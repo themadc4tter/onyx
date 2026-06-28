@@ -66,14 +66,24 @@ export class GameScene extends Phaser.Scene {
   // ─── Tilemap ────────────────────────────────────────────────────────────────
 
   private buildTilemap(mapData: number[][]) {
-    // Transform logical values (0/1/2/3) → Kenney tile indices before creating the tilemap.
-    const visualData = mapData.map(row => row.map(v => KENNEY_TILES[v] ?? 0));
+    // Layer 0 — ground: grass everywhere; paths/exits drawn as path tile.
+    // Wall cells still get a grass base because the tree tile is transparent.
+    const groundData = mapData.map(row => row.map(v =>
+      (v === TILE.PATH || v === TILE.EXIT) ? KENNEY_TILES[TILE.PATH] : KENNEY_TILES[TILE.GRASS]
+    ));
 
-    const map = this.make.tilemap({ data: visualData, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE });
-    // addTilesetImage(name, key, tileWidth, tileHeight, tileMargin, tileSpacing)
-    // Kenney sheet: 16×16 tiles, 0px margin, 1px spacing between tiles.
-    map.addTilesetImage("tileset", "tileset", 16, 16, 0, 1)!;
-    map.createLayer(0, "tileset", 0, 0)!;
+    // Layer 1 — objects: tree tile on wall cells, -1 (empty) everywhere else.
+    const TREE = KENNEY_TILES[TILE.WALL];
+    const objectData = mapData.map(row => row.map(v => v === TILE.WALL ? TREE : -1));
+
+    const addLayer = (data: number[][], depth: number) => {
+      const map = this.make.tilemap({ data, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE });
+      map.addTilesetImage("tileset", "tileset", 16, 16, 0, 1);
+      map.createLayer(0, "tileset", 0, 0)!.setDepth(depth);
+    };
+
+    addLayer(groundData, 0);
+    addLayer(objectData, 1); // trees above ground
   }
 
   // ─── Local player ───────────────────────────────────────────────────────────
@@ -92,7 +102,7 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5, 1);
 
     this.playerContainer = this.add.container(0, 0, [this.playerGraphic, label]);
-    this.playerContainer.setDepth(2);
+    this.playerContainer.setDepth(3);
     this.syncContainerToTile();
   }
 
@@ -169,7 +179,7 @@ export class GameScene extends Phaser.Scene {
         data.position.tileY * TILE_SIZE + TILE_SIZE / 2,
         [graphic, label],
       )
-      .setDepth(1);
+      .setDepth(2);
 
     this.remotePlayers.set(data.socketId, { container, graphic, tileX: data.position.tileX, tileY: data.position.tileY });
   }

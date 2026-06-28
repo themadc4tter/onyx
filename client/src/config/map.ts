@@ -6,12 +6,12 @@ export const TILE = {
 } as const;
 
 // Kenney roguelikeSheet_transparent.png — 16×16 tiles, 1px spacing, 57 cols × 31 rows
-// Indices are 0-based. Confirmed via Kenney's own sample TMX files.
+// Indices are 0-based. index = row * 57 + col.
 export const KENNEY_TILES: Record<number, number> = {
-  0: 62,   // grass floor      (row 1, col 5 — from sample_map.tmx ground layer)
-  1: 119,  // stone/dirt path  (row 2, col 5 — from sample_indoor.tmx floor layer)
-  2: 230,  // tree / wall      (row 4, col 2 — from sample_map.tmx objects layer)
-  3: 119,  // exit portal      (same visual as path)
+  0: 62,   // grass floor  (row 1, col 5 — from sample_map.tmx ground layer)
+  1: 119,  // stone path   (row 2, col 5 — from sample_indoor.tmx floor layer)
+  2: 527,  // tree         (row 9, col 14 — transparent; rendered on a grass base)
+  3: 119,  // exit portal  (same visual as path)
 };
 
 export const TILE_SIZE = 16; // world-space pixels per tile; camera zoom 2× shows as 32px
