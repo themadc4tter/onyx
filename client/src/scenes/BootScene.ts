@@ -18,9 +18,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   async create() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       console.error("BootScene: no session found");
@@ -40,29 +38,30 @@ export class BootScene extends Phaser.Scene {
 
     this.socket.on("connect", () => {
       console.log("connected", this.socket.id);
-      statusText.setText(`connected — ${this.socket.id}`).setColor("#00ff88");
+      statusText.setText("Connected — entering world...").setColor("#00ff88");
     });
 
     this.socket.on("profile", (profile: Profile) => {
-      this.add
-        .text(cx, cy + 40, `Welcome, ${profile.username}`, {
-          color: "#aaaaaa",
-          fontSize: "14px",
-        })
-        .setOrigin(0.5);
+      this.addLogoutButton();
+
+      // Short pause so the player sees the "entering world" message, then transition
+      this.time.delayedCall(600, () => {
+        this.scene.start("GameScene", { socket: this.socket, profile });
+      });
     });
 
     this.socket.on("connect_error", (err) => {
       console.error("connect_error", err.message);
-      statusText
-        .setText(`Connection rejected: ${err.message}`)
-        .setColor("#ff4444");
+      statusText.setText(`Connection rejected: ${err.message}`).setColor("#ff4444");
     });
 
     this.socket.on("disconnect", () => {
-      statusText.setText("disconnected").setColor("#ff4444");
+      statusText.setText("Disconnected").setColor("#ff4444");
+      this.logoutBtn?.remove();
     });
+  }
 
+  private addLogoutButton() {
     this.logoutBtn = document.createElement("button");
     this.logoutBtn.textContent = "Logout";
     Object.assign(this.logoutBtn.style, {

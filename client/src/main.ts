@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { supabase } from "./lib/supabase";
 import { AuthUI } from "./auth/AuthUI";
 import { BootScene } from "./scenes/BootScene";
+import { GameScene } from "./scenes/GameScene";
 
 function startGame() {
   new Phaser.Game({
@@ -9,14 +10,12 @@ function startGame() {
     width: 800,
     height: 600,
     backgroundColor: "#1a1a2e",
-    scene: [BootScene],
+    scene: [BootScene, GameScene],
   });
 }
 
 async function init() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const { data: { session } } = await supabase.auth.getSession();
 
   if (session) {
     startGame();
