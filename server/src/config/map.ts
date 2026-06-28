@@ -1,11 +1,9 @@
-export const TILE_WALL = 2;
+const TILE_WALL = 2;
 
-export const MAP_COLS = 20;
-export const MAP_ROWS = 20;
+// Identical tile data to client — server uses values (not visuals) for walkability + exit detection.
+// 0=grass  1=path  2=wall  3=exit-portal (walkable)
 
-export const SPAWN = { x: 10, y: 10 } as const;
-
-export const MAP_DATA: number[][] = [
+const TOWN_MAP: number[][] = [
   [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
   [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
   [2,0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,2],
@@ -24,11 +22,75 @@ export const MAP_DATA: number[][] = [
   [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
   [2,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,2],
   [2,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
+  [2,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,2],
   [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
 ];
 
-export function isTileWalkable(tileX: number, tileY: number): boolean {
-  if (tileX < 0 || tileX >= MAP_COLS || tileY < 0 || tileY >= MAP_ROWS) return false;
-  return MAP_DATA[tileY][tileX] !== TILE_WALL;
+const FOREST_MAP: number[][] = [
+  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
+  [2,0,2,2,0,0,2,0,0,0,0,0,2,0,0,2,2,0,0,2],
+  [2,0,0,0,0,2,0,0,0,0,0,0,0,0,2,0,0,0,0,2],
+  [2,0,0,2,0,0,0,0,2,2,0,0,0,2,0,0,0,0,0,2],
+  [2,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,2,2,0,2],
+  [2,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,0,0,2],
+  [2,0,0,2,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,2],
+  [2,0,2,0,0,0,0,0,0,1,1,0,0,0,0,0,2,0,0,2],
+  [2,0,0,0,0,2,0,0,0,1,1,0,0,0,2,0,0,0,0,2],
+  [2,0,0,0,2,0,0,0,0,1,1,0,0,0,0,0,0,0,0,2],
+  [2,0,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,2],
+  [2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,2],
+  [2,0,0,0,2,0,0,0,2,0,0,0,0,0,2,0,0,0,0,2],
+  [2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,2,0,2],
+  [2,0,2,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,2],
+  [2,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,0,2],
+  [2,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0,2],
+  [2,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,2],
+  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+];
+
+export interface ZoneExit {
+  tileX: number;
+  tileY: number;
+  toZoneId: string;
+  toTileX: number;
+  toTileY: number;
+}
+
+export interface ZoneConfig {
+  mapData: number[][];
+  cols: number;
+  rows: number;
+  spawn: { x: number; y: number };
+  exits: ZoneExit[];
+}
+
+export const ZONES: Record<string, ZoneConfig> = {
+  town: {
+    mapData: TOWN_MAP,
+    cols: 20,
+    rows: 20,
+    spawn: { x: 10, y: 10 },
+    exits: [
+      { tileX: 9,  tileY: 18, toZoneId: "forest", toTileX: 9,  toTileY: 1 },
+      { tileX: 10, tileY: 18, toZoneId: "forest", toTileX: 10, toTileY: 1 },
+    ],
+  },
+  forest: {
+    mapData: FOREST_MAP,
+    cols: 20,
+    rows: 20,
+    spawn: { x: 10, y: 10 },
+    exits: [
+      { tileX: 9,  tileY: 18, toZoneId: "town", toTileX: 9,  toTileY: 17 },
+      { tileX: 10, tileY: 18, toZoneId: "town", toTileX: 10, toTileY: 17 },
+    ],
+  },
+};
+
+export function isTileWalkable(zoneId: string, tileX: number, tileY: number): boolean {
+  const zone = ZONES[zoneId];
+  if (!zone) return false;
+  if (tileX < 0 || tileX >= zone.cols || tileY < 0 || tileY >= zone.rows) return false;
+  return zone.mapData[tileY][tileX] !== TILE_WALL;
 }

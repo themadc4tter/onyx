@@ -7,9 +7,10 @@ import { GameScene } from "./scenes/GameScene";
 function startGame() {
   new Phaser.Game({
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
+    width: 640,
+    height: 480,
     backgroundColor: "#1a1a2e",
+    pixelArt: true,
     scene: [BootScene, GameScene],
   });
 }

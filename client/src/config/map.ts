@@ -1,17 +1,25 @@
 export const TILE = {
   GRASS: 0,
-  PATH: 1,
-  WALL: 2,
+  PATH:  1,
+  WALL:  2,
+  EXIT:  3, // walkable portal tile; server triggers zone transition
 } as const;
 
-export const TILE_SIZE = 32; // pixels per tile
+// Kenney roguelikeSheet_transparent.png — 16×16 tiles, 1px spacing, 57 cols × 31 rows
+// Indices are 0-based. Confirmed via Kenney's own sample TMX files.
+export const KENNEY_TILES: Record<number, number> = {
+  0: 62,   // grass floor      (row 1, col 5 — from sample_map.tmx ground layer)
+  1: 119,  // stone/dirt path  (row 2, col 5 — from sample_indoor.tmx floor layer)
+  2: 230,  // tree / wall      (row 4, col 2 — from sample_map.tmx objects layer)
+  3: 119,  // exit portal      (same visual as path)
+};
+
+export const TILE_SIZE = 16; // world-space pixels per tile; camera zoom 2× shows as 32px
 export const MAP_COLS = 20;
 export const MAP_ROWS = 20;
 
-export const SPAWN = { x: 10, y: 10 } as const;
-
-// 0 = grass, 1 = path, 2 = wall/tree
-export const MAP_DATA: number[][] = [
+// Town: forest portal at row 18, cols 9-10 (EXIT tiles)
+export const TOWN_MAP: number[][] = [
   [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
   [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
   [2,0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,2],
@@ -30,6 +38,37 @@ export const MAP_DATA: number[][] = [
   [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
   [2,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,2],
   [2,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
+  [2,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,2], // EXIT → forest at col 9-10
   [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
 ];
+
+// Forest: players arrive at row 1 (open corridor), exit back to town at row 18, cols 9-10
+export const FOREST_MAP: number[][] = [
+  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2], // arrival row from town
+  [2,0,2,2,0,0,2,0,0,0,0,0,2,0,0,2,2,0,0,2],
+  [2,0,0,0,0,2,0,0,0,0,0,0,0,0,2,0,0,0,0,2],
+  [2,0,0,2,0,0,0,0,2,2,0,0,0,2,0,0,0,0,0,2],
+  [2,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,2,2,0,2],
+  [2,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,0,0,2],
+  [2,0,0,2,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,2],
+  [2,0,2,0,0,0,0,0,0,1,1,0,0,0,0,0,2,0,0,2],
+  [2,0,0,0,0,2,0,0,0,1,1,0,0,0,2,0,0,0,0,2],
+  [2,0,0,0,2,0,0,0,0,1,1,0,0,0,0,0,0,0,0,2],
+  [2,0,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,2],
+  [2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,2],
+  [2,0,0,0,2,0,0,0,2,0,0,0,0,0,2,0,0,0,0,2],
+  [2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,2,0,2],
+  [2,0,2,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,2],
+  [2,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,0,2],
+  [2,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0,2],
+  [2,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,2], // EXIT → town at col 9-10
+  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+];
+
+export const ZONE_MAPS: Record<string, number[][]> = {
+  town:   TOWN_MAP,
+  forest: FOREST_MAP,
+};
+
+export const SPAWN = { x: 10, y: 10 } as const;

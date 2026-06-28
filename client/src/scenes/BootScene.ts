@@ -1,13 +1,19 @@
 import Phaser from "phaser";
 import { io, Socket } from "socket.io-client";
 import { supabase } from "../lib/supabase";
-import type { RemotePlayerData } from "../types";
+import type { Facing, RemotePlayerData } from "../types";
 
 const SERVER_URL = (import.meta.env.VITE_SERVER_URL as string) ?? "http://localhost:3001";
 
 interface Profile {
   id: string;
   username: string;
+}
+
+interface ProfileEvent {
+  profile: Profile;
+  zoneId: string;
+  position: { tileX: number; tileY: number; facing: Facing };
 }
 
 export class BootScene extends Phaser.Scene {
@@ -52,14 +58,18 @@ export class BootScene extends Phaser.Scene {
       statusText.setText("Connected — entering world...").setColor("#00ff88");
     });
 
-    this.socket.on("profile", (profile: Profile) => {
+    this.socket.on("profile", (data: ProfileEvent) => {
       this.addLogoutButton();
 
       this.time.delayedCall(600, () => {
-        // Remove every BootScene listener so they don't fire on reconnections
-        // while GameScene is running (e.g. stale "profile" re-triggering a scene start).
         this.socket.removeAllListeners();
-        this.scene.start("GameScene", { socket: this.socket, profile, initPlayers: remoteBuffer });
+        this.scene.start("GameScene", {
+          socket: this.socket,
+          profile: data.profile,
+          initPlayers: remoteBuffer,
+          zoneId: data.zoneId,
+          startPos: data.position,
+        });
       });
     });
 

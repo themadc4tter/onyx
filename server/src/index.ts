@@ -1,45 +1,84 @@
 import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
-import { Server } from "socket.io";
+import { Server, Socket } from "socket.io";
 import cors from "cors";
 import { supabase } from "./lib/supabase";
-import { isTileWalkable, SPAWN } from "./config/map";
+import { isTileWalkable, ZONES, type ZoneExit } from "./config/map";
 
 const PORT = process.env.PORT ?? 3001;
 const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
 
-const ZONE_ID = "town";
-
 type Facing = "up" | "down" | "left" | "right";
-
-interface Position {
-  tileX: number;
-  tileY: number;
-  facing: Facing;
-}
-
-interface ConnectedPlayer {
-  socketId: string;
-  username: string;
-  position: Position;
-}
+interface Position { tileX: number; tileY: number; facing: Facing; }
+interface ConnectedPlayer { socketId: string; userId: string; username: string; position: Position; zoneId: string; }
 
 const connectedPlayers = new Map<string, ConnectedPlayer>();
 
+// Debounced position saves: map of socketId → pending timeout
+const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+async function savePosition(userId: string, zoneId: string, pos: Position) {
+  await supabase.from("player_state").upsert({
+    user_id:    userId,
+    zone_id:    zoneId,
+    tile_x:     pos.tileX,
+    tile_y:     pos.tileY,
+    facing:     pos.facing,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+}
+
+function scheduleSave(socketId: string, userId: string, zoneId: string, pos: Position) {
+  const existing = saveTimers.get(socketId);
+  if (existing) clearTimeout(existing);
+  saveTimers.set(socketId, setTimeout(() => {
+    saveTimers.delete(socketId);
+    savePosition(userId, zoneId, pos).catch(console.error);
+  }, 5000));
+}
+
+function flushSave(socketId: string, userId: string, zoneId: string, pos: Position) {
+  const existing = saveTimers.get(socketId);
+  if (existing) { clearTimeout(existing); saveTimers.delete(socketId); }
+  savePosition(userId, zoneId, pos).catch(console.error);
+}
+
+async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) {
+  const oldZoneId = socket.data.zoneId as string;
+  const newZoneId = exit.toZoneId;
+  const newPos: Position = { tileX: exit.toTileX, tileY: exit.toTileY, facing: "down" };
+
+  const newZonePlayers = [...connectedPlayers.values()].filter(p => p.zoneId === newZoneId);
+
+  const player = connectedPlayers.get(socket.id)!;
+  player.position = newPos;
+  player.zoneId   = newZoneId;
+  socket.data.position = newPos;
+  socket.data.zoneId   = newZoneId;
+
+  socket.leave(oldZoneId);
+  await socket.join(newZoneId);
+
+  io.to(oldZoneId).emit("player:left",   { socketId: socket.id });
+  socket.to(newZoneId).emit("player:joined", { socketId: socket.id, username: player.username, position: newPos });
+  socket.emit("zone:changed", { zoneId: newZoneId, position: newPos, initPlayers: newZonePlayers });
+
+  flushSave(socket.id, player.userId, newZoneId, newPos);
+  console.log(`[zone]       ${socket.id} (${player.username}) ${oldZoneId} → ${newZoneId}`);
+}
+
+// ─── Express + Socket.io ────────────────────────────────────────────────────
+
 const app = express();
 app.use(cors({ origin: CLIENT_URL }));
-
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
-});
+app.get("/health", (_req, res) => { res.json({ status: "ok" }); });
 
 const httpServer = createServer(app);
-
 const io = new Server(httpServer, {
   cors: { origin: CLIENT_URL },
   pingInterval: 15000,
-  pingTimeout: 10000,
+  pingTimeout:  10000,
 });
 
 io.use(async (socket, next) => {
@@ -60,59 +99,90 @@ io.on("connection", async (socket) => {
 
   const userId = socket.data.userId as string;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, username")
-    .eq("id", userId)
-    .single();
+  const [{ data: profile }, { data: state }] = await Promise.all([
+    supabase.from("profiles").select("id, username").eq("id", userId).single(),
+    supabase.from("player_state").select("zone_id, tile_x, tile_y, facing").eq("user_id", userId).single(),
+  ]);
 
   const username = profile?.username ?? userId;
-  const startPos: Position = { tileX: SPAWN.x, tileY: SPAWN.y, facing: "down" };
-  socket.data.position = startPos;
 
-  // Snapshot current players before adding self, so newcomer doesn't see themselves
-  const others = [...connectedPlayers.values()];
+  // Resolve zone (fall back to "town" if saved zone no longer exists)
+  const zoneId: string = (state?.zone_id && ZONES[state.zone_id]) ? state.zone_id : "town";
+  const zone = ZONES[zoneId]!;
+
+  // Resolve position (saved → zone spawn)
+  let startPos: Position = {
+    tileX:  state?.tile_x  ?? zone.spawn.x,
+    tileY:  state?.tile_y  ?? zone.spawn.y,
+    facing: (state?.facing as Facing) ?? "down",
+  };
+
+  // Safety: ensure saved position is actually walkable (e.g. map changed)
+  if (!isTileWalkable(zoneId, startPos.tileX, startPos.tileY)) {
+    startPos = { tileX: zone.spawn.x, tileY: zone.spawn.y, facing: "down" };
+  }
+
+  socket.data.position = startPos;
+  socket.data.zoneId   = zoneId;
+
+  // Snapshot players in the same zone before adding self
+  const others = [...connectedPlayers.values()].filter(p => p.zoneId === zoneId);
   socket.emit("players:init", others);
 
-  connectedPlayers.set(socket.id, { socketId: socket.id, username, position: startPos });
+  connectedPlayers.set(socket.id, { socketId: socket.id, userId, username, position: startPos, zoneId });
 
-  await socket.join(ZONE_ID);
-  socket.to(ZONE_ID).emit("player:joined", { socketId: socket.id, username, position: startPos });
+  await socket.join(zoneId);
+  socket.to(zoneId).emit("player:joined", { socketId: socket.id, username, position: startPos });
 
-  console.log(`[connect]    ${socket.id} (${username}) — ${connectedPlayers.size} online`);
+  console.log(`[connect]    ${socket.id} (${username}) → ${zoneId} — ${connectedPlayers.size} online`);
 
-  socket.emit("profile", profile);
+  socket.emit("profile", { profile, position: startPos, zoneId });
 
-  socket.on("move", (payload: unknown) => {
+  // ─── Move ─────────────────────────────────────────────────────────────────
+
+  socket.on("move", async (payload: unknown) => {
     const { tileX, tileY, facing } = payload as Position;
     const current: Position = socket.data.position;
+    const currentZoneId: string = socket.data.zoneId;
 
     const dx = Math.abs(tileX - current.tileX);
     const dy = Math.abs(tileY - current.tileY);
     const isOneStep = (dx === 1 && dy === 0) || (dx === 0 && dy === 1);
 
-    if (!isOneStep || !isTileWalkable(tileX, tileY)) {
+    if (!isOneStep || !isTileWalkable(currentZoneId, tileX, tileY)) {
       socket.emit("move:ack", current);
       return;
     }
 
     const accepted: Position = { tileX, tileY, facing };
     socket.data.position = accepted;
-
     const player = connectedPlayers.get(socket.id);
     if (player) player.position = accepted;
 
+    // Check for zone exit
+    const currentZone = ZONES[currentZoneId];
+    const exit = currentZone?.exits.find(e => e.tileX === tileX && e.tileY === tileY);
+    if (exit) {
+      await handleZoneTransition(io, socket, exit);
+      return;
+    }
+
     socket.emit("move:ack", accepted);
-    socket.to(ZONE_ID).emit("player:moved", { socketId: socket.id, tileX, tileY, facing });
+    socket.to(currentZoneId).emit("player:moved", { socketId: socket.id, tileX, tileY, facing });
+    scheduleSave(socket.id, userId, currentZoneId, accepted);
   });
 
+  // ─── Disconnect ────────────────────────────────────────────────────────────
+
   socket.on("disconnect", () => {
+    const player = connectedPlayers.get(socket.id);
+    if (player) {
+      flushSave(socket.id, player.userId, player.zoneId, player.position);
+    }
     connectedPlayers.delete(socket.id);
-    io.to(ZONE_ID).emit("player:left", { socketId: socket.id });
+    io.to(socket.data.zoneId as string).emit("player:left", { socketId: socket.id });
     console.log(`[disconnect] ${socket.id} (${username}) — ${connectedPlayers.size} online`);
   });
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`[server] listening on port ${PORT}`);
-});
+httpServer.listen(PORT, () => { console.log(`[server] listening on port ${PORT}`); });
