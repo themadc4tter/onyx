@@ -19,8 +19,8 @@ export class GameScene extends Phaser.Scene {
   private socket!: Socket;
   private profile!: Profile;
 
-  private tileX = SPAWN.x;
-  private tileY = SPAWN.y;
+  private tileX: number = SPAWN.x;
+  private tileY: number = SPAWN.y;
   private facing: Facing = "down";
   private moving = false;
 
@@ -52,7 +52,7 @@ export class GameScene extends Phaser.Scene {
 
   private buildTilesetTexture() {
     const S = TILE_SIZE;
-    const ct = this.textures.createCanvas("tileset", S * 3, S);
+    const ct = this.textures.createCanvas("tileset", S * 3, S)!;
     const ctx = ct.getContext();
 
     // Tile 0 — grass
@@ -77,7 +77,7 @@ export class GameScene extends Phaser.Scene {
     ctx.fillStyle = "#5c3a1e";
     ctx.fillRect(S * 2 + 12, S - 10, 8, 10);
 
-    ct.refresh();
+    ct!.refresh();
   }
 
   // ─── Tilemap ────────────────────────────────────────────────────────────────
