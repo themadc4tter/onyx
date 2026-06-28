@@ -1,24 +1,11 @@
 import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { MAP_DATA, MAP_COLS, MAP_ROWS, SPAWN, TILE, TILE_SIZE } from "../config/map";
-
-type Facing = "up" | "down" | "left" | "right";
+import type { Facing, Position, RemotePlayerData } from "../types";
 
 interface Profile {
   id: string;
   username: string;
-}
-
-interface Position {
-  tileX: number;
-  tileY: number;
-  facing: Facing;
-}
-
-interface RemotePlayerData {
-  socketId: string;
-  username: string;
-  position: Position;
 }
 
 interface RemotePlayerState {
@@ -31,6 +18,7 @@ interface RemotePlayerState {
 export class GameScene extends Phaser.Scene {
   private socket!: Socket;
   private profile!: Profile;
+  private initPlayers: RemotePlayerData[] = [];
 
   private tileX: number = SPAWN.x;
   private tileY: number = SPAWN.y;
@@ -49,9 +37,10 @@ export class GameScene extends Phaser.Scene {
     super({ key: "GameScene" });
   }
 
-  init(data: { socket: Socket; profile: Profile }) {
+  init(data: { socket: Socket; profile: Profile; initPlayers: RemotePlayerData[] }) {
     this.socket = data.socket;
     this.profile = data.profile;
+    this.initPlayers = data.initPlayers ?? [];
   }
 
   create() {
@@ -61,6 +50,9 @@ export class GameScene extends Phaser.Scene {
     this.setupCamera();
     this.setupInput();
     this.setupServerEvents();
+
+    // Populate players that were already online (buffered by BootScene).
+    for (const p of this.initPlayers) this.addRemotePlayer(p);
   }
 
   // ─── Tileset ────────────────────────────────────────────────────────────────
@@ -248,10 +240,6 @@ export class GameScene extends Phaser.Scene {
       this.facing = pos.facing;
       this.drawPlayer();
       this.moving = false;
-    });
-
-    this.socket.on("players:init", (players: RemotePlayerData[]) => {
-      for (const p of players) this.addRemotePlayer(p);
     });
 
     this.socket.on("player:joined", (data: RemotePlayerData) => {

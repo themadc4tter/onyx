@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { io, Socket } from "socket.io-client";
 import { supabase } from "../lib/supabase";
+import type { RemotePlayerData } from "../types";
 
 const SERVER_URL = (import.meta.env.VITE_SERVER_URL as string) ?? "http://localhost:3001";
 
@@ -36,6 +37,15 @@ export class BootScene extends Phaser.Scene {
       auth: { token: session.access_token },
     });
 
+    // Buffer remote players that arrive before GameScene is ready to listen.
+    // players:init fires immediately on connect; player:joined can fire during
+    // the 600ms delayedCall before GameScene registers its own listener.
+    const remoteBuffer: RemotePlayerData[] = [];
+    const onPlayersInit = (players: RemotePlayerData[]) => remoteBuffer.push(...players);
+    const onPlayerJoined = (p: RemotePlayerData) => remoteBuffer.push(p);
+    this.socket.on("players:init", onPlayersInit);
+    this.socket.on("player:joined", onPlayerJoined);
+
     this.socket.on("connect", () => {
       console.log("connected", this.socket.id);
       statusText.setText("Connected — entering world...").setColor("#00ff88");
@@ -44,9 +54,11 @@ export class BootScene extends Phaser.Scene {
     this.socket.on("profile", (profile: Profile) => {
       this.addLogoutButton();
 
-      // Short pause so the player sees the "entering world" message, then transition
       this.time.delayedCall(600, () => {
-        this.scene.start("GameScene", { socket: this.socket, profile });
+        // Hand off buffered players to GameScene, then let it own those events.
+        this.socket.off("players:init", onPlayersInit);
+        this.socket.off("player:joined", onPlayerJoined);
+        this.scene.start("GameScene", { socket: this.socket, profile, initPlayers: remoteBuffer });
       });
     });
 
