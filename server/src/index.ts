@@ -38,6 +38,8 @@ const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: { origin: CLIENT_URL },
+  pingInterval: 15000,
+  pingTimeout: 10000,
 });
 
 io.use(async (socket, next) => {
