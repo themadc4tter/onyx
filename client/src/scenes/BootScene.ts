@@ -35,6 +35,7 @@ export class BootScene extends Phaser.Scene {
 
     this.socket = io(SERVER_URL, {
       auth: { token: session.access_token },
+      reconnection: false,
     });
 
     // Buffer remote players that arrive before GameScene is ready to listen.
@@ -55,9 +56,9 @@ export class BootScene extends Phaser.Scene {
       this.addLogoutButton();
 
       this.time.delayedCall(600, () => {
-        // Hand off buffered players to GameScene, then let it own those events.
-        this.socket.off("players:init", onPlayersInit);
-        this.socket.off("player:joined", onPlayerJoined);
+        // Remove every BootScene listener so they don't fire on reconnections
+        // while GameScene is running (e.g. stale "profile" re-triggering a scene start).
+        this.socket.removeAllListeners();
         this.scene.start("GameScene", { socket: this.socket, profile, initPlayers: remoteBuffer });
       });
     });

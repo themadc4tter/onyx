@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { MAP_DATA, MAP_COLS, MAP_ROWS, SPAWN, TILE, TILE_SIZE } from "../config/map";
 import type { Facing, Position, RemotePlayerData } from "../types";
+import { supabase } from "../lib/supabase";
 
 interface Profile {
   id: string;
@@ -252,6 +253,12 @@ export class GameScene extends Phaser.Scene {
 
     this.socket.on("player:left", (data: { socketId: string }) => {
       this.removeRemotePlayer(data.socketId);
+    });
+
+    // Disconnected (sleep, network drop, server restart) — sign out and return to login.
+    this.socket.on("disconnect", async () => {
+      await supabase.auth.signOut();
+      window.location.reload();
     });
   }
 
