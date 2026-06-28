@@ -10,7 +10,11 @@ services:
       - key: NODE_ENV
         value: production
       - key: CLIENT_URL
-        sync: false      # fill in manually: the onyx-client Render URL (e.g. https://onyx-client.onrender.com)
+        sync: false      # fill in manually: the onyx-client Render URL
+      - key: SUPABASE_URL
+        value: https://xmerawtriortqtziwjbm.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false      # fill in manually: your Supabase service_role secret key
 
   - type: web
     name: onyx-client
@@ -20,4 +24,8 @@ services:
     staticPublishPath: ./dist
     envVars:
       - key: VITE_SERVER_URL
-        sync: false      # fill in manually: the onyx-server Render URL (e.g. https://onyx-server.onrender.com)
+        sync: false      # fill in manually: the onyx-server Render URL
+      - key: VITE_SUPABASE_URL
+        value: https://xmerawtriortqtziwjbm.supabase.co
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false      # fill in manually: your Supabase anon public key
