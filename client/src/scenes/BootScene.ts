@@ -55,6 +55,12 @@ export class BootScene extends Phaser.Scene {
       statusText.setText(`Connection rejected: ${err.message}`).setColor("#ff4444");
     });
 
+    this.socket.on("error", (code: string) => {
+      if (code === "server_full") {
+        statusText.setText("Server is full (50/50) — try again later.").setColor("#ff4444");
+      }
+    });
+
     this.socket.on("disconnect", () => {
       statusText.setText("Disconnected").setColor("#ff4444");
       this.logoutBtn?.remove();
