@@ -15,7 +15,7 @@ import {
 import type { Facing, Position, RemotePlayerData } from "../types";
 import { supabase } from "../lib/supabase";
 import { NpcRenderer } from "../world/NpcRenderer";
-import { getNpcsForZone } from "../world/npcs";
+import { getNpcsForZone, type NpcDefinition, type PlacedNpcDefinition } from "../world/npcs";
 
 interface Profile {
   id: string;
@@ -280,7 +280,34 @@ export class GameScene extends Phaser.Scene {
 
   private buildNpcs() {
     this.npcRenderer = new NpcRenderer(this);
-    this.npcRenderer.render(getNpcsForZone(this.zoneId));
+    this.npcRenderer.render(this.getPlacedNpcsForZone());
+  }
+
+  private getPlacedNpcsForZone(): PlacedNpcDefinition[] {
+    return getNpcsForZone(this.zoneId)
+      .map(npc => this.resolveNpcPosition(npc))
+      .filter((npc): npc is PlacedNpcDefinition => Boolean(npc));
+  }
+
+  private resolveNpcPosition(npc: NpcDefinition): PlacedNpcDefinition | null {
+    if (npc.tileX !== undefined && npc.tileY !== undefined) {
+      return { ...npc, tileX: npc.tileX, tileY: npc.tileY };
+    }
+
+    if (!npc.markerName) return null;
+
+    const objectLayer = this.map.getObjectLayer(TILED_OBJECT_LAYER);
+    const marker = objectLayer?.objects.find(object => object.name === npc.markerName);
+    if (!marker) {
+      console.warn(`NPC "${npc.id}" could not find marker "${npc.markerName}" in zone "${this.zoneId}"`);
+      return null;
+    }
+
+    return {
+      ...npc,
+      tileX: Math.floor((marker.x ?? 0) / TILE_SIZE),
+      tileY: Math.floor((marker.y ?? 0) / TILE_SIZE),
+    };
   }
 
   private createNameLabel(username: string) {

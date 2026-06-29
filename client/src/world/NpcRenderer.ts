@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { TILE_SIZE } from "../config/map";
-import type { NpcDefinition } from "./npcs";
+import type { PlacedNpcDefinition } from "./npcs";
 
 const NPC_DEPTH = 18;
 const NPC_NAME_LABEL_FONT_SIZE = "7px";
@@ -12,7 +12,7 @@ export class NpcRenderer {
 
   constructor(private scene: Phaser.Scene) {}
 
-  render(npcs: NpcDefinition[]) {
+  render(npcs: PlacedNpcDefinition[]) {
     this.clear();
 
     for (const npc of npcs) {
@@ -27,7 +27,7 @@ export class NpcRenderer {
     this.containers = [];
   }
 
-  private createNpcContainer(npc: NpcDefinition) {
+  private createNpcContainer(npc: PlacedNpcDefinition) {
     const sprite = this.scene.add.image(0, 0, npc.spriteKey);
     const nameLabel = this.createLabel(npc.name, -TILE_SIZE / 2 - 10, NPC_NAME_LABEL_FONT_SIZE, "#ffffff");
     const titleLabel = this.createLabel(`<${npc.title}>`, -TILE_SIZE / 2 - 2, NPC_TITLE_LABEL_FONT_SIZE, "#ffd98a");

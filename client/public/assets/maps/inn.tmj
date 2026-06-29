@@ -158,7 +158,7 @@
          "name":"Collision",
          "opacity":1,
          "type":"tilelayer",
-         "visible":true,
+         "visible":false,
          "width":16,
          "x":0,
          "y":0
@@ -215,6 +215,32 @@
                  "width":0,
                  "x":184,
                  "y":136
+                }, 
+                {
+                 "height":0,
+                 "id":4,
+                 "name":"npc_1",
+                 "opacity":1,
+                 "point":true,
+                 "rotation":0,
+                 "type":"npc_spawn",
+                 "visible":true,
+                 "width":0,
+                 "x":72,
+                 "y":72
+                }, 
+                {
+                 "height":0,
+                 "id":5,
+                 "name":"npc_2",
+                 "opacity":1,
+                 "point":true,
+                 "rotation":0,
+                 "type":"npc_spawn",
+                 "visible":true,
+                 "width":0,
+                 "x":200,
+                 "y":72
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -246,7 +272,7 @@
          "y":0
         }],
  "nextlayerid":12,
- "nextobjectid":4,
+ "nextobjectid":7,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.2",

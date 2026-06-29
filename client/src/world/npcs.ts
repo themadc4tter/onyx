@@ -5,8 +5,9 @@ export interface NpcDefinition {
   name: string;
   title: string;
   zoneId: string;
-  tileX: number;
-  tileY: number;
+  markerName?: string;
+  tileX?: number;
+  tileY?: number;
   spriteKey: string;
   spriteUrl: string;
   facing?: Facing;
@@ -14,18 +15,22 @@ export interface NpcDefinition {
   shopId?: string;
 }
 
+export interface PlacedNpcDefinition extends NpcDefinition {
+  tileX: number;
+  tileY: number;
+}
+
 export const NPCS: NpcDefinition[] = [
   {
-    id: "settlement-cooking-trainer",
-    name: "John Doe",
-    title: "Cooking Trainer",
-    zoneId: "settlement",
-    tileX: 20,
-    tileY: 16,
-    spriteKey: "npc001",
-    spriteUrl: "assets/characters/npc001.png",
+    id: "inn-cook-bob",
+    name: "Bob",
+    title: "Cook",
+    zoneId: "inn",
+    markerName: "npc_1",
+    spriteKey: "npc-male-tone3",
+    spriteUrl: "assets/characters/male_tone3.png",
     facing: "down",
-    dialogueId: "john_doe_intro",
+    dialogueId: "bob_intro",
   },
 ];
 
