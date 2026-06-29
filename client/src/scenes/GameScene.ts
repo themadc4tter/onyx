@@ -23,10 +23,12 @@ interface Profile {
 
 interface RemotePlayerState {
   container: Phaser.GameObjects.Container;
-  graphic: Phaser.GameObjects.Graphics;
   tileX: number;
   tileY: number;
 }
+
+const PLAYER_SPRITE_KEY = "player-male-tone1";
+const PLAYER_SPRITE_URL = "assets/characters/male_tone1.png";
 
 export class GameScene extends Phaser.Scene {
   private socket!: Socket;
@@ -43,7 +45,6 @@ export class GameScene extends Phaser.Scene {
   private facing: Facing = "down";
   private moving = false;
 
-  private playerGraphic!: Phaser.GameObjects.Graphics;
   private playerContainer!: Phaser.GameObjects.Container;
   private remotePlayers = new Map<string, RemotePlayerState>();
 
@@ -83,6 +84,7 @@ export class GameScene extends Phaser.Scene {
 
     this.load.tilemapTiledJSON(TILED_MAP_KEY, TILED_MAP_URL);
     this.load.image(TILESET_IMAGE_KEY, TILESET_IMAGE_URL);
+    this.load.image(PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL);
   }
 
   create() {
@@ -127,8 +129,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildPlayer() {
-    this.playerGraphic = this.add.graphics();
-    this.drawPlayer();
+    const sprite = this.add.image(0, 0, PLAYER_SPRITE_KEY);
 
     const label = this.add
       .text(0, -TILE_SIZE / 2 - 2, this.profile.username, {
@@ -139,38 +140,9 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 1);
 
-    this.playerContainer = this.add.container(0, 0, [this.playerGraphic, label]);
+    this.playerContainer = this.add.container(0, 0, [sprite, label]);
     this.playerContainer.setDepth(20);
     this.syncContainerToTile();
-  }
-
-  private drawPlayerGraphic(graphic: Phaser.GameObjects.Graphics, facing: Facing, bodyColor: number) {
-    graphic.clear();
-    const hs = TILE_SIZE / 2;
-
-    graphic.fillStyle(bodyColor);
-    graphic.fillRect(-hs + 2, -hs + 2, TILE_SIZE - 4, TILE_SIZE - 4);
-
-    graphic.fillStyle(0xffffff);
-    const pad = 4;
-    switch (facing) {
-      case "up":
-        graphic.fillRect(-2, -hs + pad, 4, 2);
-        break;
-      case "down":
-        graphic.fillRect(-2, hs - pad - 2, 4, 2);
-        break;
-      case "left":
-        graphic.fillRect(-hs + pad, -2, 2, 4);
-        break;
-      case "right":
-        graphic.fillRect(hs - pad - 2, -2, 2, 4);
-        break;
-    }
-  }
-
-  private drawPlayer() {
-    this.drawPlayerGraphic(this.playerGraphic, this.facing, 0x4466cc);
   }
 
   private syncContainerToTile() {
@@ -216,8 +188,7 @@ export class GameScene extends Phaser.Scene {
   private addRemotePlayer(data: RemotePlayerData) {
     if (this.remotePlayers.has(data.socketId)) return;
 
-    const graphic = this.add.graphics();
-    this.drawPlayerGraphic(graphic, data.position.facing, 0xcc7744);
+    const sprite = this.add.image(0, 0, PLAYER_SPRITE_KEY);
 
     const label = this.add
       .text(0, -TILE_SIZE / 2 - 2, data.username, {
@@ -232,11 +203,11 @@ export class GameScene extends Phaser.Scene {
       .container(
         data.position.tileX * TILE_SIZE + TILE_SIZE / 2,
         data.position.tileY * TILE_SIZE + TILE_SIZE / 2,
-        [graphic, label],
+        [sprite, label],
       )
       .setDepth(19);
 
-    this.remotePlayers.set(data.socketId, { container, graphic, tileX: data.position.tileX, tileY: data.position.tileY });
+    this.remotePlayers.set(data.socketId, { container, tileX: data.position.tileX, tileY: data.position.tileY });
   }
 
   private moveRemotePlayer(socketId: string, tileX: number, tileY: number, facing: Facing) {
@@ -244,7 +215,6 @@ export class GameScene extends Phaser.Scene {
     if (!rp) return;
     rp.tileX = tileX;
     rp.tileY = tileY;
-    this.drawPlayerGraphic(rp.graphic, facing, 0xcc7744);
     this.tweens.add({
       targets: rp.container,
       x: tileX * TILE_SIZE + TILE_SIZE / 2,
@@ -270,7 +240,6 @@ export class GameScene extends Phaser.Scene {
         this.syncContainerToTile();
       }
       this.facing = pos.facing;
-      this.drawPlayer();
       this.moving = false;
     });
 
@@ -352,7 +321,6 @@ export class GameScene extends Phaser.Scene {
       nextY >= this.map.height ||
       this.collisionLayer?.hasTileAt(nextX, nextY)
     ) {
-      this.drawPlayer();
       this.bumpPlayer(dx, dy);
       return;
     }
@@ -360,7 +328,6 @@ export class GameScene extends Phaser.Scene {
     this.moving = true;
     this.tileX = nextX;
     this.tileY = nextY;
-    this.drawPlayer();
 
     this.tweens.add({
       targets: this.playerContainer,
