@@ -84,9 +84,11 @@ export class BootScene extends Phaser.Scene {
       }
     });
 
-    this.socket.on("disconnect", () => {
-      statusText.setText("Disconnected").setColor("#ff4444");
+    this.socket.on("disconnect", async () => {
+      statusText.setText("Connection lost — returning to menu...").setColor("#ff4444");
       this.logoutBtn?.remove();
+      await supabase.auth.signOut();
+      setTimeout(() => window.location.reload(), 3000);
     });
   }
 

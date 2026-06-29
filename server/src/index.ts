@@ -11,7 +11,7 @@ const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
 
 type Facing = "up" | "down" | "left" | "right";
 interface Position { tileX: number; tileY: number; facing: Facing; }
-interface ConnectedPlayer { socketId: string; userId: string; username: string; position: Position; zoneId: string; }
+interface ConnectedPlayer { socketId: string; userId: string; username: string; position: Position; zoneId: string; lastMoveAt: number; }
 
 const connectedPlayers = new Map<string, ConnectedPlayer>();
 
@@ -72,7 +72,13 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
 
 const app = express();
 app.use(cors({ origin: CLIENT_URL }));
-app.get("/health", (_req, res) => { res.json({ status: "ok" }); });
+app.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    players: connectedPlayers.size,
+    heapMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+  });
+});
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -129,7 +135,7 @@ io.on("connection", async (socket) => {
   const others = [...connectedPlayers.values()].filter(p => p.zoneId === zoneId);
   socket.emit("players:init", others);
 
-  connectedPlayers.set(socket.id, { socketId: socket.id, userId, username, position: startPos, zoneId });
+  connectedPlayers.set(socket.id, { socketId: socket.id, userId, username, position: startPos, zoneId, lastMoveAt: 0 });
 
   await socket.join(zoneId);
   socket.to(zoneId).emit("player:joined", { socketId: socket.id, username, position: startPos });
@@ -145,6 +151,13 @@ io.on("connection", async (socket) => {
     const current: Position = socket.data.position;
     const currentZoneId: string = socket.data.zoneId;
 
+    const now = Date.now();
+    const player = connectedPlayers.get(socket.id);
+    if (!player || now - player.lastMoveAt < 80) {
+      socket.emit("move:ack", current);
+      return;
+    }
+
     const dx = Math.abs(tileX - current.tileX);
     const dy = Math.abs(tileY - current.tileY);
     const isOneStep = (dx === 1 && dy === 0) || (dx === 0 && dy === 1);
@@ -156,8 +169,8 @@ io.on("connection", async (socket) => {
 
     const accepted: Position = { tileX, tileY, facing };
     socket.data.position = accepted;
-    const player = connectedPlayers.get(socket.id);
-    if (player) player.position = accepted;
+    player.position = accepted;
+    player.lastMoveAt = now;
 
     // Check for zone exit
     const currentZone = ZONES[currentZoneId];
@@ -169,7 +182,7 @@ io.on("connection", async (socket) => {
 
     socket.emit("move:ack", accepted);
     socket.to(currentZoneId).emit("player:moved", { socketId: socket.id, tileX, tileY, facing });
-    scheduleSave(socket.id, userId, currentZoneId, accepted);
+    scheduleSave(socket.id, player.userId, currentZoneId, accepted);
   });
 
   // ─── Disconnect ────────────────────────────────────────────────────────────

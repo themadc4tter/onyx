@@ -45,6 +45,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload() {
+    const cx = this.scale.width / 2;
+    const cy = this.scale.height / 2;
+
+    const barBg = this.add.rectangle(cx, cy, 200, 10, 0x333333).setDepth(10);
+    const bar   = this.add.rectangle(cx - 100, cy, 0, 10, 0x00ff88).setOrigin(0, 0.5).setDepth(10);
+    const label = this.add.text(cx, cy - 20, "Loading...", { fontSize: "12px", color: "#aaaaaa" }).setOrigin(0.5).setDepth(10);
+
+    this.load.on("progress", (v: number) => { bar.width = 200 * v; });
+    this.load.on("complete", () => { barBg.destroy(); bar.destroy(); label.destroy(); });
+
     this.load.image("tileset", "assets/roguelikeSheet_transparent.png");
   }
 
@@ -132,6 +142,21 @@ export class GameScene extends Phaser.Scene {
       this.tileX * TILE_SIZE + TILE_SIZE / 2,
       this.tileY * TILE_SIZE + TILE_SIZE / 2
     );
+  }
+
+  private bumpPlayer(dx: number, dy: number) {
+    const originX = this.tileX * TILE_SIZE + TILE_SIZE / 2;
+    const originY = this.tileY * TILE_SIZE + TILE_SIZE / 2;
+    this.moving = true;
+    this.tweens.add({
+      targets: this.playerContainer,
+      x: originX + dx * 3,
+      y: originY + dy * 3,
+      duration: 60,
+      ease: "Power1",
+      yoyo: true,
+      onComplete: () => { this.moving = false; },
+    });
   }
 
   // ─── Camera ─────────────────────────────────────────────────────────────────
@@ -241,8 +266,15 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.socket.on("disconnect", async () => {
+      const { width, height } = this.scale;
+      this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.75)
+        .setScrollFactor(0).setDepth(20);
+      this.add.text(width / 2, height / 2, "Connection lost\nReturning to menu...", {
+        fontSize: "14px", color: "#ff4444", align: "center", lineSpacing: 6,
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(21);
+
       await supabase.auth.signOut();
-      window.location.reload();
+      setTimeout(() => window.location.reload(), 3000);
     });
   }
 
@@ -273,6 +305,7 @@ export class GameScene extends Phaser.Scene {
       currentMap[nextY][nextX] === TILE.WALL
     ) {
       this.drawPlayer();
+      this.bumpPlayer(dx, dy);
       return;
     }
 
