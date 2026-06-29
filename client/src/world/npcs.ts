@@ -33,6 +33,17 @@ export const NPCS: NpcDefinition[] = [
     dialogueId: "john_smith_intro",
   },
   {
+    id: "settlement-fisherwoman-belinda",
+    name: "Belinda",
+    title: "Fisherwoman",
+    zoneId: "settlement",
+    markerName: "npc_2",
+    spriteKey: "npc005",
+    spriteUrl: "assets/characters/npc005.png",
+    facing: "down",
+    dialogueId: "belinda_intro",
+  },
+  {
     id: "inn-cook-bob",
     name: "Bob",
     title: "Cook",
