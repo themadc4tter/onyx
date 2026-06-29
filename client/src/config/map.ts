@@ -1,74 +1,22 @@
-export const TILE = {
-  GRASS: 0,
-  PATH:  1,
-  WALL:  2,
-  EXIT:  3, // walkable portal tile; server triggers zone transition
-} as const;
+export const TILE_SIZE = 16;
 
-// Kenney roguelikeSheet_transparent.png — 16×16 tiles, 1px spacing, 57 cols × 31 rows
-// Indices are 0-based. index = row * 57 + col.
-export const KENNEY_TILES: Record<number, number> = {
-  0: 62,   // grass floor  (row 1, col 5 — from sample_map.tmx ground layer)
-  1: 119,  // stone path   (row 2, col 5 — from sample_indoor.tmx floor layer)
-  2: 527,  // tree         (row 9, col 14 — transparent; rendered on a grass base)
-  3: 119,  // exit portal  (same visual as path)
-};
+export const DEFAULT_ZONE_ID = "settlement";
 
-export const TILE_SIZE = 16; // world-space pixels per tile; camera zoom 2× shows as 32px
-export const MAP_COLS = 20;
-export const MAP_ROWS = 20;
+export const TILED_MAP_KEY = "settlement-map";
+export const TILED_MAP_URL = "assets/maps/settlement.tmj";
 
-// Town: forest portal at row 18, cols 9-10 (EXIT tiles)
-export const TOWN_MAP: number[][] = [
-  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,2,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,2,0,0,2,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,2], // EXIT → forest at col 9-10
-  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-];
+export const TILESET_IMAGE_KEY = "kenney-roguelike";
+export const TILESET_IMAGE_URL = "assets/roguelikeSheet_transparent.png";
+export const TILED_TILESET_NAME = "roguelikeSheet_transparent";
 
-// Forest: players arrive at row 1 (open corridor), exit back to town at row 18, cols 9-10
-export const FOREST_MAP: number[][] = [
-  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2], // arrival row from town
-  [2,0,2,2,0,0,2,0,0,0,0,0,2,0,0,2,2,0,0,2],
-  [2,0,0,0,0,2,0,0,0,0,0,0,0,0,2,0,0,0,0,2],
-  [2,0,0,2,0,0,0,0,2,2,0,0,0,2,0,0,0,0,0,2],
-  [2,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,2,2,0,2],
-  [2,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,0,0,2],
-  [2,0,0,2,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,2],
-  [2,0,2,0,0,0,0,0,0,1,1,0,0,0,0,0,2,0,0,2],
-  [2,0,0,0,0,2,0,0,0,1,1,0,0,0,2,0,0,0,0,2],
-  [2,0,0,0,2,0,0,0,0,1,1,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,2],
-  [2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,2],
-  [2,0,0,0,2,0,0,0,2,0,0,0,0,0,2,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,2,0,2],
-  [2,0,2,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,0,2],
-  [2,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,2], // EXIT → town at col 9-10
-  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-];
+export const TILED_RENDER_LAYERS = [
+  "Ground",
+  "Paths",
+  "Water",
+  "Buildings",
+  "Props",
+] as const;
 
-export const ZONE_MAPS: Record<string, number[][]> = {
-  town:   TOWN_MAP,
-  forest: FOREST_MAP,
-};
-
-export const SPAWN = { x: 10, y: 10 } as const;
+export const TILED_COLLISION_LAYER = "Collision";
+export const TILED_OBJECT_LAYER = "Objects";
+export const TILED_PLAYER_SPAWN = "player_spawn";

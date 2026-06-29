@@ -1,53 +1,41 @@
-const TILE_WALL = 2;
+import fs from "node:fs";
+import path from "node:path";
 
-// Identical tile data to client — server uses values (not visuals) for walkability + exit detection.
-// 0=grass  1=path  2=wall  3=exit-portal (walkable)
+export const DEFAULT_ZONE_ID = "settlement";
 
-const TOWN_MAP: number[][] = [
-  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,2,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,2,0,0,2,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,2],
-  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-];
+const TILE_SIZE = 16;
+const MAP_PATH = findSettlementMapPath();
 
-const FOREST_MAP: number[][] = [
-  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-  [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,2,2,0,0,2,0,0,0,0,0,2,0,0,2,2,0,0,2],
-  [2,0,0,0,0,2,0,0,0,0,0,0,0,0,2,0,0,0,0,2],
-  [2,0,0,2,0,0,0,0,2,2,0,0,0,2,0,0,0,0,0,2],
-  [2,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,2,2,0,2],
-  [2,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,0,0,2],
-  [2,0,0,2,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,2],
-  [2,0,2,0,0,0,0,0,0,1,1,0,0,0,0,0,2,0,0,2],
-  [2,0,0,0,0,2,0,0,0,1,1,0,0,0,2,0,0,0,0,2],
-  [2,0,0,0,2,0,0,0,0,1,1,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,2],
-  [2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,2],
-  [2,0,0,0,2,0,0,0,2,0,0,0,0,0,2,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,2,0,2],
-  [2,0,2,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,2],
-  [2,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,0,2],
-  [2,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0,2],
-  [2,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,2],
-  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-];
+interface TiledTileLayer {
+  name: string;
+  type: "tilelayer";
+  width: number;
+  height: number;
+  data: number[];
+}
+
+interface TiledObject {
+  name: string;
+  type: string;
+  x: number;
+  y: number;
+}
+
+interface TiledObjectLayer {
+  name: string;
+  type: "objectgroup";
+  objects: TiledObject[];
+}
+
+type TiledLayer = TiledTileLayer | TiledObjectLayer;
+
+interface TiledMap {
+  width: number;
+  height: number;
+  tilewidth: number;
+  tileheight: number;
+  layers: TiledLayer[];
+}
 
 export interface ZoneExit {
   tileX: number;
@@ -58,39 +46,92 @@ export interface ZoneExit {
 }
 
 export interface ZoneConfig {
-  mapData: number[][];
+  collisionData: number[];
   cols: number;
   rows: number;
   spawn: { x: number; y: number };
   exits: ZoneExit[];
 }
 
+function findSettlementMapPath() {
+  const candidates = [
+    path.resolve(process.cwd(), "../client/public/assets/maps/settlement.tmj"),
+    path.resolve(process.cwd(), "client/public/assets/maps/settlement.tmj"),
+  ];
+
+  const mapPath = candidates.find(candidate => fs.existsSync(candidate));
+  if (!mapPath) {
+    throw new Error(`Could not find settlement.tmj. Tried: ${candidates.join(", ")}`);
+  }
+
+  return mapPath;
+}
+
+function getTileLayer(map: TiledMap, name: string) {
+  const layer = map.layers.find((candidate): candidate is TiledTileLayer => (
+    candidate.type === "tilelayer" && candidate.name === name
+  ));
+
+  if (!layer) {
+    throw new Error(`Tiled map is missing tile layer "${name}"`);
+  }
+
+  return layer;
+}
+
+function getObjectLayer(map: TiledMap, name: string) {
+  const layer = map.layers.find((candidate): candidate is TiledObjectLayer => (
+    candidate.type === "objectgroup" && candidate.name === name
+  ));
+
+  if (!layer) {
+    throw new Error(`Tiled map is missing object layer "${name}"`);
+  }
+
+  return layer;
+}
+
+function loadSettlementZone(): ZoneConfig {
+  const tiledMap = JSON.parse(fs.readFileSync(MAP_PATH, "utf8")) as TiledMap;
+
+  const collisionLayer = getTileLayer(tiledMap, "Collision");
+  const objectLayer = getObjectLayer(tiledMap, "Objects");
+  const spawn = objectLayer.objects.find(object => object.name === "player_spawn" || object.type === "spawn");
+
+  if (!spawn) {
+    throw new Error('Tiled map is missing a "player_spawn" object');
+  }
+
+  if (tiledMap.tilewidth !== TILE_SIZE || tiledMap.tileheight !== TILE_SIZE) {
+    throw new Error(`Expected ${TILE_SIZE}x${TILE_SIZE} tiles, got ${tiledMap.tilewidth}x${tiledMap.tileheight}`);
+  }
+
+  return {
+    collisionData: collisionLayer.data,
+    cols: tiledMap.width,
+    rows: tiledMap.height,
+    spawn: {
+      x: Math.floor(spawn.x / tiledMap.tilewidth),
+      y: Math.floor(spawn.y / tiledMap.tileheight),
+    },
+    exits: [],
+  };
+}
+
 export const ZONES: Record<string, ZoneConfig> = {
-  town: {
-    mapData: TOWN_MAP,
-    cols: 20,
-    rows: 20,
-    spawn: { x: 10, y: 10 },
-    exits: [
-      { tileX: 9,  tileY: 18, toZoneId: "forest", toTileX: 9,  toTileY: 1 },
-      { tileX: 10, tileY: 18, toZoneId: "forest", toTileX: 10, toTileY: 1 },
-    ],
-  },
-  forest: {
-    mapData: FOREST_MAP,
-    cols: 20,
-    rows: 20,
-    spawn: { x: 10, y: 10 },
-    exits: [
-      { tileX: 9,  tileY: 18, toZoneId: "town", toTileX: 9,  toTileY: 17 },
-      { tileX: 10, tileY: 18, toZoneId: "town", toTileX: 10, toTileY: 17 },
-    ],
-  },
+  [DEFAULT_ZONE_ID]: loadSettlementZone(),
 };
+
+export function normalizeZoneId(zoneId: string | null | undefined): string {
+  if (zoneId && ZONES[zoneId]) return zoneId;
+  return DEFAULT_ZONE_ID;
+}
 
 export function isTileWalkable(zoneId: string, tileX: number, tileY: number): boolean {
   const zone = ZONES[zoneId];
   if (!zone) return false;
   if (tileX < 0 || tileX >= zone.cols || tileY < 0 || tileY >= zone.rows) return false;
-  return zone.mapData[tileY][tileX] !== TILE_WALL;
+
+  const index = tileY * zone.cols + tileX;
+  return zone.collisionData[index] === 0;
 }

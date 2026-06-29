@@ -4,7 +4,7 @@ import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import cors from "cors";
 import { supabase } from "./lib/supabase";
-import { isTileWalkable, ZONES, type ZoneExit } from "./config/map";
+import { isTileWalkable, normalizeZoneId, ZONES, type ZoneExit } from "./config/map";
 
 const PORT = process.env.PORT ?? 3001;
 const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
@@ -112,14 +112,16 @@ io.on("connection", async (socket) => {
 
   const username = profile?.username ?? userId;
 
-  // Resolve zone (fall back to "town" if saved zone no longer exists)
-  const zoneId: string = (state?.zone_id && ZONES[state.zone_id]) ? state.zone_id : "town";
+  const hasSavedZone = Boolean(state?.zone_id && ZONES[state.zone_id]);
+
+  // Resolve zone, falling back to the current single Tiled settlement map.
+  const zoneId = normalizeZoneId(state?.zone_id);
   const zone = ZONES[zoneId]!;
 
   // Resolve position (saved → zone spawn)
   let startPos: Position = {
-    tileX:  state?.tile_x  ?? zone.spawn.x,
-    tileY:  state?.tile_y  ?? zone.spawn.y,
+    tileX:  hasSavedZone ? (state?.tile_x ?? zone.spawn.x) : zone.spawn.x,
+    tileY:  hasSavedZone ? (state?.tile_y ?? zone.spawn.y) : zone.spawn.y,
     facing: (state?.facing as Facing) ?? "down",
   };
 
