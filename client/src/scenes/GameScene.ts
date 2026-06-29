@@ -10,6 +10,8 @@ import {
   TILED_PLAYER_SPAWN,
   TILED_RENDER_LAYERS,
   TILED_TILESET_NAME,
+  TILED_TILESET_SOURCE_KEY,
+  TILED_TILESET_SOURCE_URL,
   TILESET_IMAGE_KEY,
   TILESET_IMAGE_URL,
   TILE_SIZE,
@@ -26,6 +28,27 @@ interface RemotePlayerState {
   container: Phaser.GameObjects.Container;
   tileX: number;
   tileY: number;
+}
+
+interface TiledTilesetReference {
+  firstgid: number;
+  source?: string;
+  name?: string;
+  tilewidth?: number;
+  tileheight?: number;
+  spacing?: number;
+  margin?: number;
+  tilecount?: number;
+  columns?: number;
+  image?: string;
+  imagewidth?: number;
+  imageheight?: number;
+}
+
+interface CachedTiledMap {
+  data?: {
+    tilesets?: TiledTilesetReference[];
+  };
 }
 
 const PLAYER_SPRITE_KEY = "player-male-tone1";
@@ -87,6 +110,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.load.tilemapTiledJSON(TILED_MAP_KEY, TILED_MAP_URL);
+    this.load.xml(TILED_TILESET_SOURCE_KEY, TILED_TILESET_SOURCE_URL);
     this.load.image(TILESET_IMAGE_KEY, TILESET_IMAGE_URL);
     this.load.image(PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL);
   }
@@ -108,6 +132,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildTilemap() {
+    this.embedExternalTilesets();
+
     this.map = this.make.tilemap({ key: TILED_MAP_KEY });
     const tileset = this.map.addTilesetImage(TILED_TILESET_NAME, TILESET_IMAGE_KEY, TILE_SIZE, TILE_SIZE, 0, 1);
     if (!tileset) {
@@ -123,6 +149,41 @@ export class GameScene extends Phaser.Scene {
 
     TILED_FOREGROUND_LAYERS.forEach(layerName => {
       this.map.createLayer(layerName, tileset, 0, 0)?.setDepth(FOREGROUND_DEPTH);
+    });
+  }
+
+  private embedExternalTilesets() {
+    const cachedMap = this.cache.tilemap.get(TILED_MAP_KEY) as CachedTiledMap | undefined;
+    const tilesets = cachedMap?.data?.tilesets;
+    if (!tilesets) return;
+
+    const tilesetDocument = this.cache.xml.get(TILED_TILESET_SOURCE_KEY);
+    const tilesetElement = tilesetDocument?.querySelector("tileset");
+    const imageElement = tilesetElement?.querySelector("image");
+    if (!tilesetElement || !imageElement) return;
+
+    const embeddedTileset = {
+      name: tilesetElement.getAttribute("name") ?? TILED_TILESET_NAME,
+      tilewidth: Number(tilesetElement.getAttribute("tilewidth") ?? TILE_SIZE),
+      tileheight: Number(tilesetElement.getAttribute("tileheight") ?? TILE_SIZE),
+      spacing: Number(tilesetElement.getAttribute("spacing") ?? 0),
+      margin: Number(tilesetElement.getAttribute("margin") ?? 0),
+      tilecount: Number(tilesetElement.getAttribute("tilecount") ?? 0),
+      columns: Number(tilesetElement.getAttribute("columns") ?? 0),
+      image: imageElement.getAttribute("source") ?? TILESET_IMAGE_URL,
+      imagewidth: Number(imageElement.getAttribute("width") ?? 0),
+      imageheight: Number(imageElement.getAttribute("height") ?? 0),
+    };
+
+    cachedMap.data!.tilesets = tilesets.map(tileset => {
+      if (!tileset.source) return tileset;
+
+      return {
+        ...tileset,
+        ...embeddedTileset,
+        firstgid: tileset.firstgid,
+        source: undefined,
+      };
     });
   }
 

@@ -8,6 +8,8 @@ export const TILED_MAP_URL = "assets/maps/settlement.tmj";
 export const TILESET_IMAGE_KEY = "kenney-roguelike";
 export const TILESET_IMAGE_URL = "assets/roguelikeSheet_transparent.png";
 export const TILED_TILESET_NAME = "roguelikeSheet_transparent";
+export const TILED_TILESET_SOURCE_KEY = "kenney-roguelike-tsx";
+export const TILED_TILESET_SOURCE_URL = "assets/tilesets/kenney_roguelike.tsx";
 
 export const TILED_RENDER_LAYERS = [
   "Ground",
