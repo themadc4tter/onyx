@@ -14,6 +14,8 @@ import {
 } from "../config/map";
 import type { Facing, Position, RemotePlayerData } from "../types";
 import { supabase } from "../lib/supabase";
+import { NpcRenderer } from "../world/NpcRenderer";
+import { getNpcsForZone } from "../world/npcs";
 
 interface Profile {
   id: string;
@@ -95,6 +97,7 @@ export class GameScene extends Phaser.Scene {
 
   private playerContainer!: Phaser.GameObjects.Container;
   private remotePlayers = new Map<string, RemotePlayerState>();
+  private npcRenderer!: NpcRenderer;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<Facing, Phaser.Input.Keyboard.Key>;
@@ -143,6 +146,11 @@ export class GameScene extends Phaser.Scene {
       this.load.image(tileset.imageKey, tileset.imageUrl);
     }
     this.load.image(PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL);
+    for (const npc of getNpcsForZone(this.zoneId)) {
+      if (!this.textures.exists(npc.spriteKey)) {
+        this.load.image(npc.spriteKey, npc.spriteUrl);
+      }
+    }
   }
 
   create() {
@@ -154,6 +162,7 @@ export class GameScene extends Phaser.Scene {
     this.facing = this.startPos?.facing ?? "down";
 
     this.buildPlayer();
+    this.buildNpcs();
     this.setupCamera();
     this.setupInput();
     this.setupServerEvents();
@@ -267,6 +276,11 @@ export class GameScene extends Phaser.Scene {
     this.playerContainer = this.add.container(0, 0, [sprite, label]);
     this.playerContainer.setDepth(20);
     this.syncContainerToTile();
+  }
+
+  private buildNpcs() {
+    this.npcRenderer = new NpcRenderer(this);
+    this.npcRenderer.render(getNpcsForZone(this.zoneId));
   }
 
   private createNameLabel(username: string) {
