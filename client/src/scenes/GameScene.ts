@@ -2,19 +2,15 @@ import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import {
   DEFAULT_ZONE_ID,
+  getZoneMapConfig,
   TILED_COLLISION_LAYER,
   TILED_FOREGROUND_LAYERS,
-  TILED_MAP_KEY,
-  TILED_MAP_URL,
   TILED_OBJECT_LAYER,
   TILED_PLAYER_SPAWN,
   TILED_RENDER_LAYERS,
-  TILED_TILESET_NAME,
-  TILED_TILESET_SOURCE_KEY,
-  TILED_TILESET_SOURCE_URL,
-  TILESET_IMAGE_KEY,
-  TILESET_IMAGE_URL,
+  TILESETS,
   TILE_SIZE,
+  type TilesetConfig,
 } from "../config/map";
 import type { Facing, Position, RemotePlayerData } from "../types";
 import { supabase } from "../lib/supabase";
@@ -84,6 +80,7 @@ export class GameScene extends Phaser.Scene {
   private initPlayers: RemotePlayerData[] = [];
   private zoneId: string = DEFAULT_ZONE_ID;
   private startPos: Position | null = null;
+  private mapKey = getZoneMapConfig(DEFAULT_ZONE_ID).mapKey;
 
   private map!: Phaser.Tilemaps.Tilemap;
   private collisionLayer: Phaser.Tilemaps.TilemapLayer | null = null;
@@ -111,6 +108,7 @@ export class GameScene extends Phaser.Scene {
     this.profile = data.profile;
     this.initPlayers = data.initPlayers ?? [];
     this.zoneId = data.zoneId ?? DEFAULT_ZONE_ID;
+    this.mapKey = getZoneMapConfig(this.zoneId).mapKey;
     this.startPos = data.startPos ?? null;
     this.remotePlayers = new Map();
     this.moving = false;
@@ -136,9 +134,14 @@ export class GameScene extends Phaser.Scene {
       label.destroy();
     });
 
-    this.load.tilemapTiledJSON(TILED_MAP_KEY, TILED_MAP_URL);
-    this.load.xml(TILED_TILESET_SOURCE_KEY, TILED_TILESET_SOURCE_URL);
-    this.load.image(TILESET_IMAGE_KEY, TILESET_IMAGE_URL);
+    const zoneMap = getZoneMapConfig(this.zoneId);
+    this.mapKey = zoneMap.mapKey;
+
+    this.load.tilemapTiledJSON(zoneMap.mapKey, zoneMap.mapUrl);
+    for (const tileset of TILESETS) {
+      this.load.xml(tileset.sourceKey, tileset.sourceUrl);
+      this.load.image(tileset.imageKey, tileset.imageUrl);
+    }
     this.load.image(PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL);
   }
 
@@ -161,49 +164,44 @@ export class GameScene extends Phaser.Scene {
   private buildTilemap() {
     this.embedExternalTilesets();
 
-    this.map = this.make.tilemap({ key: TILED_MAP_KEY });
-    const tileset = this.map.addTilesetImage(TILED_TILESET_NAME, TILESET_IMAGE_KEY, TILE_SIZE, TILE_SIZE, 0, 1);
-    if (!tileset) {
-      throw new Error(`Missing Tiled tileset "${TILED_TILESET_NAME}"`);
+    this.map = this.make.tilemap({ key: this.mapKey });
+    const tilesets = TILESETS.map(tileset => this.map.addTilesetImage(
+      tileset.name,
+      tileset.imageKey,
+      TILE_SIZE,
+      TILE_SIZE,
+      0,
+      1,
+    ));
+
+    if (tilesets.some(tileset => !tileset)) {
+      throw new Error("Missing one or more Tiled tilesets");
     }
 
+    const layerTilesets = tilesets as Phaser.Tilemaps.Tileset[];
+
     TILED_RENDER_LAYERS.forEach((layerName, index) => {
-      this.map.createLayer(layerName, tileset, 0, 0)?.setDepth(index);
+      this.map.createLayer(layerName, layerTilesets, 0, 0)?.setDepth(index);
     });
 
-    this.collisionLayer = this.map.createLayer(TILED_COLLISION_LAYER, tileset, 0, 0);
+    this.collisionLayer = this.map.createLayer(TILED_COLLISION_LAYER, layerTilesets, 0, 0);
     this.collisionLayer?.setVisible(false);
 
     TILED_FOREGROUND_LAYERS.forEach(layerName => {
-      this.map.createLayer(layerName, tileset, 0, 0)?.setDepth(FOREGROUND_DEPTH);
+      this.map.createLayer(layerName, layerTilesets, 0, 0)?.setDepth(FOREGROUND_DEPTH);
     });
   }
 
   private embedExternalTilesets() {
-    const cachedMap = this.cache.tilemap.get(TILED_MAP_KEY) as CachedTiledMap | undefined;
+    const cachedMap = this.cache.tilemap.get(this.mapKey) as CachedTiledMap | undefined;
     const tilesets = cachedMap?.data?.tilesets;
     if (!tilesets) return;
 
-    const tilesetDocument = this.cache.xml.get(TILED_TILESET_SOURCE_KEY);
-    const tilesetElement = tilesetDocument?.querySelector("tileset");
-    const imageElement = tilesetElement?.querySelector("image");
-    if (!tilesetElement || !imageElement) return;
-
-    const embeddedTileset = {
-      name: tilesetElement.getAttribute("name") ?? TILED_TILESET_NAME,
-      tilewidth: Number(tilesetElement.getAttribute("tilewidth") ?? TILE_SIZE),
-      tileheight: Number(tilesetElement.getAttribute("tileheight") ?? TILE_SIZE),
-      spacing: Number(tilesetElement.getAttribute("spacing") ?? 0),
-      margin: Number(tilesetElement.getAttribute("margin") ?? 0),
-      tilecount: Number(tilesetElement.getAttribute("tilecount") ?? 0),
-      columns: Number(tilesetElement.getAttribute("columns") ?? 0),
-      image: imageElement.getAttribute("source") ?? TILESET_IMAGE_URL,
-      imagewidth: Number(imageElement.getAttribute("width") ?? 0),
-      imageheight: Number(imageElement.getAttribute("height") ?? 0),
-    };
-
     cachedMap.data!.tilesets = tilesets.map(tileset => {
       if (!tileset.source) return tileset;
+      const tilesetConfig = this.findTilesetConfig(tileset.source);
+      const embeddedTileset = tilesetConfig ? this.readTilesetSource(tilesetConfig) : null;
+      if (!embeddedTileset) return tileset;
 
       return {
         ...tileset,
@@ -212,6 +210,31 @@ export class GameScene extends Phaser.Scene {
         source: undefined,
       };
     });
+  }
+
+  private findTilesetConfig(source: string) {
+    const sourceFile = source.replace(/\\/g, "/").split("/").pop();
+    return TILESETS.find(tileset => tileset.key === sourceFile);
+  }
+
+  private readTilesetSource(tileset: TilesetConfig) {
+    const tilesetDocument = this.cache.xml.get(tileset.sourceKey);
+    const tilesetElement = tilesetDocument?.querySelector("tileset");
+    const imageElement = tilesetElement?.querySelector("image");
+    if (!tilesetElement || !imageElement) return null;
+
+    return {
+      name: tilesetElement.getAttribute("name") ?? tileset.name,
+      tilewidth: Number(tilesetElement.getAttribute("tilewidth") ?? TILE_SIZE),
+      tileheight: Number(tilesetElement.getAttribute("tileheight") ?? TILE_SIZE),
+      spacing: Number(tilesetElement.getAttribute("spacing") ?? 0),
+      margin: Number(tilesetElement.getAttribute("margin") ?? 0),
+      tilecount: Number(tilesetElement.getAttribute("tilecount") ?? 0),
+      columns: Number(tilesetElement.getAttribute("columns") ?? 0),
+      image: imageElement.getAttribute("source") ?? tileset.imageUrl,
+      imagewidth: Number(imageElement.getAttribute("width") ?? 0),
+      imageheight: Number(imageElement.getAttribute("height") ?? 0),
+    };
   }
 
   private findSpawnTile() {

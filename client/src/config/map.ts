@@ -2,14 +2,53 @@ export const TILE_SIZE = 16;
 
 export const DEFAULT_ZONE_ID = "settlement";
 
-export const TILED_MAP_KEY = "settlement-map";
-export const TILED_MAP_URL = "assets/maps/settlement.tmj";
+export interface TilesetConfig {
+  key: string;
+  imageKey: string;
+  imageUrl: string;
+  name: string;
+  sourceKey: string;
+  sourceUrl: string;
+}
 
-export const TILESET_IMAGE_KEY = "kenney-roguelike";
-export const TILESET_IMAGE_URL = "assets/roguelikeSheet_transparent.png";
-export const TILED_TILESET_NAME = "roguelikeSheet_transparent";
-export const TILED_TILESET_SOURCE_KEY = "kenney-roguelike-tsx";
-export const TILED_TILESET_SOURCE_URL = "assets/tilesets/kenney_roguelike.tsx";
+export interface ZoneMapConfig {
+  mapKey: string;
+  mapUrl: string;
+}
+
+export const ZONE_MAPS: Record<string, ZoneMapConfig> = {
+  settlement: {
+    mapKey: "settlement-map",
+    mapUrl: "assets/maps/settlement.tmj",
+  },
+  inn: {
+    mapKey: "inn-map",
+    mapUrl: "assets/maps/inn.tmj",
+  },
+};
+
+export const TILESETS: TilesetConfig[] = [
+  {
+    key: "kenney_roguelike.tsx",
+    imageKey: "kenney-roguelike",
+    imageUrl: "assets/roguelikeSheet_transparent.png",
+    name: "roguelikeSheet_transparent",
+    sourceKey: "kenney-roguelike-tsx",
+    sourceUrl: "assets/tilesets/kenney_roguelike.tsx",
+  },
+  {
+    key: "kenney_roguelikeIndoor.tsx",
+    imageKey: "kenney-roguelike-indoor",
+    imageUrl: "assets/roguelikeIndoor_transparent.png",
+    name: "roguelikeIndoor_transparent",
+    sourceKey: "kenney-roguelike-indoor-tsx",
+    sourceUrl: "assets/tilesets/kenney_roguelikeIndoor.tsx",
+  },
+];
+
+export function getZoneMapConfig(zoneId: string) {
+  return ZONE_MAPS[zoneId] ?? ZONE_MAPS[DEFAULT_ZONE_ID];
+}
 
 export const TILED_RENDER_LAYERS = [
   "Ground",

@@ -1,0 +1,17 @@
+[31mfailed to load config from C:\Users\Olivi\Documents\repo\onyx\client\vite.config.ts[39m
+[31merror when starting dev server:
+Error: spawn EPERM
+    at ChildProcess.spawn (node:internal/child_process:413:11)
+    at Object.spawn (node:child_process:757:9)
+    at ensureServiceIsRunning (C:\Users\Olivi\Documents\repo\onyx\node_modules\vite\node_modules\esbuild\lib\main.js:1975:29)
+    at build (C:\Users\Olivi\Documents\repo\onyx\node_modules\vite\node_modules\esbuild\lib\main.js:1873:26)
+    at bundleConfigFile (file:///C:/Users/Olivi/Documents/repo/onyx/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:66845:24)
+    at loadConfigFromFile (file:///C:/Users/Olivi/Documents/repo/onyx/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:66815:27)
+    at resolveConfig (file:///C:/Users/Olivi/Documents/repo/onyx/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:66416:30)
+    at _createServer (file:///C:/Users/Olivi/Documents/repo/onyx/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:63015:24)
+    at createServer (file:///C:/Users/Olivi/Documents/repo/onyx/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:63012:10)
+    at CAC.<anonymous> (file:///C:/Users/Olivi/Documents/repo/onyx/node_modules/vite/dist/node/cli.js:736:26)[39m
+npm ERR! Lifecycle script `dev` failed with error: 
+npm ERR! Error: command failed 
+npm ERR!   in workspace: @onyx/client@1.0.0 
+npm ERR!   at location: C:\Users\Olivi\Documents\repo\onyx\client 

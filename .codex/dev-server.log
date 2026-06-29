@@ -1,0 +1,8 @@
+
+> onyx@1.0.0 dev:server
+> npm run dev --workspace=server
+
+
+> @onyx/server@1.0.0 dev
+> tsx watch src/index.ts
+

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="40" height="32" tilewidth="16" tileheight="16" infinite="0" nextlayerid="12" nextobjectid="10">
+<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="40" height="32" tilewidth="16" tileheight="16" infinite="0" nextlayerid="12" nextobjectid="13">
  <editorsettings>
   <export target="settlement.tmj" format="json"/>
  </editorsettings>
@@ -294,6 +294,10 @@
  </layer>
  <objectgroup id="9" name="Objects">
   <object id="1" name="player_spawn" type="spawn" x="328" y="280">
+   <point/>
+  </object>
+  <object id="11" name="exit_inn" type="exit" x="176" y="208" width="16" height="16"/>
+  <object id="12" name="entry_inn" type="entry" x="184" y="232">
    <point/>
   </object>
  </objectgroup>

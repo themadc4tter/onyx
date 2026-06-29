@@ -363,13 +363,38 @@
                  "width":0,
                  "x":328,
                  "y":280
+                },
+                {
+                 "height":16,
+                 "id":11,
+                 "name":"exit_inn",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"exit",
+                 "visible":true,
+                 "width":16,
+                 "x":176,
+                 "y":208
+                },
+                {
+                 "height":0,
+                 "id":12,
+                 "name":"entry_inn",
+                 "opacity":1,
+                 "point":true,
+                 "rotation":0,
+                 "type":"entry",
+                 "visible":true,
+                 "width":0,
+                 "x":184,
+                 "y":232
                 }],
          "opacity":1,
          "type":"objectgroup",
          "visible":true,
          "x":0,
          "y":0
-        }, 
+                },
         {
          "data":[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -414,7 +439,7 @@
          "y":0
         }],
  "nextlayerid":12,
- "nextobjectid":10,
+ "nextobjectid":13,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.2",
