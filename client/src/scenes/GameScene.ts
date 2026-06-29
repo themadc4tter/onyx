@@ -3,6 +3,7 @@ import type { Socket } from "socket.io-client";
 import {
   DEFAULT_ZONE_ID,
   TILED_COLLISION_LAYER,
+  TILED_FOREGROUND_LAYERS,
   TILED_MAP_KEY,
   TILED_MAP_URL,
   TILED_OBJECT_LAYER,
@@ -31,6 +32,7 @@ const PLAYER_SPRITE_KEY = "player-male-tone1";
 const PLAYER_SPRITE_URL = "assets/characters/male_tone1.png";
 const NAME_LABEL_FONT_SIZE = "7px";
 const NAME_LABEL_RESOLUTION = 4;
+const FOREGROUND_DEPTH = 21;
 
 export class GameScene extends Phaser.Scene {
   private socket!: Socket;
@@ -118,6 +120,10 @@ export class GameScene extends Phaser.Scene {
 
     this.collisionLayer = this.map.createLayer(TILED_COLLISION_LAYER, tileset, 0, 0);
     this.collisionLayer?.setVisible(false);
+
+    TILED_FOREGROUND_LAYERS.forEach(layerName => {
+      this.map.createLayer(layerName, tileset, 0, 0)?.setDepth(FOREGROUND_DEPTH);
+    });
   }
 
   private findSpawnTile() {

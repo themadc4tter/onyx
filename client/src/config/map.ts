@@ -15,6 +15,11 @@ export const TILED_RENDER_LAYERS = [
   "Water",
   "Buildings",
   "Props",
+  "Props2",
+] as const;
+
+export const TILED_FOREGROUND_LAYERS = [
+  "Foreground",
 ] as const;
 
 export const TILED_COLLISION_LAYER = "Collision";
