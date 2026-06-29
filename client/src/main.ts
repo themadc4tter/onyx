@@ -9,6 +9,10 @@ function startGame() {
     type: Phaser.AUTO,
     width: 640,
     height: 480,
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
     backgroundColor: "#1a1a2e",
     pixelArt: true,
     scene: [BootScene, GameScene],
