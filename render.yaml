@@ -2,9 +2,9 @@ services:
   - type: web
     name: onyx-server
     runtime: node
-    rootDir: server
-    buildCommand: npm install --include=dev && npm run build
-    startCommand: npm start
+    rootDir: .
+    buildCommand: npm install --include=dev && npm run build --workspace=server
+    startCommand: npm start --workspace=server
     plan: starter        # paid tier — no cold starts (required for persistent WebSockets)
     envVars:
       - key: NODE_ENV
