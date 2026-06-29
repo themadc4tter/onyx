@@ -300,7 +300,7 @@
   <object id="12" name="entry_inn" type="entry" x="184" y="232">
    <point/>
   </object>
-  <object id="13" name="npc_1" type="npc_spawn" x="472" y="408">
+  <object id="13" name="npc_1" type="npc_spawn" x="504" y="408">
    <point/>
   </object>
  </objectgroup>

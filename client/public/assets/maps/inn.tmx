@@ -141,7 +141,7 @@
   <object id="4" name="npc_1" type="npc_spawn" x="72" y="72">
    <point/>
   </object>
-  <object id="5" name="npc_2" type="npc_spawn" x="200" y="72">
+  <object id="5" name="npc_2" type="npc_spawn" x="184" y="56">
    <point/>
   </object>
  </objectgroup>

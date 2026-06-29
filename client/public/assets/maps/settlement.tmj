@@ -399,7 +399,7 @@
                  "type":"npc_spawn",
                  "visible":true,
                  "width":0,
-                 "x":472,
+                 "x":504,
                  "y":408
                 }],
          "opacity":1,
