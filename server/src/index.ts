@@ -72,6 +72,8 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
   const player = connectedPlayers.get(socket.id)!;
   player.position = newPos;
   player.zoneId   = newZoneId;
+  player.lastMoveAt = 0;
+  player.lastProcessedMoveSeq = 0;
   socket.data.position = newPos;
   socket.data.zoneId   = newZoneId;
 
