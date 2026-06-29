@@ -29,6 +29,8 @@ interface RemotePlayerState {
 
 const PLAYER_SPRITE_KEY = "player-male-tone1";
 const PLAYER_SPRITE_URL = "assets/characters/male_tone1.png";
+const NAME_LABEL_FONT_SIZE = "7px";
+const NAME_LABEL_RESOLUTION = 4;
 
 export class GameScene extends Phaser.Scene {
   private socket!: Socket;
@@ -130,19 +132,27 @@ export class GameScene extends Phaser.Scene {
 
   private buildPlayer() {
     const sprite = this.add.image(0, 0, PLAYER_SPRITE_KEY);
-
-    const label = this.add
-      .text(0, -TILE_SIZE / 2 - 2, this.profile.username, {
-        fontSize: "8px",
-        color: "#ffffff",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5, 1);
+    const label = this.createNameLabel(this.profile.username);
 
     this.playerContainer = this.add.container(0, 0, [sprite, label]);
     this.playerContainer.setDepth(20);
     this.syncContainerToTile();
+  }
+
+  private createNameLabel(username: string) {
+    const label = this.add
+      .text(0, -TILE_SIZE / 2 - 2, username, {
+        fontFamily: "Arial, sans-serif",
+        fontSize: NAME_LABEL_FONT_SIZE,
+        color: "#ffffff",
+        stroke: "#000000",
+        strokeThickness: 1,
+        resolution: NAME_LABEL_RESOLUTION,
+      })
+      .setOrigin(0.5, 1);
+
+    label.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    return label;
   }
 
   private syncContainerToTile() {
@@ -189,15 +199,7 @@ export class GameScene extends Phaser.Scene {
     if (this.remotePlayers.has(data.socketId)) return;
 
     const sprite = this.add.image(0, 0, PLAYER_SPRITE_KEY);
-
-    const label = this.add
-      .text(0, -TILE_SIZE / 2 - 2, data.username, {
-        fontSize: "8px",
-        color: "#ffffff",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5, 1);
+    const label = this.createNameLabel(data.username);
 
     const container = this.add
       .container(
