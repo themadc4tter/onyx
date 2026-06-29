@@ -11,9 +11,22 @@ const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
 
 type Facing = "up" | "down" | "left" | "right";
 interface Position { tileX: number; tileY: number; facing: Facing; }
-interface ConnectedPlayer { socketId: string; userId: string; username: string; position: Position; zoneId: string; lastMoveAt: number; }
+interface MovePayload extends Position { seq?: number; }
+interface MoveAck { seq: number; position: Position; }
+interface ConnectedPlayer {
+  socketId: string;
+  userId: string;
+  username: string;
+  position: Position;
+  zoneId: string;
+  lastMoveAt: number;
+  lastProcessedMoveSeq: number;
+}
 
 const connectedPlayers = new Map<string, ConnectedPlayer>();
+const MOVE_INTERVAL_MS = 120;
+const MOVE_RATE_TOLERANCE_MS = 30;
+const MIN_MOVE_INTERVAL_MS = MOVE_INTERVAL_MS - MOVE_RATE_TOLERANCE_MS;
 
 // Debounced position saves: map of socketId → pending timeout
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -42,6 +55,11 @@ function flushSave(socketId: string, userId: string, zoneId: string, pos: Positi
   const existing = saveTimers.get(socketId);
   if (existing) { clearTimeout(existing); saveTimers.delete(socketId); }
   savePosition(userId, zoneId, pos).catch(console.error);
+}
+
+function emitMoveAck(socket: Socket, seq: number, position: Position) {
+  const ack: MoveAck = { seq, position };
+  socket.emit("move:ack", ack);
 }
 
 async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) {
@@ -137,7 +155,15 @@ io.on("connection", async (socket) => {
   const others = [...connectedPlayers.values()].filter(p => p.zoneId === zoneId);
   socket.emit("players:init", others);
 
-  connectedPlayers.set(socket.id, { socketId: socket.id, userId, username, position: startPos, zoneId, lastMoveAt: 0 });
+  connectedPlayers.set(socket.id, {
+    socketId: socket.id,
+    userId,
+    username,
+    position: startPos,
+    zoneId,
+    lastMoveAt: 0,
+    lastProcessedMoveSeq: 0,
+  });
 
   await socket.join(zoneId);
   socket.to(zoneId).emit("player:joined", { socketId: socket.id, username, position: startPos });
@@ -149,14 +175,24 @@ io.on("connection", async (socket) => {
   // ─── Move ─────────────────────────────────────────────────────────────────
 
   socket.on("move", async (payload: unknown) => {
-    const { tileX, tileY, facing } = payload as Position;
+    const { seq = 0, tileX, tileY, facing } = payload as MovePayload;
     const current: Position = socket.data.position;
     const currentZoneId: string = socket.data.zoneId;
 
     const now = Date.now();
     const player = connectedPlayers.get(socket.id);
-    if (!player || now - player.lastMoveAt < 80) {
-      socket.emit("move:ack", current);
+    if (!player) {
+      emitMoveAck(socket, seq, current);
+      return;
+    }
+
+    if (seq <= player.lastProcessedMoveSeq) {
+      emitMoveAck(socket, seq, current);
+      return;
+    }
+
+    if (player.lastMoveAt > 0 && now - player.lastMoveAt < MIN_MOVE_INTERVAL_MS) {
+      emitMoveAck(socket, seq, current);
       return;
     }
 
@@ -165,7 +201,7 @@ io.on("connection", async (socket) => {
     const isOneStep = (dx === 1 && dy === 0) || (dx === 0 && dy === 1);
 
     if (!isOneStep || !isTileWalkable(currentZoneId, tileX, tileY)) {
-      socket.emit("move:ack", current);
+      emitMoveAck(socket, seq, current);
       return;
     }
 
@@ -173,6 +209,7 @@ io.on("connection", async (socket) => {
     socket.data.position = accepted;
     player.position = accepted;
     player.lastMoveAt = now;
+    player.lastProcessedMoveSeq = seq;
 
     // Check for zone exit
     const currentZone = ZONES[currentZoneId];
@@ -182,7 +219,7 @@ io.on("connection", async (socket) => {
       return;
     }
 
-    socket.emit("move:ack", accepted);
+    emitMoveAck(socket, seq, accepted);
     socket.to(currentZoneId).emit("player:moved", { socketId: socket.id, tileX, tileY, facing });
     scheduleSave(socket.id, player.userId, currentZoneId, accepted);
   });

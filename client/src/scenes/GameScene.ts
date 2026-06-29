@@ -32,6 +32,15 @@ interface RemotePlayerState {
   moving: boolean;
 }
 
+interface PredictedMove extends Position {
+  seq: number;
+}
+
+interface MoveAck {
+  seq: number;
+  position: Position;
+}
+
 interface TiledTilesetReference {
   firstgid: number;
   source?: string;
@@ -60,6 +69,7 @@ const NAME_LABEL_RESOLUTION = 4;
 const FOREGROUND_DEPTH = 21;
 const LOCAL_MOVE_DURATION_MS = 120;
 const REMOTE_MOVE_DURATION_MS = 120;
+const MAX_QUEUED_DIRECTIONS = 3;
 
 const DIRECTION_VECTORS: Record<Facing, { dx: number; dy: number }> = {
   up: { dx: 0, dy: -1 },
@@ -82,8 +92,9 @@ export class GameScene extends Phaser.Scene {
   private tileY = 0;
   private facing: Facing = "down";
   private moving = false;
-  private queuedDirection: Facing | null = null;
-  private awaitingMoveAck: Position | null = null;
+  private queuedDirections: Facing[] = [];
+  private nextMoveSeq = 1;
+  private pendingMoves: PredictedMove[] = [];
 
   private playerContainer!: Phaser.GameObjects.Container;
   private remotePlayers = new Map<string, RemotePlayerState>();
@@ -103,8 +114,9 @@ export class GameScene extends Phaser.Scene {
     this.startPos = data.startPos ?? null;
     this.remotePlayers = new Map();
     this.moving = false;
-    this.queuedDirection = null;
-    this.awaitingMoveAck = null;
+    this.queuedDirections = [];
+    this.nextMoveSeq = 1;
+    this.pendingMoves = [];
   }
 
   preload() {
@@ -338,19 +350,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private setupServerEvents() {
-    this.socket.on("move:ack", (pos: Position) => {
-      this.awaitingMoveAck = null;
+    this.socket.on("move:ack", (ack: MoveAck | Position) => {
+      const normalizedAck = this.normalizeMoveAck(ack);
+      if (!normalizedAck) return;
 
-      if (pos.tileX !== this.tileX || pos.tileY !== this.tileY) {
-        this.tweens.killTweensOf(this.playerContainer);
-        this.tileX = pos.tileX;
-        this.tileY = pos.tileY;
-        this.syncContainerToTile();
-        this.queuedDirection = null;
-        this.moving = false;
-      }
-      this.facing = pos.facing;
-      this.tryQueuedMove();
+      this.reconcileMoveAck(normalizedAck);
     });
 
     this.socket.on("player:joined", (data: RemotePlayerData) => {
@@ -400,7 +404,7 @@ export class GameScene extends Phaser.Scene {
     const direction = pressedDirection ?? this.readHeldDirection();
 
     if (this.moving) {
-      if (pressedDirection) this.queuedDirection = pressedDirection;
+      if (pressedDirection) this.queueDirection(pressedDirection);
       return;
     }
 
@@ -429,8 +433,14 @@ export class GameScene extends Phaser.Scene {
     return null;
   }
 
+  private queueDirection(direction: Facing) {
+    if (this.queuedDirections.length >= MAX_QUEUED_DIRECTIONS) {
+      this.queuedDirections.shift();
+    }
+    this.queuedDirections.push(direction);
+  }
+
   private startLocalMove(newFacing: Facing) {
-    this.queuedDirection = null;
     this.facing = newFacing;
 
     const { dx, dy } = DIRECTION_VECTORS[newFacing];
@@ -451,7 +461,14 @@ export class GameScene extends Phaser.Scene {
     this.moving = true;
     this.tileX = nextX;
     this.tileY = nextY;
-    this.awaitingMoveAck = { tileX: nextX, tileY: nextY, facing: newFacing };
+
+    const predictedMove: PredictedMove = {
+      seq: this.nextMoveSeq++,
+      tileX: nextX,
+      tileY: nextY,
+      facing: newFacing,
+    };
+    this.pendingMoves.push(predictedMove);
 
     this.tweens.add({
       targets: this.playerContainer,
@@ -465,15 +482,55 @@ export class GameScene extends Phaser.Scene {
       },
     });
 
-    this.socket.emit("move", { tileX: nextX, tileY: nextY, facing: newFacing });
+    this.socket.emit("move", predictedMove);
   }
 
   private tryQueuedMove() {
-    if (this.moving || this.awaitingMoveAck) return;
+    if (this.moving) return;
 
-    const direction = this.queuedDirection ?? this.readHeldDirection();
+    const direction = this.queuedDirections.shift() ?? this.readHeldDirection();
     if (!direction) return;
 
     this.startLocalMove(direction);
+  }
+
+  private normalizeMoveAck(ack: MoveAck | Position): MoveAck | null {
+    if ("position" in ack) return ack;
+
+    const matchingMove = this.pendingMoves.find(move => move.tileX === ack.tileX && move.tileY === ack.tileY);
+    if (!matchingMove) return null;
+
+    return {
+      seq: matchingMove.seq,
+      position: ack,
+    };
+  }
+
+  private reconcileMoveAck(ack: MoveAck) {
+    const acknowledgedMove = this.pendingMoves.find(move => move.seq === ack.seq);
+    this.pendingMoves = this.pendingMoves.filter(move => move.seq > ack.seq);
+
+    if (
+      acknowledgedMove &&
+      (ack.position.tileX !== acknowledgedMove.tileX ||
+        ack.position.tileY !== acknowledgedMove.tileY ||
+        ack.position.facing !== acknowledgedMove.facing)
+    ) {
+      this.correctLocalPosition(ack.position);
+      return;
+    }
+
+    this.facing = ack.position.facing;
+  }
+
+  private correctLocalPosition(position: Position) {
+    this.tweens.killTweensOf(this.playerContainer);
+    this.tileX = position.tileX;
+    this.tileY = position.tileY;
+    this.facing = position.facing;
+    this.moving = false;
+    this.queuedDirections = [];
+    this.pendingMoves = [];
+    this.syncContainerToTile();
   }
 }
