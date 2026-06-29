@@ -5,6 +5,7 @@ export const DEFAULT_ZONE_ID = "settlement";
 
 const TILE_SIZE = 16;
 const MAP_PATH = findSettlementMapPath();
+let settlementMapMtimeMs = 0;
 
 interface TiledTileLayer {
   name: string;
@@ -118,16 +119,38 @@ function loadSettlementZone(): ZoneConfig {
   };
 }
 
+function getSettlementMapMtime() {
+  return fs.statSync(MAP_PATH).mtimeMs;
+}
+
+function loadTrackedSettlementZone() {
+  const zone = loadSettlementZone();
+  settlementMapMtimeMs = getSettlementMapMtime();
+  return zone;
+}
+
 export const ZONES: Record<string, ZoneConfig> = {
-  [DEFAULT_ZONE_ID]: loadSettlementZone(),
+  [DEFAULT_ZONE_ID]: loadTrackedSettlementZone(),
 };
 
+function refreshSettlementZoneIfChanged() {
+  const currentMtimeMs = getSettlementMapMtime();
+  if (currentMtimeMs === settlementMapMtimeMs) return;
+
+  ZONES[DEFAULT_ZONE_ID] = loadSettlementZone();
+  settlementMapMtimeMs = currentMtimeMs;
+  console.log(`[map]        reloaded ${path.basename(MAP_PATH)}`);
+}
+
 export function normalizeZoneId(zoneId: string | null | undefined): string {
+  refreshSettlementZoneIfChanged();
   if (zoneId && ZONES[zoneId]) return zoneId;
   return DEFAULT_ZONE_ID;
 }
 
 export function isTileWalkable(zoneId: string, tileX: number, tileY: number): boolean {
+  refreshSettlementZoneIfChanged();
+
   const zone = ZONES[zoneId];
   if (!zone) return false;
   if (tileX < 0 || tileX >= zone.cols || tileY < 0 || tileY >= zone.rows) return false;
