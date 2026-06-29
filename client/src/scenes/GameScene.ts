@@ -165,7 +165,7 @@ export class GameScene extends Phaser.Scene {
     this.embedExternalTilesets();
 
     this.map = this.make.tilemap({ key: this.mapKey });
-    const tilesets = TILESETS.map(tileset => this.map.addTilesetImage(
+    const tilesets = this.getMapTilesetConfigs().map(tileset => this.map.addTilesetImage(
       tileset.name,
       tileset.imageKey,
       TILE_SIZE,
@@ -190,6 +190,19 @@ export class GameScene extends Phaser.Scene {
     TILED_FOREGROUND_LAYERS.forEach(layerName => {
       this.map.createLayer(layerName, layerTilesets, 0, 0)?.setDepth(FOREGROUND_DEPTH);
     });
+  }
+
+  private getMapTilesetConfigs() {
+    const cachedMap = this.cache.tilemap.get(this.mapKey) as CachedTiledMap | undefined;
+    const mapTilesets = cachedMap?.data?.tilesets ?? [];
+    const tilesetConfigs = mapTilesets
+      .map(tileset => TILESETS.find(config => (
+        config.name === tileset.name ||
+        (tileset.source && config.key === tileset.source.replace(/\\/g, "/").split("/").pop())
+      )))
+      .filter((tileset): tileset is TilesetConfig => Boolean(tileset));
+
+    return tilesetConfigs.length > 0 ? tilesetConfigs : TILESETS;
   }
 
   private embedExternalTilesets() {
