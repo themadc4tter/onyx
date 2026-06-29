@@ -363,7 +363,7 @@
                  "width":0,
                  "x":328,
                  "y":280
-                },
+                }, 
                 {
                  "height":16,
                  "id":11,
@@ -375,7 +375,7 @@
                  "width":16,
                  "x":176,
                  "y":208
-                },
+                }, 
                 {
                  "height":0,
                  "id":12,
@@ -388,13 +388,26 @@
                  "width":0,
                  "x":184,
                  "y":232
+                }, 
+                {
+                 "height":0,
+                 "id":13,
+                 "name":"npc_1",
+                 "opacity":1,
+                 "point":true,
+                 "rotation":0,
+                 "type":"npc_spawn",
+                 "visible":true,
+                 "width":0,
+                 "x":472,
+                 "y":408
                 }],
          "opacity":1,
          "type":"objectgroup",
          "visible":true,
          "x":0,
          "y":0
-                },
+        }, 
         {
          "data":[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -439,7 +452,7 @@
          "y":0
         }],
  "nextlayerid":12,
- "nextobjectid":13,
+ "nextobjectid":15,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.2",

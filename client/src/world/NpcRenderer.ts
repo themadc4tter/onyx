@@ -29,8 +29,8 @@ export class NpcRenderer {
 
   private createNpcContainer(npc: PlacedNpcDefinition) {
     const sprite = this.scene.add.image(0, 0, npc.spriteKey);
-    const nameLabel = this.createLabel(npc.name, -TILE_SIZE / 2 - 10, NPC_NAME_LABEL_FONT_SIZE, "#ffffff");
-    const titleLabel = this.createLabel(`<${npc.title}>`, -TILE_SIZE / 2 - 2, NPC_TITLE_LABEL_FONT_SIZE, "#ffd98a");
+    const nameLabel = this.createLabel(npc.name, -TILE_SIZE / 2 - 8, NPC_NAME_LABEL_FONT_SIZE, "#ffffff");
+    const titleLabel = this.createLabel(`<${npc.title}>`, -TILE_SIZE / 2 - 3, NPC_TITLE_LABEL_FONT_SIZE, "#ffd98a");
 
     return this.scene.add
       .container(

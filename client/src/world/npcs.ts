@@ -22,6 +22,17 @@ export interface PlacedNpcDefinition extends NpcDefinition {
 
 export const NPCS: NpcDefinition[] = [
   {
+    id: "settlement-blacksmith-john-smith",
+    name: "John Smith",
+    title: "Blacksmith",
+    zoneId: "settlement",
+    markerName: "npc_1",
+    spriteKey: "npc004",
+    spriteUrl: "assets/characters/npc004.png",
+    facing: "down",
+    dialogueId: "john_smith_intro",
+  },
+  {
     id: "inn-cook-bob",
     name: "Bob",
     title: "Cook",
@@ -31,6 +42,17 @@ export const NPCS: NpcDefinition[] = [
     spriteUrl: "assets/characters/male_tone3.png",
     facing: "down",
     dialogueId: "bob_intro",
+  },
+  {
+    id: "inn-adventurer-gerald",
+    name: "Gerald",
+    title: "Adventurer",
+    zoneId: "inn",
+    markerName: "npc_2",
+    spriteKey: "npc008",
+    spriteUrl: "assets/characters/npc008.png",
+    facing: "down",
+    dialogueId: "gerald_intro",
   },
 ];
 
