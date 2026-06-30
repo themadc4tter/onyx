@@ -14,8 +14,16 @@ import {
   loadInventory,
   markInventoryDirty,
   moveInventoryItem,
+  saveInventory,
   splitInventoryStack,
 } from "./game/inventory";
+import {
+  equipInventoryItem,
+  getEquipment,
+  loadEquipment,
+  saveEquipment,
+  unequipItem,
+} from "./game/equipment";
 import { getItemDefinition } from "./game/items";
 
 const PORT = process.env.PORT ?? 3001;
@@ -55,6 +63,15 @@ interface InventorySplitPayload {
 }
 interface InventoryDeletePayload {
   slotIndex?: number;
+}
+interface EquipmentPayload {
+  slots: ReturnType<typeof getEquipment>["slots"];
+}
+interface EquipmentEquipPayload {
+  inventorySlotIndex?: number;
+}
+interface EquipmentUnequipPayload {
+  slot?: string;
 }
 interface ConnectedPlayer {
   socketId: string;
@@ -142,12 +159,24 @@ function getInventoryPayload(userId: string): InventoryPayload {
   };
 }
 
+function getEquipmentPayload(userId: string): EquipmentPayload {
+  const equipment = getEquipment(userId);
+  return {
+    slots: Object.fromEntries(
+      Object.entries(equipment.slots).map(([slot, item]) => [slot, item ? { ...item } : null]),
+    ) as EquipmentPayload["slots"],
+  };
+}
+
 function getInventoryErrorMessage(error?: string) {
   const messages: Record<string, string> = {
     empty_source: "That inventory slot is empty.",
+    empty_equipment_slot: "That equipment slot is empty.",
     inventory_full: "Inventory is full.",
+    invalid_equipment_slot: "That equipment slot is not valid.",
     invalid_quantity: "That stack cannot be split that way.",
     invalid_slot: "That inventory slot is not valid.",
+    not_equipment: "That item cannot be equipped.",
     unknown_item: "That item is not available.",
   };
 
@@ -160,6 +189,15 @@ function emitInventoryActionResult(socket: Socket, userId: string, ok: boolean, 
   }
 
   socket.emit("inventory:changed", getInventoryPayload(userId));
+}
+
+function emitEquipmentActionResult(socket: Socket, userId: string, ok: boolean, error?: string) {
+  if (!ok) {
+    socket.emit("chat:error", { message: getInventoryErrorMessage(error) });
+  }
+
+  socket.emit("inventory:changed", getInventoryPayload(userId));
+  socket.emit("equipment:changed", getEquipmentPayload(userId));
 }
 
 function normalizeChatPayload(payload: unknown): NormalizedChatPayload | null {
@@ -203,6 +241,7 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
     initPlayers: newZonePlayers,
     herbSpawns: getHerbSpawnStates(newZoneId),
     inventory: getInventoryPayload(player.userId),
+    equipment: getEquipmentPayload(player.userId),
   });
 
   flushSave(socket.id, player.userId, newZoneId, newPos);
@@ -250,7 +289,10 @@ io.on("connection", async (socket) => {
     supabase.from("profiles").select("id, username").eq("id", userId).single(),
     supabase.from("player_state").select("zone_id, tile_x, tile_y, facing").eq("user_id", userId).single(),
   ]);
-  await loadInventory(userId);
+  await Promise.all([
+    loadInventory(userId),
+    loadEquipment(userId),
+  ]);
 
   const username = profile?.username ?? userId;
 
@@ -301,6 +343,7 @@ io.on("connection", async (socket) => {
     zoneId,
     herbSpawns: getHerbSpawnStates(zoneId),
     inventory: getInventoryPayload(userId),
+    equipment: getEquipmentPayload(userId),
   });
 
   // ─── Move ─────────────────────────────────────────────────────────────────
@@ -461,6 +504,47 @@ io.on("connection", async (socket) => {
     const result = deleteInventoryItem(player.userId, Number(payload?.slotIndex));
     if (result.ok) markInventoryDirty(player.userId);
     emitInventoryActionResult(socket, player.userId, result.ok, result.error);
+  });
+
+  socket.on("equipment:equip", async (payload: EquipmentEquipPayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+
+    const result = equipInventoryItem(
+      player.userId,
+      Number(payload?.inventorySlotIndex),
+    );
+
+    if (result.ok) {
+      await Promise.all([
+        saveInventory(player.userId, result.inventory),
+        saveEquipment(player.userId, result.equipment),
+      ]).catch(error => {
+        console.error(`[equipment] failed to save equipped item for ${player.userId}`, error);
+        socket.emit("chat:error", { message: "Equipment could not be saved." });
+      });
+    }
+
+    emitEquipmentActionResult(socket, player.userId, result.ok, result.error);
+  });
+
+  socket.on("equipment:unequip", async (payload: EquipmentUnequipPayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+
+    const result = unequipItem(player.userId, payload?.slot ?? "");
+
+    if (result.ok) {
+      await Promise.all([
+        saveInventory(player.userId, result.inventory),
+        saveEquipment(player.userId, result.equipment),
+      ]).catch(error => {
+        console.error(`[equipment] failed to save unequipped item for ${player.userId}`, error);
+        socket.emit("chat:error", { message: "Equipment could not be saved." });
+      });
+    }
+
+    emitEquipmentActionResult(socket, player.userId, result.ok, result.error);
   });
 
   // ─── Disconnect ────────────────────────────────────────────────────────────

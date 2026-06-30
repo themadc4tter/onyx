@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
+import { createEmptyEquipment, EQUIPMENT_SLOTS, type EquipmentSlot, type EquipmentState } from "../game/equipment";
 import { createEmptyInventory, type InventoryState } from "../game/inventory";
 import { getItemDefinition } from "../game/items";
 import { HudChat } from "./chat/HudChat";
@@ -12,11 +13,6 @@ interface SkillMock {
   currentXp: number;
   totalXp: number;
   nextUnlock: string;
-}
-
-interface EquipmentSlotMock {
-  slot: string;
-  item: string;
 }
 
 const HUD_LAYER_ID = "game-hud-layer";
@@ -32,17 +28,6 @@ const SKILLS: SkillMock[] = [
   { name: "Alchemy", level: 7, currentXp: 58, totalXp: 200, nextUnlock: "Mist Tonic" },
   { name: "Cooking", level: 13, currentXp: 116, totalXp: 200, nextUnlock: "Hearty Stew" },
   { name: "Fishing", level: 6, currentXp: 50, totalXp: 200, nextUnlock: "River Perch" },
-];
-
-const EQUIPMENT: EquipmentSlotMock[] = [
-  { slot: "Head", item: "Cloth Hood" },
-  { slot: "Chest", item: "Padded Tunic" },
-  { slot: "Legs", item: "Traveler Pants" },
-  { slot: "Boots", item: "Worn Boots" },
-  { slot: "Main Hand", item: "Bronze Sword" },
-  { slot: "Off Hand", item: "Wooden Buckler" },
-  { slot: "Tool", item: "Copper Pickaxe" },
-  { slot: "Charm", item: "Empty" },
 ];
 
 const CSS = `
@@ -465,6 +450,69 @@ const CSS = `
     gap: 8px;
   }
 
+  .equipment-slot {
+    min-height: 74px;
+    align-items: stretch;
+  }
+
+  .equipment-slot.filled {
+    border-color: rgba(221, 198, 144, 0.34);
+    background: rgba(255, 255, 255, 0.055);
+  }
+
+  .equipment-slot.uncommon { border-color: rgba(95, 191, 137, 0.7); }
+  .equipment-slot.rare { border-color: rgba(114, 173, 255, 0.78); }
+
+  .equipment-slot-main {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 7px;
+    align-items: center;
+    flex: 1;
+  }
+
+  .equipment-slot-empty {
+    color: rgba(242, 234, 216, 0.46);
+  }
+
+  .equipment-slot-text {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .equipment-item-icon {
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
+    object-fit: contain;
+  }
+
+  .equipment-stat-line {
+    color: rgba(242, 234, 216, 0.68);
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .equipment-unequip-button {
+    align-self: center;
+    min-width: 66px;
+    height: 28px;
+    border: 1px solid rgba(221, 198, 144, 0.34);
+    background: rgba(0, 0, 0, 0.24);
+    color: #f2ead8;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .equipment-unequip-button:hover {
+    border-color: #e5c36b;
+    color: #ffe7a8;
+  }
+
   .slot-item,
   .stat-value,
   .party-role {
@@ -543,14 +591,21 @@ export class GameHudOverlay {
   private buttons = new Map<PanelId, HTMLButtonElement>();
   private chat: HudChat;
   private inventory: InventoryState;
+  private equipment: EquipmentState;
   private selectedInventorySlotIndex: number | null = null;
   private draggedInventorySlotIndex: number | null = null;
 
-  constructor(private scene: Phaser.Scene, private socket: Socket, initialInventory?: InventoryState) {
+  constructor(
+    private scene: Phaser.Scene,
+    private socket: Socket,
+    initialInventory?: InventoryState,
+    initialEquipment?: EquipmentState,
+  ) {
     const root = document.getElementById("game-root");
     if (!root) throw new Error("Missing #game-root element for game HUD");
 
     this.inventory = initialInventory ?? createEmptyInventory();
+    this.equipment = initialEquipment ?? createEmptyEquipment();
     this.root = root;
     this.styleEl = document.createElement("style");
     this.styleEl.textContent = CSS;
@@ -568,6 +623,7 @@ export class GameHudOverlay {
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("resize", this.updateCanvasBounds);
     this.socket.on("inventory:changed", this.handleInventoryChanged);
+    this.socket.on("equipment:changed", this.handleEquipmentChanged);
     this.scene.scale.on(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     this.scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
@@ -577,6 +633,7 @@ export class GameHudOverlay {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("resize", this.updateCanvasBounds);
     this.socket.off("inventory:changed", this.handleInventoryChanged);
+    this.socket.off("equipment:changed", this.handleEquipmentChanged);
     this.scene.scale.off(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.chat.destroy();
     this.layer.remove();
@@ -712,6 +769,7 @@ export class GameHudOverlay {
       <div class="inventory-header">
         <span>${filledSlots} / ${this.inventory.slotCount} slots</span>
         <div class="inventory-actions">
+          <button class="inventory-action-button equip" type="button">Equip</button>
           <button class="inventory-action-button split" type="button">Split</button>
           <button class="inventory-action-button delete" type="button">Delete</button>
         </div>
@@ -719,10 +777,14 @@ export class GameHudOverlay {
     `;
 
     const selectedSlot = this.getSelectedInventorySlot();
+    const selectedItem = selectedSlot ? getItemDefinition(selectedSlot.itemId) : null;
+    const equipButton = panel.querySelector<HTMLButtonElement>(".inventory-action-button.equip")!;
     const splitButton = panel.querySelector<HTMLButtonElement>(".inventory-action-button.split")!;
     const deleteButton = panel.querySelector<HTMLButtonElement>(".inventory-action-button.delete")!;
+    equipButton.disabled = !selectedSlot || selectedItem?.type !== "equipment" || !selectedItem.equipment || selectedSlot.quantity !== 1;
     splitButton.disabled = !selectedSlot || selectedSlot.quantity <= 1;
     deleteButton.disabled = !selectedSlot;
+    equipButton.addEventListener("click", () => this.equipSelectedInventoryItem());
     splitButton.addEventListener("click", () => this.promptSplitSelectedInventoryStack());
     deleteButton.addEventListener("click", () => this.confirmDeleteSelectedInventoryItem());
     deleteButton.addEventListener("dragover", event => {
@@ -758,6 +820,7 @@ export class GameHudOverlay {
       if (slotItem) {
         slot.draggable = true;
         slot.addEventListener("click", () => this.selectInventorySlot(slotIndex));
+        slot.addEventListener("dblclick", () => this.equipInventoryItem(slotIndex));
         slot.addEventListener("contextmenu", event => {
           event.preventDefault();
           this.selectInventorySlot(slotIndex);
@@ -825,6 +888,19 @@ export class GameHudOverlay {
     if (this.activePanel === "inventory") this.renderActivePanel();
   }
 
+  private equipSelectedInventoryItem() {
+    if (this.selectedInventorySlotIndex === null) return;
+    this.equipInventoryItem(this.selectedInventorySlotIndex);
+  }
+
+  private equipInventoryItem(slotIndex: number) {
+    const slot = this.inventory.slots[slotIndex];
+    const item = slot ? getItemDefinition(slot.itemId) : null;
+    if (!slot || item?.type !== "equipment" || !item.equipment || slot.quantity !== 1) return;
+
+    this.socket.emit("equipment:equip", { inventorySlotIndex: slotIndex });
+  }
+
   private getDraggedSlotIndex(event: DragEvent) {
     const transferValue = event.dataTransfer?.getData("text/plain");
     const parsedTransferValue = transferValue ? Number(transferValue) : NaN;
@@ -890,33 +966,162 @@ export class GameHudOverlay {
     }
   };
 
+  private handleEquipmentChanged = (equipment: EquipmentState) => {
+    this.equipment = equipment;
+    if (this.activePanel === "equipment") {
+      this.renderActivePanel();
+    }
+  };
+
   private createEquipmentPanel() {
     const layout = document.createElement("div");
     layout.className = "equipment-layout";
 
     const slots = document.createElement("div");
     slots.className = "equipment-grid";
-    for (const entry of EQUIPMENT) {
-      const slot = document.createElement("div");
-      slot.className = "equipment-slot";
-      slot.innerHTML = `<span class="slot-label">${entry.slot}</span><strong class="slot-item">${entry.item}</strong>`;
-      slots.appendChild(slot);
+    for (const equipmentSlot of EQUIPMENT_SLOTS) {
+      slots.appendChild(this.createEquipmentSlot(equipmentSlot));
     }
 
     const stats = document.createElement("aside");
     stats.className = "equipment-stats";
-    stats.innerHTML = `
-      <div class="detail-title">Character</div>
-      <div class="stat-list">
-        <div class="stat-row"><span class="stat-label">Power</span><strong class="stat-value">18</strong></div>
-        <div class="stat-row"><span class="stat-label">Guard</span><strong class="stat-value">11</strong></div>
-        <div class="stat-row"><span class="stat-label">Focus</span><strong class="stat-value">14</strong></div>
-        <div class="stat-row"><span class="stat-label">Gathering</span><strong class="stat-value">+6</strong></div>
-      </div>
-    `;
+    stats.appendChild(this.createEquipmentStatsPanel());
 
     layout.append(slots, stats);
     return layout;
+  }
+
+  private createEquipmentSlot(equipmentSlot: EquipmentSlot) {
+    const equippedItem = this.equipment.slots[equipmentSlot];
+    const item = equippedItem ? getItemDefinition(equippedItem.itemId) : null;
+    const slot = document.createElement("div");
+    slot.className = [
+      "equipment-slot",
+      item ? "filled" : "",
+      item?.rarity ?? "",
+    ].filter(Boolean).join(" ");
+    slot.title = item ? `${item.name}\n${item.description}` : "";
+
+    const main = document.createElement("div");
+    main.className = "equipment-slot-main";
+
+    if (item) {
+      const icon = document.createElement("img");
+      icon.className = "equipment-item-icon";
+      icon.src = item.iconUrl;
+      icon.alt = item.name;
+      main.appendChild(icon);
+    }
+
+    const text = document.createElement("div");
+    text.className = "equipment-slot-text";
+
+    const label = document.createElement("span");
+    label.className = "slot-label";
+    label.textContent = this.formatEquipmentSlot(equipmentSlot);
+    text.appendChild(label);
+
+    const itemName = document.createElement("strong");
+    itemName.className = item ? "slot-item" : "slot-item equipment-slot-empty";
+    itemName.textContent = item?.name ?? "Empty";
+    text.appendChild(itemName);
+
+    const statSummary = item?.equipment?.stats ? this.formatStatSummary(item.equipment.stats) : "";
+    if (statSummary) {
+      const statLine = document.createElement("span");
+      statLine.className = "equipment-stat-line";
+      statLine.textContent = statSummary;
+      text.appendChild(statLine);
+    }
+
+    main.appendChild(text);
+    slot.appendChild(main);
+
+    if (item) {
+      const button = document.createElement("button");
+      button.className = "equipment-unequip-button";
+      button.type = "button";
+      button.textContent = "Unequip";
+      button.addEventListener("click", () => {
+        this.socket.emit("equipment:unequip", { slot: equipmentSlot });
+      });
+      slot.appendChild(button);
+    }
+
+    return slot;
+  }
+
+  private createEquipmentStatsPanel() {
+    const container = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "detail-title";
+    title.textContent = "Character";
+    container.appendChild(title);
+
+    const statList = document.createElement("div");
+    statList.className = "stat-list";
+    const totals = this.getEquipmentStatTotals();
+    const statEntries = Object.entries(totals);
+
+    if (statEntries.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "stat-row";
+      empty.innerHTML = `<span class="stat-label">Equipment bonuses</span><strong class="stat-value">None</strong>`;
+      statList.appendChild(empty);
+    } else {
+      for (const [stat, value] of statEntries) {
+        const row = document.createElement("div");
+        row.className = "stat-row";
+        row.innerHTML = `<span class="stat-label">${this.formatStatName(stat)}</span><strong class="stat-value">+${value}</strong>`;
+        statList.appendChild(row);
+      }
+    }
+
+    container.appendChild(statList);
+    return container;
+  }
+
+  private getEquipmentStatTotals() {
+    const totals: Record<string, number> = {};
+    for (const equippedItem of Object.values(this.equipment.slots)) {
+      const item = equippedItem ? getItemDefinition(equippedItem.itemId) : null;
+      if (!item?.equipment?.stats) continue;
+
+      for (const [stat, value] of Object.entries(item.equipment.stats)) {
+        if (typeof value !== "number" || value === 0) continue;
+        totals[stat] = (totals[stat] ?? 0) + value;
+      }
+    }
+
+    return totals;
+  }
+
+  private formatStatSummary(stats: object) {
+    return Object.entries(stats as Record<string, number | undefined>)
+      .filter((entry): entry is [string, number] => typeof entry[1] === "number" && entry[1] !== 0)
+      .map(([stat, value]) => `+${value} ${this.formatStatName(stat)}`)
+      .join(", ");
+  }
+
+  private formatEquipmentSlot(slot: EquipmentSlot) {
+    const labels: Record<EquipmentSlot, string> = {
+      head: "Head",
+      chest: "Chest",
+      legs: "Legs",
+      feet: "Boots",
+      main_hand: "Main Hand",
+      off_hand: "Off Hand",
+      ring: "Ring",
+      charm: "Charm",
+    };
+    return labels[slot];
+  }
+
+  private formatStatName(stat: string) {
+    return stat
+      .split("_")
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
   }
 
   private createPartyPanel() {
