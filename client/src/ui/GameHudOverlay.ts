@@ -34,6 +34,8 @@ interface EquipmentSlotMock {
 
 const HUD_LAYER_ID = "game-hud-layer";
 const HUD_INSET_PX = 12;
+const MAX_CHAT_MESSAGES = 80;
+const CHAT_HISTORY: ChatMessage[] = [];
 
 const SKILLS: SkillMock[] = [
   { name: "Melee", level: 12, currentXp: 124, totalXp: 200, nextUnlock: "Guarding Stance" },
@@ -527,7 +529,10 @@ export class GameHudOverlay {
 
     this.render();
     this.updateCanvasBounds();
-    this.addSystemMessage("Welcome to Onyx.");
+    this.renderChatHistory();
+    if (CHAT_HISTORY.length === 0) {
+      this.addSystemMessage("Welcome to Onyx.");
+    }
 
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("resize", this.updateCanvasBounds);
@@ -851,6 +856,7 @@ export class GameHudOverlay {
       channel: parsed.channel,
       text: parsed.text,
     });
+    this.chatInput.blur();
   }
 
   private parseChatInput(rawText: string): { channel: ChatChannel; text: string; switchOnly?: boolean } | null {
@@ -906,7 +912,20 @@ export class GameHudOverlay {
     });
   }
 
-  private addChatMessage(message: ChatMessage) {
+  private renderChatHistory() {
+    for (const message of CHAT_HISTORY) {
+      this.addChatMessage(message, false);
+    }
+  }
+
+  private addChatMessage(message: ChatMessage, persist = true) {
+    if (persist) {
+      CHAT_HISTORY.push(message);
+      while (CHAT_HISTORY.length > MAX_CHAT_MESSAGES) {
+        CHAT_HISTORY.shift();
+      }
+    }
+
     const line = document.createElement("div");
     line.className = `hud-chat-line ${message.channel}`;
 
@@ -929,7 +948,7 @@ export class GameHudOverlay {
 
     this.chatLog.appendChild(line);
 
-    while (this.chatLog.childElementCount > 80) {
+    while (this.chatLog.childElementCount > MAX_CHAT_MESSAGES) {
       this.chatLog.firstElementChild?.remove();
     }
 
