@@ -331,11 +331,47 @@ const CSS = `
 
   .inventory-header {
     display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 12px;
     color: rgba(242, 234, 216, 0.8);
     font-size: 13px;
+  }
+
+  .inventory-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .inventory-action-button {
+    min-width: 62px;
+    height: 28px;
+    border: 1px solid rgba(221, 198, 144, 0.34);
+    background: rgba(0, 0, 0, 0.24);
+    color: #f2ead8;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .inventory-action-button:hover:not(:disabled),
+  .inventory-action-button.drag-over {
+    border-color: #e5c36b;
+    color: #ffe7a8;
+  }
+
+  .inventory-action-button.delete:hover:not(:disabled),
+  .inventory-action-button.delete.drag-over {
+    border-color: rgba(242, 105, 86, 0.9);
+    color: #ffb5a8;
+  }
+
+  .inventory-action-button:disabled {
+    cursor: default;
+    opacity: 0.42;
   }
 
   .inventory-grid {
@@ -357,6 +393,25 @@ const CSS = `
     color: rgba(242, 234, 216, 0.58);
     font-size: 10px;
     text-align: center;
+    cursor: default;
+  }
+
+  .inventory-slot.filled {
+    cursor: grab;
+  }
+
+  .inventory-slot.filled:active {
+    cursor: grabbing;
+  }
+
+  .inventory-slot.selected {
+    outline: 2px solid #e5c36b;
+    outline-offset: 2px;
+  }
+
+  .inventory-slot.drag-over {
+    border-color: #e5c36b;
+    background: rgba(229, 195, 107, 0.16);
   }
 
   .inventory-item-icon {
@@ -488,6 +543,8 @@ export class GameHudOverlay {
   private buttons = new Map<PanelId, HTMLButtonElement>();
   private chat: HudChat;
   private inventory: InventoryState;
+  private selectedInventorySlotIndex: number | null = null;
+  private draggedInventorySlotIndex: number | null = null;
 
   constructor(private scene: Phaser.Scene, private socket: Socket, initialInventory?: InventoryState) {
     const root = document.getElementById("game-root");
@@ -654,18 +711,83 @@ export class GameHudOverlay {
     panel.innerHTML = `
       <div class="inventory-header">
         <span>${filledSlots} / ${this.inventory.slotCount} slots</span>
-        <strong>Inventory</strong>
+        <div class="inventory-actions">
+          <button class="inventory-action-button split" type="button">Split</button>
+          <button class="inventory-action-button delete" type="button">Delete</button>
+        </div>
       </div>
     `;
+
+    const selectedSlot = this.getSelectedInventorySlot();
+    const splitButton = panel.querySelector<HTMLButtonElement>(".inventory-action-button.split")!;
+    const deleteButton = panel.querySelector<HTMLButtonElement>(".inventory-action-button.delete")!;
+    splitButton.disabled = !selectedSlot || selectedSlot.quantity <= 1;
+    deleteButton.disabled = !selectedSlot;
+    splitButton.addEventListener("click", () => this.promptSplitSelectedInventoryStack());
+    deleteButton.addEventListener("click", () => this.confirmDeleteSelectedInventoryItem());
+    deleteButton.addEventListener("dragover", event => {
+      if (this.draggedInventorySlotIndex === null) return;
+      event.preventDefault();
+      deleteButton.classList.add("drag-over");
+    });
+    deleteButton.addEventListener("dragleave", () => deleteButton.classList.remove("drag-over"));
+    deleteButton.addEventListener("drop", event => {
+      event.preventDefault();
+      deleteButton.classList.remove("drag-over");
+      if (this.draggedInventorySlotIndex === null) return;
+      this.confirmDeleteInventoryItem(this.draggedInventorySlotIndex);
+      this.draggedInventorySlotIndex = null;
+    });
 
     const grid = document.createElement("div");
     grid.className = "inventory-grid";
 
-    for (const slotItem of this.inventory.slots) {
+    for (let slotIndex = 0; slotIndex < this.inventory.slots.length; slotIndex += 1) {
+      const slotItem = this.inventory.slots[slotIndex];
       const item = slotItem ? getItemDefinition(slotItem.itemId) : null;
       const slot = document.createElement("div");
-      slot.className = ["inventory-slot", item ? "filled" : "", item?.rarity ?? ""].filter(Boolean).join(" ");
+      slot.className = [
+        "inventory-slot",
+        item ? "filled" : "",
+        item?.rarity ?? "",
+        this.selectedInventorySlotIndex === slotIndex ? "selected" : "",
+      ].filter(Boolean).join(" ");
       slot.title = item ? `${item.name}\n${item.description}` : "";
+      slot.dataset.slotIndex = String(slotIndex);
+
+      if (slotItem) {
+        slot.draggable = true;
+        slot.addEventListener("click", () => this.selectInventorySlot(slotIndex));
+        slot.addEventListener("contextmenu", event => {
+          event.preventDefault();
+          this.selectInventorySlot(slotIndex);
+          this.promptSplitInventoryStack(slotIndex);
+        });
+        slot.addEventListener("dragstart", event => {
+          this.draggedInventorySlotIndex = slotIndex;
+          event.dataTransfer?.setData("text/plain", String(slotIndex));
+          event.dataTransfer?.setDragImage(slot, slot.clientWidth / 2, slot.clientHeight / 2);
+        });
+        slot.addEventListener("dragend", () => {
+          this.draggedInventorySlotIndex = null;
+          this.clearInventoryDragState();
+        });
+      }
+
+      slot.addEventListener("dragover", event => {
+        if (this.draggedInventorySlotIndex === null || this.draggedInventorySlotIndex === slotIndex) return;
+        event.preventDefault();
+        slot.classList.add("drag-over");
+      });
+      slot.addEventListener("dragleave", () => slot.classList.remove("drag-over"));
+      slot.addEventListener("drop", event => {
+        event.preventDefault();
+        slot.classList.remove("drag-over");
+        const fromSlotIndex = this.getDraggedSlotIndex(event);
+        this.draggedInventorySlotIndex = null;
+        if (fromSlotIndex === null || fromSlotIndex === slotIndex) return;
+        this.socket.emit("inventory:move", { fromSlotIndex, toSlotIndex: slotIndex });
+      });
 
       if (item) {
         const icon = document.createElement("img");
@@ -693,8 +815,76 @@ export class GameHudOverlay {
     return panel;
   }
 
+  private getSelectedInventorySlot() {
+    if (this.selectedInventorySlotIndex === null) return null;
+    return this.inventory.slots[this.selectedInventorySlotIndex] ?? null;
+  }
+
+  private selectInventorySlot(slotIndex: number) {
+    this.selectedInventorySlotIndex = this.selectedInventorySlotIndex === slotIndex ? null : slotIndex;
+    if (this.activePanel === "inventory") this.renderActivePanel();
+  }
+
+  private getDraggedSlotIndex(event: DragEvent) {
+    const transferValue = event.dataTransfer?.getData("text/plain");
+    const parsedTransferValue = transferValue ? Number(transferValue) : NaN;
+    if (Number.isInteger(parsedTransferValue)) return parsedTransferValue;
+    return this.draggedInventorySlotIndex;
+  }
+
+  private clearInventoryDragState() {
+    this.windowRoot
+      .querySelectorAll(".inventory-slot.drag-over, .inventory-action-button.drag-over")
+      .forEach(element => element.classList.remove("drag-over"));
+  }
+
+  private promptSplitSelectedInventoryStack() {
+    if (this.selectedInventorySlotIndex === null) return;
+    this.promptSplitInventoryStack(this.selectedInventorySlotIndex);
+  }
+
+  private promptSplitInventoryStack(slotIndex: number) {
+    const slot = this.inventory.slots[slotIndex];
+    if (!slot || slot.quantity <= 1) return;
+
+    const itemName = getItemDefinition(slot.itemId)?.name ?? slot.itemId;
+    const defaultQuantity = Math.floor(slot.quantity / 2);
+    const requestedQuantity = window.prompt(`Split how many ${itemName}?`, String(defaultQuantity));
+    if (requestedQuantity === null) return;
+
+    const quantity = Number(requestedQuantity);
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity >= slot.quantity) {
+      this.addSystemMessage(`Enter a whole number from 1 to ${slot.quantity - 1}.`);
+      return;
+    }
+
+    this.socket.emit("inventory:split", { fromSlotIndex: slotIndex, quantity });
+  }
+
+  private confirmDeleteSelectedInventoryItem() {
+    if (this.selectedInventorySlotIndex === null) return;
+    this.confirmDeleteInventoryItem(this.selectedInventorySlotIndex);
+  }
+
+  private confirmDeleteInventoryItem(slotIndex: number) {
+    const slot = this.inventory.slots[slotIndex];
+    if (!slot) return;
+
+    const itemName = getItemDefinition(slot.itemId)?.name ?? slot.itemId;
+    const quantityLabel = slot.quantity > 1 ? `${slot.quantity} ` : "";
+    if (!window.confirm(`Delete ${quantityLabel}${itemName}? This cannot be undone.`)) return;
+
+    this.socket.emit("inventory:delete", { slotIndex });
+  }
+
   private handleInventoryChanged = (inventory: InventoryState) => {
     this.inventory = inventory;
+    if (
+      this.selectedInventorySlotIndex !== null &&
+      !this.inventory.slots[this.selectedInventorySlotIndex]
+    ) {
+      this.selectedInventorySlotIndex = null;
+    }
     if (this.activePanel === "inventory") {
       this.renderActivePanel();
     }

@@ -7,11 +7,14 @@ import { supabase } from "./lib/supabase";
 import { isTileWalkable, normalizeZoneId, ZONES, type HerbSpawn, type ZoneExit } from "./config/map";
 import {
   addItemToInventory,
+  deleteInventoryItem,
   flushAllDirtyInventories,
   flushDirtyInventory,
   getInventory,
   loadInventory,
   markInventoryDirty,
+  moveInventoryItem,
+  splitInventoryStack,
 } from "./game/inventory";
 import { getItemDefinition } from "./game/items";
 
@@ -41,6 +44,17 @@ interface HerbPickPayload {
 interface InventoryPayload {
   slotCount: number;
   slots: ReturnType<typeof getInventory>["slots"];
+}
+interface InventoryMovePayload {
+  fromSlotIndex?: number;
+  toSlotIndex?: number;
+}
+interface InventorySplitPayload {
+  fromSlotIndex?: number;
+  quantity?: number;
+}
+interface InventoryDeletePayload {
+  slotIndex?: number;
 }
 interface ConnectedPlayer {
   socketId: string;
@@ -126,6 +140,26 @@ function getInventoryPayload(userId: string): InventoryPayload {
     slotCount: inventory.slotCount,
     slots: inventory.slots.map(slot => slot ? { ...slot } : null),
   };
+}
+
+function getInventoryErrorMessage(error?: string) {
+  const messages: Record<string, string> = {
+    empty_source: "That inventory slot is empty.",
+    inventory_full: "Inventory is full.",
+    invalid_quantity: "That stack cannot be split that way.",
+    invalid_slot: "That inventory slot is not valid.",
+    unknown_item: "That item is not available.",
+  };
+
+  return messages[error ?? ""] ?? "Inventory action failed.";
+}
+
+function emitInventoryActionResult(socket: Socket, userId: string, ok: boolean, error?: string) {
+  if (!ok) {
+    socket.emit("chat:error", { message: getInventoryErrorMessage(error) });
+  }
+
+  socket.emit("inventory:changed", getInventoryPayload(userId));
 }
 
 function normalizeChatPayload(payload: unknown): NormalizedChatPayload | null {
@@ -390,6 +424,43 @@ io.on("connection", async (socket) => {
       spawn.available = true;
       io.to(player.zoneId).emit("herb:state", { id: spawn.id, available: true });
     }, HERB_RESPAWN_MS);
+  });
+
+  socket.on("inventory:move", (payload: InventoryMovePayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+
+    const result = moveInventoryItem(
+      player.userId,
+      Number(payload?.fromSlotIndex),
+      Number(payload?.toSlotIndex),
+    );
+
+    if (result.ok) markInventoryDirty(player.userId);
+    emitInventoryActionResult(socket, player.userId, result.ok, result.error);
+  });
+
+  socket.on("inventory:split", (payload: InventorySplitPayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+
+    const result = splitInventoryStack(
+      player.userId,
+      Number(payload?.fromSlotIndex),
+      Number(payload?.quantity),
+    );
+
+    if (result.ok) markInventoryDirty(player.userId);
+    emitInventoryActionResult(socket, player.userId, result.ok, result.error);
+  });
+
+  socket.on("inventory:delete", (payload: InventoryDeletePayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+
+    const result = deleteInventoryItem(player.userId, Number(payload?.slotIndex));
+    if (result.ok) markInventoryDirty(player.userId);
+    emitInventoryActionResult(socket, player.userId, result.ok, result.error);
   });
 
   // ─── Disconnect ────────────────────────────────────────────────────────────

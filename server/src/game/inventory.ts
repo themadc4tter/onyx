@@ -19,6 +19,12 @@ export interface AddItemResult {
   inventory: InventoryState;
 }
 
+export interface InventoryActionResult {
+  ok: boolean;
+  inventory: InventoryState;
+  error?: string;
+}
+
 const INVENTORY_SLOT_COUNT = 24;
 const INVENTORY_SAVE_DELAY_MS = 30_000;
 const INVENTORY_SAVE_RETRY_MS = 30_000;
@@ -219,4 +225,100 @@ export function addItemToInventory(userId: string, itemId: string, quantity: num
     remainingQuantity,
     inventory,
   };
+}
+
+function isValidSlotIndex(inventory: InventoryState, slotIndex: number) {
+  return Number.isInteger(slotIndex) && slotIndex >= 0 && slotIndex < inventory.slotCount;
+}
+
+export function moveInventoryItem(userId: string, fromSlotIndex: number, toSlotIndex: number): InventoryActionResult {
+  const inventory = getInventory(userId);
+  if (!isValidSlotIndex(inventory, fromSlotIndex) || !isValidSlotIndex(inventory, toSlotIndex)) {
+    return { ok: false, inventory, error: "invalid_slot" };
+  }
+
+  if (fromSlotIndex === toSlotIndex) {
+    return { ok: true, inventory };
+  }
+
+  const fromSlot = inventory.slots[fromSlotIndex];
+  if (!fromSlot) {
+    return { ok: false, inventory, error: "empty_source" };
+  }
+
+  const toSlot = inventory.slots[toSlotIndex];
+  if (!toSlot) {
+    inventory.slots[toSlotIndex] = { ...fromSlot, slotIndex: toSlotIndex };
+    inventory.slots[fromSlotIndex] = null;
+    return { ok: true, inventory };
+  }
+
+  if (fromSlot.itemId === toSlot.itemId) {
+    const item = getItemDefinition(fromSlot.itemId);
+    if (!item) {
+      return { ok: false, inventory, error: "unknown_item" };
+    }
+
+    const movedQuantity = Math.min(item.maxStack - toSlot.quantity, fromSlot.quantity);
+    if (movedQuantity <= 0) {
+      inventory.slots[toSlotIndex] = { ...fromSlot, slotIndex: toSlotIndex };
+      inventory.slots[fromSlotIndex] = { ...toSlot, slotIndex: fromSlotIndex };
+      return { ok: true, inventory };
+    }
+
+    toSlot.quantity += movedQuantity;
+    fromSlot.quantity -= movedQuantity;
+    if (fromSlot.quantity <= 0) {
+      inventory.slots[fromSlotIndex] = null;
+    }
+    return { ok: true, inventory };
+  }
+
+  inventory.slots[toSlotIndex] = { ...fromSlot, slotIndex: toSlotIndex };
+  inventory.slots[fromSlotIndex] = { ...toSlot, slotIndex: fromSlotIndex };
+  return { ok: true, inventory };
+}
+
+export function splitInventoryStack(userId: string, fromSlotIndex: number, quantity: number): InventoryActionResult {
+  const inventory = getInventory(userId);
+  if (!isValidSlotIndex(inventory, fromSlotIndex)) {
+    return { ok: false, inventory, error: "invalid_slot" };
+  }
+
+  const fromSlot = inventory.slots[fromSlotIndex];
+  if (!fromSlot) {
+    return { ok: false, inventory, error: "empty_source" };
+  }
+
+  if (!Number.isInteger(quantity) || quantity <= 0 || quantity >= fromSlot.quantity) {
+    return { ok: false, inventory, error: "invalid_quantity" };
+  }
+
+  const emptySlotIndex = inventory.slots.findIndex(slot => slot === null);
+  if (emptySlotIndex === -1) {
+    return { ok: false, inventory, error: "inventory_full" };
+  }
+
+  fromSlot.quantity -= quantity;
+  inventory.slots[emptySlotIndex] = {
+    slotIndex: emptySlotIndex,
+    itemId: fromSlot.itemId,
+    quantity,
+  };
+
+  return { ok: true, inventory };
+}
+
+export function deleteInventoryItem(userId: string, slotIndex: number): InventoryActionResult {
+  const inventory = getInventory(userId);
+  if (!isValidSlotIndex(inventory, slotIndex)) {
+    return { ok: false, inventory, error: "invalid_slot" };
+  }
+
+  if (!inventory.slots[slotIndex]) {
+    return { ok: false, inventory, error: "empty_source" };
+  }
+
+  inventory.slots[slotIndex] = null;
+  return { ok: true, inventory };
 }
