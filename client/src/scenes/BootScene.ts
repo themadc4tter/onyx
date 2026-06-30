@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { io, Socket } from "socket.io-client";
 import { supabase } from "../lib/supabase";
+import type { InventoryState } from "../game/inventory";
 import type { Facing, RemotePlayerData } from "../types";
 import type { HerbSpawnState } from "../world/HerbSpawnerManager";
 
@@ -16,6 +17,7 @@ interface ProfileEvent {
   zoneId: string;
   position: { tileX: number; tileY: number; facing: Facing };
   herbSpawns?: HerbSpawnState[];
+  inventory?: InventoryState;
 }
 
 export class BootScene extends Phaser.Scene {
@@ -72,6 +74,7 @@ export class BootScene extends Phaser.Scene {
           zoneId: data.zoneId,
           startPos: data.position,
           herbSpawns: data.herbSpawns ?? [],
+          inventory: data.inventory,
         });
       });
     });

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { DEFAULT_ZONE_ID, getZoneMapConfig, TILESETS, ZONE_MAPS } from "../config/map";
+import type { InventoryState } from "../game/inventory";
 import type { Facing, Position, RemotePlayerData } from "../types";
 import { supabase } from "../lib/supabase";
 import { NpcRenderer } from "../world/NpcRenderer";
@@ -33,6 +34,7 @@ export class GameScene extends Phaser.Scene {
   private zoneId: string = DEFAULT_ZONE_ID;
   private startPos: Position | null = null;
   private herbSpawnStates: HerbSpawnState[] = [];
+  private inventory: InventoryState | undefined;
   private mapKey = getZoneMapConfig(DEFAULT_ZONE_ID).mapKey;
 
   private map!: Phaser.Tilemaps.Tilemap;
@@ -58,6 +60,7 @@ export class GameScene extends Phaser.Scene {
     zoneId?: string;
     startPos?: Position;
     herbSpawns?: HerbSpawnState[];
+    inventory?: InventoryState;
   }) {
     this.socket = data.socket;
     this.profile = data.profile;
@@ -66,6 +69,7 @@ export class GameScene extends Phaser.Scene {
     this.mapKey = getZoneMapConfig(this.zoneId).mapKey;
     this.startPos = data.startPos ?? null;
     this.herbSpawnStates = data.herbSpawns ?? [];
+    this.inventory = data.inventory;
   }
 
   preload() {
@@ -120,7 +124,7 @@ export class GameScene extends Phaser.Scene {
     this.setupCamera();
     this.playZoneMusic();
     this.setupServerEvents();
-    this.hudOverlay = new GameHudOverlay(this, this.socket);
+    this.hudOverlay = new GameHudOverlay(this, this.socket, this.inventory);
     this.herbSpawners = new HerbSpawnerManager(this, this.socket, this.map, this.player, message => {
       this.hudOverlay.addSystemMessage(message);
     }, this.herbSpawnStates);
@@ -213,6 +217,7 @@ export class GameScene extends Phaser.Scene {
       position: Position;
       initPlayers: RemotePlayerData[];
       herbSpawns?: HerbSpawnState[];
+      inventory?: InventoryState;
     }) => {
       this.socket.removeAllListeners();
       this.scene.restart({
@@ -222,6 +227,7 @@ export class GameScene extends Phaser.Scene {
         zoneId: payload.zoneId,
         startPos: payload.position,
         herbSpawns: payload.herbSpawns ?? [],
+        inventory: payload.inventory,
       });
     });
 

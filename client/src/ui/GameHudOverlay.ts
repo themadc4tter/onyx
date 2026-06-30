@@ -1,5 +1,7 @@
 import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
+import { createEmptyInventory, type InventoryState } from "../game/inventory";
+import { getItemDefinition } from "../game/items";
 import { HudChat } from "./chat/HudChat";
 
 type PanelId = "skills" | "inventory" | "equipment" | "party";
@@ -10,12 +12,6 @@ interface SkillMock {
   currentXp: number;
   totalXp: number;
   nextUnlock: string;
-}
-
-interface InventoryItemMock {
-  name: string;
-  count?: number;
-  rarity?: "common" | "uncommon" | "rare";
 }
 
 interface EquipmentSlotMock {
@@ -36,33 +32,6 @@ const SKILLS: SkillMock[] = [
   { name: "Alchemy", level: 7, currentXp: 58, totalXp: 200, nextUnlock: "Mist Tonic" },
   { name: "Cooking", level: 13, currentXp: 116, totalXp: 200, nextUnlock: "Hearty Stew" },
   { name: "Fishing", level: 6, currentXp: 50, totalXp: 200, nextUnlock: "River Perch" },
-];
-
-const INVENTORY: Array<InventoryItemMock | null> = [
-  { name: "Copper Ore", count: 18 },
-  { name: "Moonleaf", count: 6, rarity: "uncommon" },
-  { name: "Repair Kit", count: 2 },
-  { name: "Mist Tonic", count: 3, rarity: "uncommon" },
-  { name: "Iron Dagger", rarity: "rare" },
-  null,
-  { name: "Raw Trout", count: 7 },
-  { name: "Coal", count: 11 },
-  null,
-  null,
-  { name: "Guild Token", count: 1, rarity: "rare" },
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
 ];
 
 const EQUIPMENT: EquipmentSlotMock[] = [
@@ -390,6 +359,26 @@ const CSS = `
     text-align: center;
   }
 
+  .inventory-item-icon {
+    width: 22px;
+    height: 22px;
+    image-rendering: pixelated;
+    object-fit: contain;
+  }
+
+  .inventory-item-name {
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    bottom: 3px;
+    color: rgba(242, 234, 216, 0.82);
+    font-size: 9px;
+    line-height: 1.05;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 1px #000;
+  }
+
   .inventory-slot.filled {
     color: #f2ead8;
     border-color: rgba(221, 198, 144, 0.34);
@@ -402,7 +391,7 @@ const CSS = `
   .item-count {
     position: absolute;
     right: 4px;
-    bottom: 3px;
+    top: 3px;
     color: #ffe7a8;
     font-size: 11px;
     font-weight: 700;
@@ -498,11 +487,13 @@ export class GameHudOverlay {
   private selectedSkill = SKILLS[0];
   private buttons = new Map<PanelId, HTMLButtonElement>();
   private chat: HudChat;
+  private inventory: InventoryState;
 
-  constructor(private scene: Phaser.Scene, private socket: Socket) {
+  constructor(private scene: Phaser.Scene, private socket: Socket, initialInventory?: InventoryState) {
     const root = document.getElementById("game-root");
     if (!root) throw new Error("Missing #game-root element for game HUD");
 
+    this.inventory = initialInventory ?? createEmptyInventory();
     this.root = root;
     this.styleEl = document.createElement("style");
     this.styleEl.textContent = CSS;
@@ -519,6 +510,7 @@ export class GameHudOverlay {
 
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("resize", this.updateCanvasBounds);
+    this.socket.on("inventory:changed", this.handleInventoryChanged);
     this.scene.scale.on(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     this.scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
@@ -527,6 +519,7 @@ export class GameHudOverlay {
   destroy = () => {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("resize", this.updateCanvasBounds);
+    this.socket.off("inventory:changed", this.handleInventoryChanged);
     this.scene.scale.off(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.chat.destroy();
     this.layer.remove();
@@ -657,25 +650,40 @@ export class GameHudOverlay {
 
   private createInventoryPanel() {
     const panel = document.createElement("div");
-    const filledSlots = INVENTORY.filter(Boolean).length;
+    const filledSlots = this.inventory.slots.filter(Boolean).length;
     panel.innerHTML = `
       <div class="inventory-header">
-        <span>${filledSlots} / ${INVENTORY.length} slots</span>
-        <strong>1,284 coins</strong>
+        <span>${filledSlots} / ${this.inventory.slotCount} slots</span>
+        <strong>Inventory</strong>
       </div>
     `;
 
     const grid = document.createElement("div");
     grid.className = "inventory-grid";
 
-    for (const item of INVENTORY) {
+    for (const slotItem of this.inventory.slots) {
+      const item = slotItem ? getItemDefinition(slotItem.itemId) : null;
       const slot = document.createElement("div");
       slot.className = ["inventory-slot", item ? "filled" : "", item?.rarity ?? ""].filter(Boolean).join(" ");
-      slot.textContent = item?.name ?? "";
-      if (item?.count) {
+      slot.title = item ? `${item.name}\n${item.description}` : "";
+
+      if (item) {
+        const icon = document.createElement("img");
+        icon.className = "inventory-item-icon";
+        icon.src = item.iconUrl;
+        icon.alt = item.name;
+        slot.appendChild(icon);
+
+        const name = document.createElement("span");
+        name.className = "inventory-item-name";
+        name.textContent = item.name;
+        slot.appendChild(name);
+      }
+
+      if (slotItem && slotItem.quantity > 1) {
         const count = document.createElement("span");
         count.className = "item-count";
-        count.textContent = String(item.count);
+        count.textContent = String(slotItem.quantity);
         slot.appendChild(count);
       }
       grid.appendChild(slot);
@@ -684,6 +692,13 @@ export class GameHudOverlay {
     panel.appendChild(grid);
     return panel;
   }
+
+  private handleInventoryChanged = (inventory: InventoryState) => {
+    this.inventory = inventory;
+    if (this.activePanel === "inventory") {
+      this.renderActivePanel();
+    }
+  };
 
   private createEquipmentPanel() {
     const layout = document.createElement("div");

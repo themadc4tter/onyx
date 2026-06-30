@@ -5,6 +5,8 @@ import { Server, Socket } from "socket.io";
 import cors from "cors";
 import { supabase } from "./lib/supabase";
 import { isTileWalkable, normalizeZoneId, ZONES, type HerbSpawn, type ZoneExit } from "./config/map";
+import { addItemToInventory, getInventory } from "./game/inventory";
+import { getItemDefinition } from "./game/items";
 
 const PORT = process.env.PORT ?? 3001;
 const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
@@ -28,6 +30,10 @@ interface HerbSpawnState extends HerbSpawn {
 }
 interface HerbPickPayload {
   id?: string;
+}
+interface InventoryPayload {
+  slotCount: number;
+  slots: ReturnType<typeof getInventory>["slots"];
 }
 interface ConnectedPlayer {
   socketId: string;
@@ -107,6 +113,14 @@ function getHerbSpawnState(zoneId: string, herbId: string) {
   return herbSpawnStates.get(zoneId)?.get(herbId) ?? null;
 }
 
+function getInventoryPayload(userId: string): InventoryPayload {
+  const inventory = getInventory(userId);
+  return {
+    slotCount: inventory.slotCount,
+    slots: inventory.slots,
+  };
+}
+
 function normalizeChatPayload(payload: unknown): NormalizedChatPayload | null {
   const candidate = payload as ChatSendPayload;
   const channel = candidate?.channel;
@@ -147,6 +161,7 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
     position: newPos,
     initPlayers: newZonePlayers,
     herbSpawns: getHerbSpawnStates(newZoneId),
+    inventory: getInventoryPayload(player.userId),
   });
 
   flushSave(socket.id, player.userId, newZoneId, newPos);
@@ -238,7 +253,13 @@ io.on("connection", async (socket) => {
 
   console.log(`[connect]    ${socket.id} (${username}) → ${zoneId} — ${connectedPlayers.size} online`);
 
-  socket.emit("profile", { profile, position: startPos, zoneId, herbSpawns: getHerbSpawnStates(zoneId) });
+  socket.emit("profile", {
+    profile,
+    position: startPos,
+    zoneId,
+    herbSpawns: getHerbSpawnStates(zoneId),
+    inventory: getInventoryPayload(userId),
+  });
 
   // ─── Move ─────────────────────────────────────────────────────────────────
 
@@ -344,9 +365,17 @@ io.on("connection", async (socket) => {
       return;
     }
 
+    const addResult = addItemToInventory(player.userId, spawn.itemId, 1);
+    const item = getItemDefinition(spawn.itemId);
+    if (!addResult.ok) {
+      socket.emit("chat:error", { message: "Inventory is full." });
+      return;
+    }
+
     spawn.available = false;
     io.to(player.zoneId).emit("herb:state", { id: spawn.id, available: false });
-    socket.emit("herb:picked", { itemId: spawn.itemId });
+    socket.emit("inventory:changed", getInventoryPayload(player.userId));
+    socket.emit("herb:picked", { itemId: spawn.itemId, itemName: item?.name ?? spawn.itemId });
 
     setTimeout(() => {
       spawn.available = true;

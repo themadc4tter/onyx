@@ -109,8 +109,8 @@ export class HerbSpawnerManager {
     });
   };
 
-  private handleHerbPicked = (payload: { itemId?: string }) => {
-    this.addSystemMessage(`You picked 1 ${payload.itemId ?? HERB_ITEM_NAME}.`);
+  private handleHerbPicked = (payload: { itemId?: string; itemName?: string }) => {
+    this.addSystemMessage(`You picked 1 ${payload.itemName ?? payload.itemId ?? HERB_ITEM_NAME}.`);
   };
 
   private destroy = () => {
