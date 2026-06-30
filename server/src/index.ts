@@ -5,7 +5,14 @@ import { Server, Socket } from "socket.io";
 import cors from "cors";
 import { supabase } from "./lib/supabase";
 import { isTileWalkable, normalizeZoneId, ZONES, type HerbSpawn, type ZoneExit } from "./config/map";
-import { addItemToInventory, getInventory, loadInventory, saveInventory } from "./game/inventory";
+import {
+  addItemToInventory,
+  flushAllDirtyInventories,
+  flushDirtyInventory,
+  getInventory,
+  loadInventory,
+  markInventoryDirty,
+} from "./game/inventory";
 import { getItemDefinition } from "./game/items";
 
 const PORT = process.env.PORT ?? 3001;
@@ -119,13 +126,6 @@ function getInventoryPayload(userId: string): InventoryPayload {
     slotCount: inventory.slotCount,
     slots: inventory.slots.map(slot => slot ? { ...slot } : null),
   };
-}
-
-function persistInventoryChange(socket: Socket, userId: string) {
-  saveInventory(userId).catch(error => {
-    console.error("[inventory] failed to save inventory", error);
-    socket.emit("chat:error", { message: "Inventory save failed. Your current session still has the item." });
-  });
 }
 
 function normalizeChatPayload(payload: unknown): NormalizedChatPayload | null {
@@ -384,7 +384,7 @@ io.on("connection", async (socket) => {
     io.to(player.zoneId).emit("herb:state", { id: spawn.id, available: false });
     socket.emit("inventory:changed", getInventoryPayload(player.userId));
     socket.emit("herb:picked", { itemId: spawn.itemId, itemName: item?.name ?? spawn.itemId });
-    persistInventoryChange(socket, player.userId);
+    markInventoryDirty(player.userId);
 
     setTimeout(() => {
       spawn.available = true;
@@ -394,10 +394,13 @@ io.on("connection", async (socket) => {
 
   // ─── Disconnect ────────────────────────────────────────────────────────────
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", async () => {
     const player = connectedPlayers.get(socket.id);
     if (player) {
       flushSave(socket.id, player.userId, player.zoneId, player.position);
+      await flushDirtyInventory(player.userId).catch(error => {
+        console.error(`[inventory] failed to flush inventory for ${player.userId} on disconnect`, error);
+      });
     }
     connectedPlayers.delete(socket.id);
     io.to(socket.data.zoneId as string).emit("player:left", { socketId: socket.id });
@@ -406,3 +409,30 @@ io.on("connection", async (socket) => {
 });
 
 httpServer.listen(PORT, () => { console.log(`[server] listening on port ${PORT}`); });
+
+let isShuttingDown = false;
+async function shutdown(signal: NodeJS.Signals) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[server] received ${signal}, flushing dirty inventories...`);
+
+  const forceExitTimer = setTimeout(() => {
+    console.error("[server] shutdown timed out");
+    process.exit(1);
+  }, 5000);
+  forceExitTimer.unref();
+
+  try {
+    await flushAllDirtyInventories();
+  } catch (error) {
+    console.error("[inventory] failed to flush all dirty inventories during shutdown", error);
+  }
+
+  httpServer.close(() => {
+    clearTimeout(forceExitTimer);
+    process.exit(0);
+  });
+}
+
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);

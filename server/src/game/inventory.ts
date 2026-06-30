@@ -20,7 +20,11 @@ export interface AddItemResult {
 }
 
 const INVENTORY_SLOT_COUNT = 24;
+const INVENTORY_SAVE_DELAY_MS = 30_000;
+const INVENTORY_SAVE_RETRY_MS = 30_000;
 const inventories = new Map<string, InventoryState>();
+const dirtyInventoryUserIds = new Set<string>();
+const inventorySaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 interface InventoryRow {
   slot_index: number;
@@ -127,6 +131,50 @@ export async function saveInventory(userId: string, inventory = getInventory(use
       throw error;
     }
   }
+}
+
+export function markInventoryDirty(userId: string) {
+  dirtyInventoryUserIds.add(userId);
+  if (inventorySaveTimers.has(userId)) return;
+
+  const timer = setTimeout(() => {
+    inventorySaveTimers.delete(userId);
+    flushDirtyInventory(userId).catch(error => {
+      console.error(`[inventory] failed to save dirty inventory for ${userId}`, error);
+      scheduleInventorySaveRetry(userId);
+    });
+  }, INVENTORY_SAVE_DELAY_MS);
+  inventorySaveTimers.set(userId, timer);
+}
+
+export async function flushDirtyInventory(userId: string) {
+  const timer = inventorySaveTimers.get(userId);
+  if (timer) {
+    clearTimeout(timer);
+    inventorySaveTimers.delete(userId);
+  }
+
+  if (!dirtyInventoryUserIds.has(userId)) return;
+
+  await saveInventory(userId);
+  dirtyInventoryUserIds.delete(userId);
+}
+
+export async function flushAllDirtyInventories() {
+  await Promise.all([...dirtyInventoryUserIds].map(userId => flushDirtyInventory(userId)));
+}
+
+function scheduleInventorySaveRetry(userId: string) {
+  if (!dirtyInventoryUserIds.has(userId) || inventorySaveTimers.has(userId)) return;
+
+  const timer = setTimeout(() => {
+    inventorySaveTimers.delete(userId);
+    flushDirtyInventory(userId).catch(error => {
+      console.error(`[inventory] failed to retry dirty inventory save for ${userId}`, error);
+      scheduleInventorySaveRetry(userId);
+    });
+  }, INVENTORY_SAVE_RETRY_MS);
+  inventorySaveTimers.set(userId, timer);
 }
 
 export function addItemToInventory(userId: string, itemId: string, quantity: number): AddItemResult {
