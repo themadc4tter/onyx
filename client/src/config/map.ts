@@ -25,6 +25,12 @@ export const ZONE_MAPS: Record<string, ZoneMapConfig> = {
     musicKey: "settlement-music",
     musicUrl: "assets/audio/settlement.ogg",
   },
+  east_meadow: {
+    mapKey: "east-meadow-map",
+    mapUrl: "assets/maps/east_meadow.tmj",
+    musicKey: "settlement-music",
+    musicUrl: "assets/audio/settlement.ogg",
+  },
   inn: {
     mapKey: "inn-map",
     mapUrl: "assets/maps/inn.tmj",

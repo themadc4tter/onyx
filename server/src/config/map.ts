@@ -6,6 +6,7 @@ export const DEFAULT_ZONE_ID = "settlement";
 const TILE_SIZE = 16;
 const MAP_DEFINITIONS = {
   settlement: "settlement.tmj",
+  east_meadow: "east_meadow.tmj",
   inn: "inn.tmj",
 } as const;
 
