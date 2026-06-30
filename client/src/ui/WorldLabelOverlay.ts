@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 
 interface WorldLabelOptions {
-  target: Phaser.GameObjects.Components.Transform;
+  target: Phaser.GameObjects.Components.Transform & Partial<Pick<Phaser.GameObjects.Container, "getWorldPoint">>;
   text: string;
   offsetY: number;
   color: string;
@@ -11,7 +11,7 @@ interface WorldLabelOptions {
 
 interface WorldLabel {
   element: HTMLDivElement;
-  target: Phaser.GameObjects.Components.Transform;
+  target: Phaser.GameObjects.Components.Transform & Partial<Pick<Phaser.GameObjects.Container, "getWorldPoint">>;
   offsetY: number;
 }
 
@@ -105,8 +105,9 @@ export class WorldLabelOverlay {
     const canvasRect = canvas.getBoundingClientRect();
     const rootRect = this.root.getBoundingClientRect();
 
-    const screenX = camera.x + (label.target.x - camera.scrollX) * camera.zoom;
-    const screenY = camera.y + (label.target.y + label.offsetY - camera.scrollY) * camera.zoom;
+    const worldPoint = label.target.getWorldPoint?.() ?? label.target;
+    const screenX = camera.x + (worldPoint.x - camera.worldView.x) * camera.zoom;
+    const screenY = camera.y + (worldPoint.y + label.offsetY - camera.worldView.y) * camera.zoom;
     const scaleX = canvasRect.width / this.scene.scale.width;
     const scaleY = canvasRect.height / this.scene.scale.height;
     const cssX = canvasRect.left - rootRect.left + screenX * scaleX;

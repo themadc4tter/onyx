@@ -53,7 +53,7 @@ export class NpcRenderer {
     this.labels.push(this.labelOverlay.addLabel({
       target: container,
       text: `<${npc.title}>`,
-      offsetY: -TILE_SIZE / 2 - 3,
+      offsetY: -TILE_SIZE / 2 - 5,
       color: "#ffd98a",
       fontSize: NPC_TITLE_LABEL_FONT_SIZE,
       className: "world-label-title",
