@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
-import { DEFAULT_ZONE_ID, getZoneMapConfig, TILESETS } from "../config/map";
+import { DEFAULT_ZONE_ID, getZoneMapConfig, TILESETS, ZONE_MAPS } from "../config/map";
 import type { Facing, Position, RemotePlayerData } from "../types";
 import { supabase } from "../lib/supabase";
 import { NpcRenderer } from "../world/NpcRenderer";
@@ -18,6 +18,7 @@ interface Profile {
 }
 
 const CAMERA_ZOOM = 2;
+const MUSIC_VOLUME = 0.35;
 
 export class GameScene extends Phaser.Scene {
   private socket!: Socket;
@@ -36,6 +37,7 @@ export class GameScene extends Phaser.Scene {
   private remotePlayers!: RemotePlayerManager;
   private player!: LocalPlayerController;
   private worldMapBuilder!: WorldMapBuilder;
+  private currentMusic: Phaser.Sound.BaseSound | null = null;
 
   constructor() {
     super({ key: "GameScene" });
@@ -57,6 +59,9 @@ export class GameScene extends Phaser.Scene {
     this.mapKey = zoneMap.mapKey;
 
     this.load.tilemapTiledJSON(zoneMap.mapKey, zoneMap.mapUrl);
+    if (!this.cache.audio.exists(zoneMap.musicKey)) {
+      this.load.audio(zoneMap.musicKey, zoneMap.musicUrl);
+    }
     for (const tileset of TILESETS) {
       this.load.xml(tileset.sourceKey, tileset.sourceUrl);
       this.load.image(tileset.imageKey, tileset.imageUrl);
@@ -94,6 +99,7 @@ export class GameScene extends Phaser.Scene {
     this.remotePlayers.addMany(this.initPlayers);
 
     this.setupCamera();
+    this.playZoneMusic();
     this.setupServerEvents();
     this.hudOverlay = new GameHudOverlay(this, this.socket);
   }
@@ -133,6 +139,32 @@ export class GameScene extends Phaser.Scene {
 
     camera.setBounds(boundsX, boundsY, boundsWidth, boundsHeight);
     camera.startFollow(this.player.container, true);
+  }
+
+  private playZoneMusic() {
+    const { musicKey } = getZoneMapConfig(this.zoneId);
+
+    for (const config of Object.values(ZONE_MAPS)) {
+      this.sound.stopByKey(config.musicKey);
+    }
+
+    this.currentMusic = this.sound.add(musicKey, {
+      loop: true,
+      volume: MUSIC_VOLUME,
+    });
+
+    const startMusic = () => {
+      if (!this.currentMusic?.isPlaying) {
+        this.currentMusic?.play();
+      }
+    };
+
+    if (this.sound.locked) {
+      this.sound.once(Phaser.Sound.Events.UNLOCKED, startMusic);
+      return;
+    }
+
+    startMusic();
   }
 
   private setupServerEvents() {

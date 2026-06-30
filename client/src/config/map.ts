@@ -14,16 +14,22 @@ export interface TilesetConfig {
 export interface ZoneMapConfig {
   mapKey: string;
   mapUrl: string;
+  musicKey: string;
+  musicUrl: string;
 }
 
 export const ZONE_MAPS: Record<string, ZoneMapConfig> = {
   settlement: {
     mapKey: "settlement-map",
     mapUrl: "assets/maps/settlement.tmj",
+    musicKey: "settlement-music",
+    musicUrl: "assets/audio/settlement.ogg",
   },
   inn: {
     mapKey: "inn-map",
     mapUrl: "assets/maps/inn.tmj",
+    musicKey: "inn-music",
+    musicUrl: "assets/audio/inn.ogg",
   },
 };
 
