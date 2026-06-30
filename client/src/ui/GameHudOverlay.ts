@@ -759,6 +759,10 @@ export class GameHudOverlay {
     return this.chat.isFocused();
   }
 
+  addSystemMessage(message: string) {
+    this.chat.addSystemMessage(message);
+  }
+
   private updateCanvasBounds = () => {
     const canvasRect = this.scene.game.canvas.getBoundingClientRect();
     const rootRect = this.root.getBoundingClientRect();

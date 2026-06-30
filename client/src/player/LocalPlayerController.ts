@@ -96,6 +96,13 @@ export class LocalPlayerController {
     this.reconcileMoveAck(normalizedAck);
   }
 
+  getTilePosition() {
+    return {
+      tileX: this.tileX,
+      tileY: this.tileY,
+    };
+  }
+
   private readPressedDirection(): Facing | null {
     const justDown = Phaser.Input.Keyboard.JustDown;
 
@@ -242,4 +249,3 @@ export class LocalPlayerController {
     );
   }
 }
-

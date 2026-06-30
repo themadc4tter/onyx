@@ -56,18 +56,27 @@ export interface ZoneExit {
   toTileY: number;
 }
 
+export interface HerbSpawn {
+  id: string;
+  tileX: number;
+  tileY: number;
+  itemId: string;
+}
+
 export interface ZoneConfig {
   collisionData: number[];
   cols: number;
   rows: number;
   spawn: { x: number; y: number };
   exits: ZoneExit[];
+  herbSpawns: HerbSpawn[];
 }
 
 interface LoadedZone extends Omit<ZoneConfig, "exits"> {
   zoneId: ZoneId;
   entries: Map<string, { x: number; y: number }>;
   exitObjects: TiledObject[];
+  herbSpawnObjects: TiledObject[];
 }
 
 function findMapPath(filename: string) {
@@ -178,8 +187,10 @@ function loadZone(zoneId: ZoneId): LoadedZone {
     cols: tiledMap.width,
     rows: tiledMap.height,
     spawn: toTilePosition(spawn, tiledMap),
+    herbSpawns: [],
     entries,
     exitObjects: objectLayer.objects.filter(object => object.type === "exit" || object.name.startsWith("exit_")),
+    herbSpawnObjects: objectLayer.objects.filter(object => object.type === "herb_spawn"),
   };
 }
 
@@ -217,6 +228,22 @@ function buildZoneConfigs() {
       rows: zone.rows,
       spawn: zone.spawn,
       exits,
+      herbSpawns: zone.herbSpawnObjects.map((object, index) => {
+        const position = toTilePosition(object, {
+          width: zone.cols,
+          height: zone.rows,
+          tilewidth: TILE_SIZE,
+          tileheight: TILE_SIZE,
+          layers: [],
+        });
+
+        return {
+          id: object.name || `${zone.zoneId}_herb_${index + 1}`,
+          tileX: position.x,
+          tileY: position.y,
+          itemId: "moonleaf",
+        };
+      }),
     };
   }
 

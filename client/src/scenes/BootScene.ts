@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { io, Socket } from "socket.io-client";
 import { supabase } from "../lib/supabase";
 import type { Facing, RemotePlayerData } from "../types";
+import type { HerbSpawnState } from "../world/HerbSpawnerManager";
 
 const SERVER_URL = (import.meta.env.VITE_SERVER_URL as string) ?? "http://localhost:3001";
 
@@ -14,6 +15,7 @@ interface ProfileEvent {
   profile: Profile;
   zoneId: string;
   position: { tileX: number; tileY: number; facing: Facing };
+  herbSpawns?: HerbSpawnState[];
 }
 
 export class BootScene extends Phaser.Scene {
@@ -69,6 +71,7 @@ export class BootScene extends Phaser.Scene {
           initPlayers: remoteBuffer,
           zoneId: data.zoneId,
           startPos: data.position,
+          herbSpawns: data.herbSpawns ?? [],
         });
       });
     });

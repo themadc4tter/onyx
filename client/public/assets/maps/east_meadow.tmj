@@ -503,6 +503,32 @@
                  "width":0,
                  "x":24,
                  "y":440
+                }, 
+                {
+                 "height":0,
+                 "id":6,
+                 "name":"herb_1",
+                 "opacity":1,
+                 "point":true,
+                 "rotation":0,
+                 "type":"herb_spawn",
+                 "visible":true,
+                 "width":0,
+                 "x":440,
+                 "y":360
+                }, 
+                {
+                 "height":0,
+                 "id":7,
+                 "name":"herb_2",
+                 "opacity":1,
+                 "point":true,
+                 "rotation":0,
+                 "type":"herb_spawn",
+                 "visible":true,
+                 "width":0,
+                 "x":504,
+                 "y":280
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -570,7 +596,7 @@
          "y":0
         }],
  "nextlayerid":11,
- "nextobjectid":6,
+ "nextobjectid":8,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.2",

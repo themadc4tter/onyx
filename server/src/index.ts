@@ -4,7 +4,7 @@ import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import cors from "cors";
 import { supabase } from "./lib/supabase";
-import { isTileWalkable, normalizeZoneId, ZONES, type ZoneExit } from "./config/map";
+import { isTileWalkable, normalizeZoneId, ZONES, type HerbSpawn, type ZoneExit } from "./config/map";
 
 const PORT = process.env.PORT ?? 3001;
 const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
@@ -23,6 +23,12 @@ interface ChatMessage {
   text: string;
   sentAt: string;
 }
+interface HerbSpawnState extends HerbSpawn {
+  available: boolean;
+}
+interface HerbPickPayload {
+  id?: string;
+}
 interface ConnectedPlayer {
   socketId: string;
   userId: string;
@@ -40,6 +46,8 @@ const MOVE_RATE_TOLERANCE_MS = 30;
 const MIN_MOVE_INTERVAL_MS = MOVE_INTERVAL_MS - MOVE_RATE_TOLERANCE_MS;
 const CHAT_RATE_LIMIT_MS = 800;
 const MAX_CHAT_LENGTH = 240;
+const HERB_RESPAWN_MS = 10_000;
+const herbSpawnStates = new Map<string, Map<string, HerbSpawnState>>();
 
 // Debounced position saves: map of socketId → pending timeout
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -73,6 +81,30 @@ function flushSave(socketId: string, userId: string, zoneId: string, pos: Positi
 function emitMoveAck(socket: Socket, seq: number, position: Position) {
   const ack: MoveAck = { seq, position };
   socket.emit("move:ack", ack);
+}
+
+function getHerbSpawnStates(zoneId: string) {
+  const zone = ZONES[zoneId];
+  if (!zone) return [];
+
+  let zoneStates = herbSpawnStates.get(zoneId);
+  if (!zoneStates) {
+    zoneStates = new Map();
+    herbSpawnStates.set(zoneId, zoneStates);
+  }
+
+  for (const spawn of zone.herbSpawns) {
+    if (!zoneStates.has(spawn.id)) {
+      zoneStates.set(spawn.id, { ...spawn, available: true });
+    }
+  }
+
+  return [...zoneStates.values()];
+}
+
+function getHerbSpawnState(zoneId: string, herbId: string) {
+  getHerbSpawnStates(zoneId);
+  return herbSpawnStates.get(zoneId)?.get(herbId) ?? null;
 }
 
 function normalizeChatPayload(payload: unknown): NormalizedChatPayload | null {
@@ -110,7 +142,12 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
 
   io.to(oldZoneId).emit("player:left",   { socketId: socket.id });
   socket.to(newZoneId).emit("player:joined", { socketId: socket.id, username: player.username, position: newPos });
-  socket.emit("zone:changed", { zoneId: newZoneId, position: newPos, initPlayers: newZonePlayers });
+  socket.emit("zone:changed", {
+    zoneId: newZoneId,
+    position: newPos,
+    initPlayers: newZonePlayers,
+    herbSpawns: getHerbSpawnStates(newZoneId),
+  });
 
   flushSave(socket.id, player.userId, newZoneId, newPos);
   console.log(`[zone]       ${socket.id} (${player.username}) ${oldZoneId} → ${newZoneId}`);
@@ -201,7 +238,7 @@ io.on("connection", async (socket) => {
 
   console.log(`[connect]    ${socket.id} (${username}) → ${zoneId} — ${connectedPlayers.size} online`);
 
-  socket.emit("profile", { profile, position: startPos, zoneId });
+  socket.emit("profile", { profile, position: startPos, zoneId, herbSpawns: getHerbSpawnStates(zoneId) });
 
   // ─── Move ─────────────────────────────────────────────────────────────────
 
@@ -290,6 +327,31 @@ io.on("connection", async (socket) => {
     }
 
     io.emit("chat:message", message);
+  });
+
+  socket.on("herb:pick", (payload: HerbPickPayload) => {
+    const player = connectedPlayers.get(socket.id);
+    const herbId = payload?.id;
+    if (!player || !herbId) return;
+
+    const spawn = getHerbSpawnState(player.zoneId, herbId);
+    if (
+      !spawn ||
+      !spawn.available ||
+      spawn.tileX !== player.position.tileX ||
+      spawn.tileY !== player.position.tileY
+    ) {
+      return;
+    }
+
+    spawn.available = false;
+    io.to(player.zoneId).emit("herb:state", { id: spawn.id, available: false });
+    socket.emit("herb:picked", { itemId: spawn.itemId });
+
+    setTimeout(() => {
+      spawn.available = true;
+      io.to(player.zoneId).emit("herb:state", { id: spawn.id, available: true });
+    }, HERB_RESPAWN_MS);
   });
 
   // ─── Disconnect ────────────────────────────────────────────────────────────

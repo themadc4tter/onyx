@@ -130,7 +130,7 @@ export class HudChat {
     this.addSystemMessage(payload.message ?? "Message could not be sent.");
   };
 
-  private addSystemMessage(text: string) {
+  addSystemMessage(text: string) {
     this.addMessage({
       id: `system-${Date.now()}-${Math.random()}`,
       channel: "system",
@@ -188,4 +188,3 @@ export class HudChat {
     return labels[channel];
   }
 }
-

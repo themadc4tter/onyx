@@ -9,6 +9,12 @@ import { WorldLabelOverlay } from "../ui/WorldLabelOverlay";
 import { GameHudOverlay } from "../ui/GameHudOverlay";
 import { RemotePlayerManager } from "../world/RemotePlayerManager";
 import { WorldMapBuilder } from "../world/WorldMapBuilder";
+import {
+  HerbSpawnerManager,
+  HERB_SPRITE_ASSET_KEY,
+  HERB_SPRITE_URL,
+  type HerbSpawnState,
+} from "../world/HerbSpawnerManager";
 import { LocalPlayerController, type MoveAck } from "../player/LocalPlayerController";
 import { PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL } from "../player/playerAssets";
 
@@ -26,6 +32,7 @@ export class GameScene extends Phaser.Scene {
   private initPlayers: RemotePlayerData[] = [];
   private zoneId: string = DEFAULT_ZONE_ID;
   private startPos: Position | null = null;
+  private herbSpawnStates: HerbSpawnState[] = [];
   private mapKey = getZoneMapConfig(DEFAULT_ZONE_ID).mapKey;
 
   private map!: Phaser.Tilemaps.Tilemap;
@@ -37,19 +44,28 @@ export class GameScene extends Phaser.Scene {
   private remotePlayers!: RemotePlayerManager;
   private player!: LocalPlayerController;
   private worldMapBuilder!: WorldMapBuilder;
+  private herbSpawners!: HerbSpawnerManager;
   private currentMusic: Phaser.Sound.BaseSound | null = null;
 
   constructor() {
     super({ key: "GameScene" });
   }
 
-  init(data: { socket: Socket; profile: Profile; initPlayers: RemotePlayerData[]; zoneId?: string; startPos?: Position }) {
+  init(data: {
+    socket: Socket;
+    profile: Profile;
+    initPlayers: RemotePlayerData[];
+    zoneId?: string;
+    startPos?: Position;
+    herbSpawns?: HerbSpawnState[];
+  }) {
     this.socket = data.socket;
     this.profile = data.profile;
     this.initPlayers = data.initPlayers ?? [];
     this.zoneId = data.zoneId ?? DEFAULT_ZONE_ID;
     this.mapKey = getZoneMapConfig(this.zoneId).mapKey;
     this.startPos = data.startPos ?? null;
+    this.herbSpawnStates = data.herbSpawns ?? [];
   }
 
   preload() {
@@ -67,6 +83,9 @@ export class GameScene extends Phaser.Scene {
       this.load.image(tileset.imageKey, tileset.imageUrl);
     }
     this.load.image(PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL);
+    if (!this.textures.exists(HERB_SPRITE_ASSET_KEY)) {
+      this.load.image(HERB_SPRITE_ASSET_KEY, HERB_SPRITE_URL);
+    }
     for (const npc of getNpcsForZone(this.zoneId)) {
       if (!this.textures.exists(npc.spriteKey)) {
         this.load.image(npc.spriteKey, npc.spriteUrl);
@@ -102,10 +121,15 @@ export class GameScene extends Phaser.Scene {
     this.playZoneMusic();
     this.setupServerEvents();
     this.hudOverlay = new GameHudOverlay(this, this.socket);
+    this.herbSpawners = new HerbSpawnerManager(this, this.socket, this.map, this.player, message => {
+      this.hudOverlay.addSystemMessage(message);
+    }, this.herbSpawnStates);
   }
 
   update() {
-    this.player.update(this.hudOverlay?.isTextInputFocused() ?? false);
+    const inputBlocked = this.hudOverlay?.isTextInputFocused() ?? false;
+    this.player.update(inputBlocked);
+    this.herbSpawners?.update(inputBlocked);
   }
 
   private showLoadingIndicator() {
@@ -184,7 +208,12 @@ export class GameScene extends Phaser.Scene {
       this.remotePlayers.remove(data.socketId);
     });
 
-    this.socket.on("zone:changed", (payload: { zoneId: string; position: Position; initPlayers: RemotePlayerData[] }) => {
+    this.socket.on("zone:changed", (payload: {
+      zoneId: string;
+      position: Position;
+      initPlayers: RemotePlayerData[];
+      herbSpawns?: HerbSpawnState[];
+    }) => {
       this.socket.removeAllListeners();
       this.scene.restart({
         socket: this.socket,
@@ -192,6 +221,7 @@ export class GameScene extends Phaser.Scene {
         initPlayers: payload.initPlayers,
         zoneId: payload.zoneId,
         startPos: payload.position,
+        herbSpawns: payload.herbSpawns ?? [],
       });
     });
 
