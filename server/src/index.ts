@@ -29,13 +29,13 @@ import {
   acceptTradeRequest,
   addTradeOfferItem,
   cancelTradeForUser,
-  confirmTrade,
   createTradeRequest,
   declineTradeRequest,
   getTradeParticipants,
   getTradeStateForUser,
+  getTradeSessionForUser,
   removeTradeOfferItem,
-  setTradeLocked,
+  setTradeAccepted,
   type TradeParticipant,
   type TradeSession,
 } from "./game/trading";
@@ -224,7 +224,6 @@ function getTradeErrorMessage(error?: string) {
   const messages: Record<string, string> = {
     already_trading: "One of you is already trading.",
     invalid_offer: "That item cannot be offered.",
-    not_locked: "Both players must lock the trade first.",
     not_trading: "You are not in a trade.",
     out_of_range: "You are too far away to trade.",
     request_not_found: "That trade request is no longer available.",
@@ -232,7 +231,6 @@ function getTradeErrorMessage(error?: string) {
     self_trade: "You cannot trade with yourself.",
     target_unavailable: "That player is not available to trade.",
     trade_failed: "Trade failed.",
-    trade_locked: "Unlock the trade before changing your offer.",
     inventory_full: "One of you does not have enough inventory space.",
   };
 
@@ -640,19 +638,6 @@ io.on("connection", async (socket) => {
     emitTradeUpdate(io, result.session);
   });
 
-  socket.on("trade:lock", (payload: { locked?: boolean }) => {
-    const player = connectedPlayers.get(socket.id);
-    if (!player) return;
-
-    const result = setTradeLocked(player.userId, payload?.locked !== false);
-    if (!result.ok || !result.session) {
-      emitTradeError(socket, result.error);
-      return;
-    }
-
-    emitTradeUpdate(io, result.session);
-  });
-
   socket.on("trade:cancel", () => {
     const player = connectedPlayers.get(socket.id);
     if (!player) return;
@@ -660,22 +645,22 @@ io.on("connection", async (socket) => {
     cancelTrade(io, player.userId, "cancelled");
   });
 
-  socket.on("trade:confirm", async () => {
+  socket.on("trade:setAccepted", async (payload: { accepted?: boolean }) => {
     const player = connectedPlayers.get(socket.id);
     if (!player) return;
 
-    const activeResult = setTradeLocked(player.userId, true);
-    if (!activeResult.ok || !activeResult.session) {
-      emitTradeError(socket, activeResult.error);
+    const session = getTradeSessionForUser(player.userId);
+    if (!session) {
+      emitTradeError(socket, "not_trading");
       return;
     }
 
-    if (!validateTradeParticipantsInRange(activeResult.session)) {
+    if (!validateTradeParticipantsInRange(session)) {
       cancelTrade(io, player.userId, "range");
       return;
     }
 
-    const result = confirmTrade(player.userId);
+    const result = setTradeAccepted(player.userId, payload?.accepted !== false);
     if (!result.ok || !result.session) {
       emitTradeError(socket, result.error);
       if (result.session) emitTradeUpdate(io, result.session);

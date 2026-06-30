@@ -44,11 +44,8 @@ interface TradeStatePayload {
   partnerUsername: string;
   ownOffer: TradeOfferItem[];
   otherOffer: TradeOfferItem[];
-  ownLocked: boolean;
-  otherLocked: boolean;
-  ownConfirmed: boolean;
-  otherConfirmed: boolean;
-  canConfirm: boolean;
+  ownAccepted: boolean;
+  otherAccepted: boolean;
 }
 
 const HUD_LAYER_ID = "game-hud-layer";
@@ -675,6 +672,12 @@ const CSS = `
     padding: 10px;
   }
 
+  .trade-panel.accepted {
+    border-color: rgba(95, 191, 137, 0.86);
+    background: rgba(44, 111, 72, 0.22);
+    box-shadow: inset 0 0 0 1px rgba(95, 191, 137, 0.18);
+  }
+
   .trade-panel-title {
     display: flex;
     justify-content: space-between;
@@ -689,6 +692,10 @@ const CSS = `
     color: rgba(242, 234, 216, 0.7);
     font-size: 12px;
     font-weight: 700;
+  }
+
+  .trade-panel.accepted .trade-status {
+    color: #9af0b8;
   }
 
   .trade-offer-list {
@@ -1668,11 +1675,11 @@ export class GameHudOverlay {
     const offers = document.createElement("div");
     offers.className = "trade-offers";
     offers.append(
-      this.createTradeOfferPanel("Your offer", this.tradeState.ownOffer, this.tradeState.ownLocked, true),
+      this.createTradeOfferPanel("Your offer", this.tradeState.ownOffer, this.tradeState.ownAccepted, true),
       this.createTradeOfferPanel(
         `${this.tradeState.partnerUsername}'s offer`,
         this.tradeState.otherOffer,
-        this.tradeState.otherLocked,
+        this.tradeState.otherAccepted,
         false,
       ),
     );
@@ -1681,26 +1688,19 @@ export class GameHudOverlay {
     inventoryPanel.className = "trade-panel";
     const inventoryTitle = document.createElement("div");
     inventoryTitle.className = "trade-inventory-title";
-    inventoryTitle.textContent = this.tradeState.ownLocked ? "Unlock to change your offer" : "Click inventory items to offer them";
+    inventoryTitle.textContent = this.tradeState.ownAccepted ? "Changing your offer will reset acceptance" : "Click inventory items to offer them";
     inventoryPanel.append(inventoryTitle, this.createTradeInventoryGrid());
 
     const actions = document.createElement("div");
     actions.className = "trade-actions";
 
-    const lockButton = document.createElement("button");
-    lockButton.className = "trade-action-button";
-    lockButton.type = "button";
-    lockButton.textContent = this.tradeState.ownLocked ? "Unlock" : "Lock";
-    lockButton.addEventListener("click", () => {
-      this.socket.emit("trade:lock", { locked: !this.tradeState?.ownLocked });
+    const acceptButton = document.createElement("button");
+    acceptButton.className = "trade-action-button confirm";
+    acceptButton.type = "button";
+    acceptButton.textContent = this.tradeState.ownAccepted ? "Unaccept" : "Accept";
+    acceptButton.addEventListener("click", () => {
+      this.socket.emit("trade:setAccepted", { accepted: !this.tradeState?.ownAccepted });
     });
-
-    const confirmButton = document.createElement("button");
-    confirmButton.className = "trade-action-button confirm";
-    confirmButton.type = "button";
-    confirmButton.textContent = this.tradeState.canConfirm ? "Confirm" : "Waiting";
-    confirmButton.disabled = !this.tradeState.canConfirm || this.tradeState.ownConfirmed;
-    confirmButton.addEventListener("click", () => this.socket.emit("trade:confirm"));
 
     const cancelButton = document.createElement("button");
     cancelButton.className = "trade-action-button cancel";
@@ -1708,15 +1708,15 @@ export class GameHudOverlay {
     cancelButton.textContent = "Cancel";
     cancelButton.addEventListener("click", () => this.socket.emit("trade:cancel"));
 
-    actions.append(lockButton, confirmButton, cancelButton);
+    actions.append(acceptButton, cancelButton);
     body.append(offers, inventoryPanel, actions);
     windowEl.append(header, body);
     this.tradeRoot.appendChild(windowEl);
   }
 
-  private createTradeOfferPanel(titleText: string, offer: TradeOfferItem[], locked: boolean, isOwnOffer: boolean) {
+  private createTradeOfferPanel(titleText: string, offer: TradeOfferItem[], accepted: boolean, isOwnOffer: boolean) {
     const panel = document.createElement("div");
-    panel.className = "trade-panel";
+    panel.className = `trade-panel${accepted ? " accepted" : ""}`;
 
     const title = document.createElement("div");
     title.className = "trade-panel-title";
@@ -1726,7 +1726,7 @@ export class GameHudOverlay {
 
     const status = document.createElement("span");
     status.className = "trade-status";
-    status.textContent = locked ? "Locked" : "Editing";
+    status.textContent = accepted ? "Accepted" : "Editing";
 
     title.append(name, status);
     panel.appendChild(title);
@@ -1773,7 +1773,7 @@ export class GameHudOverlay {
     remove.className = "trade-remove-button";
     remove.type = "button";
     remove.innerHTML = "&times;";
-    remove.disabled = !isOwnOffer || Boolean(this.tradeState?.ownLocked);
+    remove.disabled = !isOwnOffer;
     remove.addEventListener("click", () => {
       this.socket.emit("trade:removeItem", { slotIndex: offeredItem.slotIndex });
     });
@@ -1798,7 +1798,7 @@ export class GameHudOverlay {
         item?.rarity ?? "",
         offeredSlotIndexes.has(slotIndex) ? "selected" : "",
       ].filter(Boolean).join(" ");
-      slot.disabled = !slotItem || Boolean(this.tradeState?.ownLocked);
+      slot.disabled = !slotItem;
       slot.title = item ? `${item.name}\n${item.description}` : "";
 
       if (slotItem && item) {
@@ -1831,7 +1831,7 @@ export class GameHudOverlay {
 
   private offerInventorySlot(slotIndex: number) {
     const slot = this.inventory.slots[slotIndex];
-    if (!slot || this.tradeState?.ownLocked) return;
+    if (!slot) return;
 
     let quantity = 1;
     if (slot.quantity > 1) {

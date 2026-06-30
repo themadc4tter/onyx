@@ -22,8 +22,7 @@ export interface TradeSession {
   a: TradeParticipant;
   b: TradeParticipant;
   offers: Record<string, TradeOfferItem[]>;
-  locked: Record<string, boolean>;
-  confirmed: Record<string, boolean>;
+  accepted: Record<string, boolean>;
   createdAt: number;
   updatedAt: number;
 }
@@ -33,11 +32,8 @@ export interface TradeStatePayload {
   partnerUsername: string;
   ownOffer: TradeOfferItem[];
   otherOffer: TradeOfferItem[];
-  ownLocked: boolean;
-  otherLocked: boolean;
-  ownConfirmed: boolean;
-  otherConfirmed: boolean;
-  canConfirm: boolean;
+  ownAccepted: boolean;
+  otherAccepted: boolean;
 }
 
 export interface TradeActionResult {
@@ -70,10 +66,8 @@ function clearExpiredRequests() {
 }
 
 function resetTradeApproval(session: TradeSession) {
-  session.locked[session.a.userId] = false;
-  session.locked[session.b.userId] = false;
-  session.confirmed[session.a.userId] = false;
-  session.confirmed[session.b.userId] = false;
+  session.accepted[session.a.userId] = false;
+  session.accepted[session.b.userId] = false;
   session.updatedAt = Date.now();
 }
 
@@ -92,6 +86,10 @@ function getPartner(session: TradeSession, userId: string) {
 function getTradeForUserId(userId: string) {
   const tradeId = activeTradeIdByUserId.get(userId);
   return tradeId ? activeTradesById.get(tradeId) ?? null : null;
+}
+
+export function getTradeSessionForUser(userId: string) {
+  return getTradeForUserId(userId);
 }
 
 export function createTradeRequest(from: TradeParticipant, to: TradeParticipant): TradeActionResult {
@@ -156,11 +154,7 @@ export function acceptTradeRequest(userId: string, requestId: string): TradeActi
       [request.from.userId]: [],
       [request.to.userId]: [],
     },
-    locked: {
-      [request.from.userId]: false,
-      [request.to.userId]: false,
-    },
-    confirmed: {
+    accepted: {
       [request.from.userId]: false,
       [request.to.userId]: false,
     },
@@ -179,10 +173,6 @@ export function addTradeOfferItem(userId: string, slotIndex: number, quantity: n
   const session = getTradeForUserId(userId);
   if (!session || !getParticipant(session, userId)) {
     return { ok: false, error: "not_trading" };
-  }
-
-  if (session.locked[userId]) {
-    return { ok: false, error: "trade_locked" };
   }
 
   if (!Number.isInteger(slotIndex) || !Number.isInteger(quantity) || quantity <= 0) {
@@ -219,10 +209,6 @@ export function removeTradeOfferItem(userId: string, slotIndex: number): TradeAc
     return { ok: false, error: "not_trading" };
   }
 
-  if (session.locked[userId]) {
-    return { ok: false, error: "trade_locked" };
-  }
-
   const offer = session.offers[userId];
   const nextOffer = offer.filter(item => item.slotIndex !== slotIndex);
   if (nextOffer.length === offer.length) {
@@ -234,32 +220,16 @@ export function removeTradeOfferItem(userId: string, slotIndex: number): TradeAc
   return { ok: true, session };
 }
 
-export function setTradeLocked(userId: string, locked: boolean): TradeActionResult {
+export function setTradeAccepted(userId: string, accepted: boolean): TradeActionResult {
   const session = getTradeForUserId(userId);
   if (!session || !getParticipant(session, userId)) {
     return { ok: false, error: "not_trading" };
   }
 
-  session.locked[userId] = locked;
-  session.confirmed[userId] = false;
-  session.updatedAt = Date.now();
-  return { ok: true, session };
-}
-
-export function confirmTrade(userId: string): TradeActionResult {
-  const session = getTradeForUserId(userId);
-  if (!session || !getParticipant(session, userId)) {
-    return { ok: false, error: "not_trading" };
-  }
-
-  if (!session.locked[session.a.userId] || !session.locked[session.b.userId]) {
-    return { ok: false, error: "not_locked" };
-  }
-
-  session.confirmed[userId] = true;
+  session.accepted[userId] = accepted;
   session.updatedAt = Date.now();
 
-  const completed = session.confirmed[session.a.userId] && session.confirmed[session.b.userId];
+  const completed = session.accepted[session.a.userId] && session.accepted[session.b.userId];
   if (!completed) {
     return { ok: true, session, completed: false };
   }
@@ -271,8 +241,8 @@ export function confirmTrade(userId: string): TradeActionResult {
     session.offers[session.b.userId],
   );
   if (!result.ok) {
-    session.confirmed[session.a.userId] = false;
-    session.confirmed[session.b.userId] = false;
+    session.accepted[session.a.userId] = false;
+    session.accepted[session.b.userId] = false;
     return { ok: false, session, error: result.error ?? "trade_failed" };
   }
 
@@ -309,10 +279,7 @@ export function getTradeStateForUser(session: TradeSession, userId: string): Tra
     partnerUsername: partner.username,
     ownOffer: session.offers[userId].map(item => ({ ...item })),
     otherOffer: session.offers[partner.userId].map(item => ({ ...item })),
-    ownLocked: session.locked[userId],
-    otherLocked: session.locked[partner.userId],
-    ownConfirmed: session.confirmed[userId],
-    otherConfirmed: session.confirmed[partner.userId],
-    canConfirm: session.locked[userId] && session.locked[partner.userId],
+    ownAccepted: session.accepted[userId],
+    otherAccepted: session.accepted[partner.userId],
   };
 }
