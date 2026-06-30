@@ -1,8 +1,10 @@
 import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { TILE_SIZE } from "../config/map";
+import type { EquipmentState } from "../game/equipment";
 import type { Facing, Position } from "../types";
 import { WorldLabelOverlay } from "../ui/WorldLabelOverlay";
+import { EquipmentOverlayRenderer } from "./EquipmentOverlayRenderer";
 import { PLAYER_SPRITE_KEY } from "./playerAssets";
 
 interface PredictedMove extends Position {
@@ -37,6 +39,7 @@ export class LocalPlayerController {
   private pendingMoves: PredictedMove[] = [];
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd: Record<Facing, Phaser.Input.Keyboard.Key>;
+  private equipmentOverlays: EquipmentOverlayRenderer;
 
   constructor(
     private scene: Phaser.Scene,
@@ -53,6 +56,7 @@ export class LocalPlayerController {
 
     const sprite = this.scene.add.image(0, 0, PLAYER_SPRITE_KEY);
     this.container = this.scene.add.container(0, 0, [sprite]).setDepth(20);
+    this.equipmentOverlays = new EquipmentOverlayRenderer(this.scene, this.container);
     this.syncContainerToTile();
 
     labelOverlay.addLabel({
@@ -101,6 +105,10 @@ export class LocalPlayerController {
       tileX: this.tileX,
       tileY: this.tileY,
     };
+  }
+
+  setEquipment(equipment: EquipmentState) {
+    this.equipmentOverlays.setEquipment(equipment);
   }
 
   private readPressedDirection(): Facing | null {

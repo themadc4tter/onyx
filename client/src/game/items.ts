@@ -1,7 +1,7 @@
 export type ItemRarity = "common" | "uncommon" | "rare";
 export type ItemType = "material" | "consumable" | "equipment" | "quest";
 export type EquipmentSlot = "head" | "chest" | "legs" | "feet" | "main_hand" | "off_hand" | "ring" | "charm";
-export const EQUIPMENT_SLOTS: EquipmentSlot[] = ["head", "chest", "legs", "feet", "main_hand", "off_hand", "ring", "charm"];
+export const EQUIPMENT_SLOTS: EquipmentSlot[] = ["main_hand", "off_hand", "head", "chest", "legs", "feet", "ring", "charm"];
 
 export interface EquipmentStats {
   attack_damage?: number;

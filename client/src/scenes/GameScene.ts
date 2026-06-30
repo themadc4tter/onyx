@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { DEFAULT_ZONE_ID, getZoneMapConfig, TILESETS, ZONE_MAPS } from "../config/map";
-import type { EquipmentState } from "../game/equipment";
+import { createEmptyEquipment, type EquipmentState } from "../game/equipment";
 import type { InventoryState } from "../game/inventory";
 import type { Facing, Position, RemotePlayerData } from "../types";
 import { supabase } from "../lib/supabase";
@@ -124,6 +124,7 @@ export class GameScene extends Phaser.Scene {
     this.npcRenderer.render(this.worldMapBuilder.getPlacedNpcsForZone(this.zoneId, this.map));
     this.remotePlayers = new RemotePlayerManager(this, this.labelOverlay);
     this.remotePlayers.addMany(this.initPlayers);
+    this.player.setEquipment(this.equipment ?? createEmptyEquipment());
 
     this.setupCamera();
     this.playZoneMusic();
@@ -210,6 +211,15 @@ export class GameScene extends Phaser.Scene {
 
     this.socket.on("player:moved", (data: { socketId: string; tileX: number; tileY: number; facing: Facing }) => {
       this.remotePlayers.move(data.socketId, data.tileX, data.tileY, data.facing);
+    });
+
+    this.socket.on("player:equipmentChanged", (data: { socketId: string; equipment: EquipmentState }) => {
+      this.remotePlayers.updateEquipment(data.socketId, data.equipment);
+    });
+
+    this.socket.on("equipment:changed", (equipment: EquipmentState) => {
+      this.equipment = equipment;
+      this.player.setEquipment(equipment);
     });
 
     this.socket.on("player:left", (data: { socketId: string }) => {

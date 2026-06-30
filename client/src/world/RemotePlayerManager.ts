@@ -1,11 +1,14 @@
 import Phaser from "phaser";
 import { TILE_SIZE } from "../config/map";
+import type { EquipmentState } from "../game/equipment";
 import type { Facing, Position, RemotePlayerData } from "../types";
 import { WorldLabelOverlay, type WorldLabelHandle } from "../ui/WorldLabelOverlay";
+import { EquipmentOverlayRenderer } from "../player/EquipmentOverlayRenderer";
 import { PLAYER_SPRITE_KEY } from "../player/playerAssets";
 
 interface RemotePlayerState {
   container: Phaser.GameObjects.Container;
+  equipmentOverlays: EquipmentOverlayRenderer;
   nameLabel: WorldLabelHandle;
   tileX: number;
   tileY: number;
@@ -39,6 +42,10 @@ export class RemotePlayerManager {
         [sprite],
       )
       .setDepth(REMOTE_PLAYER_DEPTH);
+    const equipmentOverlays = new EquipmentOverlayRenderer(this.scene, container);
+    if (data.equipment) {
+      equipmentOverlays.setEquipment(data.equipment);
+    }
 
     const nameLabel = this.labelOverlay.addLabel({
       target: container,
@@ -51,6 +58,7 @@ export class RemotePlayerManager {
 
     this.remotePlayers.set(data.socketId, {
       container,
+      equipmentOverlays,
       nameLabel,
       tileX: data.position.tileX,
       tileY: data.position.tileY,
@@ -67,11 +75,16 @@ export class RemotePlayerManager {
     this.playNextMove(remotePlayer);
   }
 
+  updateEquipment(socketId: string, equipment: EquipmentState) {
+    this.remotePlayers.get(socketId)?.equipmentOverlays.setEquipment(equipment);
+  }
+
   remove(socketId: string) {
     const remotePlayer = this.remotePlayers.get(socketId);
     if (!remotePlayer) return;
 
     remotePlayer.nameLabel.destroy();
+    remotePlayer.equipmentOverlays.destroy();
     remotePlayer.container.destroy(true);
     this.remotePlayers.delete(socketId);
   }
@@ -98,4 +111,3 @@ export class RemotePlayerManager {
     });
   }
 }
-

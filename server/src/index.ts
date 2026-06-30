@@ -168,6 +168,15 @@ function getEquipmentPayload(userId: string): EquipmentPayload {
   };
 }
 
+function getPlayerSnapshot(player: ConnectedPlayer) {
+  return {
+    socketId: player.socketId,
+    username: player.username,
+    position: player.position,
+    equipment: getEquipmentPayload(player.userId),
+  };
+}
+
 function getInventoryErrorMessage(error?: string) {
   const messages: Record<string, string> = {
     empty_source: "That inventory slot is empty.",
@@ -220,7 +229,9 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
   const newZoneId = exit.toZoneId;
   const newPos: Position = { tileX: exit.toTileX, tileY: exit.toTileY, facing: "down" };
 
-  const newZonePlayers = [...connectedPlayers.values()].filter(p => p.zoneId === newZoneId);
+  const newZonePlayers = [...connectedPlayers.values()]
+    .filter(p => p.zoneId === newZoneId)
+    .map(getPlayerSnapshot);
 
   const player = connectedPlayers.get(socket.id)!;
   player.position = newPos;
@@ -234,7 +245,7 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
   await socket.join(newZoneId);
 
   io.to(oldZoneId).emit("player:left",   { socketId: socket.id });
-  socket.to(newZoneId).emit("player:joined", { socketId: socket.id, username: player.username, position: newPos });
+  socket.to(newZoneId).emit("player:joined", getPlayerSnapshot(player));
   socket.emit("zone:changed", {
     zoneId: newZoneId,
     position: newPos,
@@ -318,7 +329,9 @@ io.on("connection", async (socket) => {
   socket.data.zoneId   = zoneId;
 
   // Snapshot players in the same zone before adding self
-  const others = [...connectedPlayers.values()].filter(p => p.zoneId === zoneId);
+  const others = [...connectedPlayers.values()]
+    .filter(p => p.zoneId === zoneId)
+    .map(getPlayerSnapshot);
   socket.emit("players:init", others);
 
   connectedPlayers.set(socket.id, {
@@ -333,7 +346,7 @@ io.on("connection", async (socket) => {
   });
 
   await socket.join(zoneId);
-  socket.to(zoneId).emit("player:joined", { socketId: socket.id, username, position: startPos });
+  socket.to(zoneId).emit("player:joined", getPlayerSnapshot(connectedPlayers.get(socket.id)!));
 
   console.log(`[connect]    ${socket.id} (${username}) → ${zoneId} — ${connectedPlayers.size} online`);
 
@@ -526,6 +539,12 @@ io.on("connection", async (socket) => {
     }
 
     emitEquipmentActionResult(socket, player.userId, result.ok, result.error);
+    if (result.ok) {
+      socket.to(player.zoneId).emit("player:equipmentChanged", {
+        socketId: socket.id,
+        equipment: getEquipmentPayload(player.userId),
+      });
+    }
   });
 
   socket.on("equipment:unequip", async (payload: EquipmentUnequipPayload) => {
@@ -545,6 +564,12 @@ io.on("connection", async (socket) => {
     }
 
     emitEquipmentActionResult(socket, player.userId, result.ok, result.error);
+    if (result.ok) {
+      socket.to(player.zoneId).emit("player:equipmentChanged", {
+        socketId: socket.id,
+        equipment: getEquipmentPayload(player.userId),
+      });
+    }
   });
 
   // ─── Disconnect ────────────────────────────────────────────────────────────
