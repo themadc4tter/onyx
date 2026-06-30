@@ -5,7 +5,8 @@ type PanelId = "skills" | "inventory" | "equipment" | "party";
 interface SkillMock {
   name: string;
   level: number;
-  xp: number;
+  currentXp: number;
+  totalXp: number;
   nextUnlock: string;
 }
 
@@ -24,15 +25,15 @@ const HUD_LAYER_ID = "game-hud-layer";
 const HUD_INSET_PX = 12;
 
 const SKILLS: SkillMock[] = [
-  { name: "Melee", level: 12, xp: 62, nextUnlock: "Guarding Stance" },
-  { name: "Ranged", level: 8, xp: 34, nextUnlock: "Snare Trap" },
-  { name: "Magic", level: 10, xp: 48, nextUnlock: "Lesser Ward" },
-  { name: "Mining", level: 15, xp: 76, nextUnlock: "Iron Veins" },
-  { name: "Smithing", level: 11, xp: 52, nextUnlock: "Reinforced Buckles" },
-  { name: "Herbalism", level: 9, xp: 41, nextUnlock: "Moonleaf" },
-  { name: "Alchemy", level: 7, xp: 29, nextUnlock: "Mist Tonic" },
-  { name: "Cooking", level: 13, xp: 58, nextUnlock: "Hearty Stew" },
-  { name: "Fishing", level: 6, xp: 25, nextUnlock: "River Perch" },
+  { name: "Melee", level: 12, currentXp: 124, totalXp: 200, nextUnlock: "Guarding Stance" },
+  { name: "Ranged", level: 8, currentXp: 68, totalXp: 200, nextUnlock: "Snare Trap" },
+  { name: "Magic", level: 10, currentXp: 96, totalXp: 200, nextUnlock: "Lesser Ward" },
+  { name: "Mining", level: 15, currentXp: 152, totalXp: 200, nextUnlock: "Iron Veins" },
+  { name: "Smithing", level: 11, currentXp: 104, totalXp: 200, nextUnlock: "Reinforced Buckles" },
+  { name: "Herbalism", level: 9, currentXp: 82, totalXp: 200, nextUnlock: "Moonleaf" },
+  { name: "Alchemy", level: 7, currentXp: 58, totalXp: 200, nextUnlock: "Mist Tonic" },
+  { name: "Cooking", level: 13, currentXp: 116, totalXp: 200, nextUnlock: "Hearty Stew" },
+  { name: "Fishing", level: 6, currentXp: 50, totalXp: 200, nextUnlock: "River Perch" },
 ];
 
 const INVENTORY: Array<InventoryItemMock | null> = [
@@ -183,6 +184,12 @@ const CSS = `
     pointer-events: auto;
   }
 
+  .hud-window-skills {
+    top: calc(var(--hud-canvas-top) + var(--hud-inset));
+    bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 58px);
+    max-height: none;
+  }
+
   .hud-window-header {
     display: flex;
     align-items: center;
@@ -235,9 +242,9 @@ const CSS = `
   .skill-row {
     display: grid;
     grid-template-columns: 1fr 34px;
-    gap: 8px;
+    gap: 6px 8px;
     align-items: center;
-    padding: 8px;
+    padding: 7px 8px;
     border: 1px solid rgba(242, 234, 216, 0.1);
     background: rgba(255, 255, 255, 0.035);
     color: #f2ead8;
@@ -273,8 +280,17 @@ const CSS = `
 
   .xp-fill,
   .vital-fill {
+    display: block;
     height: 100%;
     background: #5fbf89;
+  }
+
+  .xp-meta {
+    grid-column: 1 / -1;
+    color: rgba(242, 234, 216, 0.7);
+    font-size: 11px;
+    line-height: 1;
+    text-align: right;
   }
 
   .skill-detail,
@@ -428,6 +444,11 @@ const CSS = `
       max-height: calc(var(--hud-canvas-height) - 82px);
     }
 
+    .hud-window-skills {
+      top: calc(var(--hud-canvas-top) + var(--hud-inset));
+      max-height: none;
+    }
+
     .hud-dock {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       width: min(260px, calc(var(--hud-canvas-width) - 24px));
@@ -558,7 +579,7 @@ export class GameHudOverlay {
     if (!this.activePanel) return;
 
     const panel = document.createElement("section");
-    panel.className = "hud-window";
+    panel.className = `hud-window hud-window-${this.activePanel}`;
     panel.setAttribute("aria-label", this.getPanelTitle(this.activePanel));
     panel.innerHTML = `
       <header class="hud-window-header">
@@ -590,13 +611,15 @@ export class GameHudOverlay {
     list.className = "skill-list";
 
     for (const skill of SKILLS) {
+      const percent = Math.round((skill.currentXp / skill.totalXp) * 100);
       const row = document.createElement("button");
       row.type = "button";
       row.className = `skill-row${skill.name === this.selectedSkill.name ? " active" : ""}`;
       row.innerHTML = `
         <span class="skill-name">${skill.name}</span>
         <span class="skill-level">${skill.level}</span>
-        <span class="xp-bar"><span class="xp-fill" style="width: ${skill.xp}%"></span></span>
+        <span class="xp-bar"><span class="xp-fill" style="width: ${percent}%"></span></span>
+        <span class="xp-meta">${skill.currentXp}/${skill.totalXp} (${percent}%)</span>
       `;
       row.addEventListener("click", () => {
         this.selectedSkill = skill;
