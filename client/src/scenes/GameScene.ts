@@ -17,6 +17,7 @@ import { supabase } from "../lib/supabase";
 import { NpcRenderer } from "../world/NpcRenderer";
 import { getNpcsForZone, type NpcDefinition, type PlacedNpcDefinition } from "../world/npcs";
 import { WorldLabelOverlay, type WorldLabelHandle } from "../ui/WorldLabelOverlay";
+import { GameHudOverlay } from "../ui/GameHudOverlay";
 
 interface Profile {
   id: string;
@@ -99,6 +100,7 @@ export class GameScene extends Phaser.Scene {
 
   private playerContainer!: Phaser.GameObjects.Container;
   private labelOverlay!: WorldLabelOverlay;
+  private hudOverlay!: GameHudOverlay;
   private remotePlayers = new Map<string, RemotePlayerState>();
   private npcRenderer!: NpcRenderer;
 
@@ -170,6 +172,7 @@ export class GameScene extends Phaser.Scene {
     this.setupCamera();
     this.setupInput();
     this.setupServerEvents();
+    this.hudOverlay = new GameHudOverlay(this);
 
     for (const p of this.initPlayers) this.addRemotePlayer(p);
   }
