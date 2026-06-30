@@ -1,5 +1,19 @@
 export type ItemRarity = "common" | "uncommon" | "rare";
 export type ItemType = "material" | "consumable" | "equipment" | "quest";
+export type EquipmentSlot = "head" | "chest" | "legs" | "feet" | "main_hand" | "off_hand" | "tool" | "charm";
+
+export interface EquipmentStats {
+  attack_damage?: number;
+  power?: number;
+  guard?: number;
+  focus?: number;
+  gathering?: number;
+}
+
+export interface EquipmentDefinition {
+  slot: EquipmentSlot;
+  stats: EquipmentStats;
+}
 
 export interface ItemDefinition {
   id: string;
@@ -8,6 +22,7 @@ export interface ItemDefinition {
   maxStack: number;
   rarity: ItemRarity;
   type: ItemType;
+  equipment?: EquipmentDefinition;
 }
 
 export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
@@ -18,6 +33,20 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     maxStack: 20,
     rarity: "uncommon",
     type: "material",
+  },
+  mystic_ruby_staff: {
+    id: "mystic_ruby_staff",
+    name: "Mystic Ruby Staff",
+    description: "A powerful staff.",
+    maxStack: 1,
+    rarity: "rare",
+    type: "equipment",
+    equipment: {
+      slot: "main_hand",
+      stats: {
+        attack_damage: 8,
+      },
+    },
   },
 };
 
