@@ -4,12 +4,15 @@ import { AuthUI } from "./auth/AuthUI";
 import { BootScene } from "./scenes/BootScene";
 import { GameScene } from "./scenes/GameScene";
 
+const GAME_WIDTH = 854;
+const GAME_HEIGHT = 480;
+
 function startGame() {
   new Phaser.Game({
     type: Phaser.AUTO,
     parent: "game-root",
-    width: 640,
-    height: 480,
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
