@@ -21,6 +21,7 @@ interface EquipmentSlotMock {
 }
 
 const HUD_LAYER_ID = "game-hud-layer";
+const HUD_INSET_PX = 12;
 
 const SKILLS: SkillMock[] = [
   { name: "Melee", level: 12, xp: 62, nextUnlock: "Guarding Stance" },
@@ -80,13 +81,18 @@ const CSS = `
     pointer-events: none;
     font-family: Arial, Helvetica, sans-serif;
     color: #f2ead8;
+    --hud-canvas-left: 0px;
+    --hud-canvas-top: 0px;
+    --hud-canvas-width: 100vw;
+    --hud-canvas-height: 100vh;
+    --hud-inset: ${HUD_INSET_PX}px;
   }
 
   .hud-chat {
     position: absolute;
-    left: max(16px, env(safe-area-inset-left));
-    bottom: max(16px, env(safe-area-inset-bottom));
-    width: min(360px, calc(100vw - 120px));
+    left: calc(var(--hud-canvas-left) + var(--hud-inset));
+    bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + var(--hud-inset));
+    width: min(360px, calc(var(--hud-canvas-width) - 24px));
     min-height: 132px;
     background: rgba(13, 17, 22, 0.58);
     border: 1px solid rgba(221, 198, 144, 0.28);
@@ -126,21 +132,23 @@ const CSS = `
 
   .hud-dock {
     position: absolute;
-    right: max(16px, env(safe-area-inset-right));
-    bottom: max(16px, env(safe-area-inset-bottom));
+    right: calc(100% - var(--hud-canvas-left) - var(--hud-canvas-width) + var(--hud-inset));
+    bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + var(--hud-inset));
     display: grid;
-    grid-template-columns: repeat(2, 42px);
+    grid-template-columns: repeat(4, minmax(82px, 1fr));
     gap: 8px;
+    width: min(408px, calc(var(--hud-canvas-width) - 24px));
     pointer-events: auto;
   }
 
   .hud-dock-button {
-    width: 42px;
-    height: 42px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
     border: 1px solid rgba(221, 198, 144, 0.5);
     background: rgba(23, 27, 29, 0.86);
     color: #f2ead8;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0;
     cursor: pointer;
@@ -163,10 +171,10 @@ const CSS = `
 
   .hud-window {
     position: absolute;
-    right: max(72px, calc(env(safe-area-inset-right) + 72px));
-    bottom: max(16px, env(safe-area-inset-bottom));
-    width: min(520px, calc(100vw - 32px));
-    max-height: min(430px, calc(100vh - 32px));
+    right: calc(100% - var(--hud-canvas-left) - var(--hud-canvas-width) + var(--hud-inset));
+    bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 58px);
+    width: min(520px, calc(var(--hud-canvas-width) - 24px));
+    max-height: min(430px, calc(var(--hud-canvas-height) - 82px));
     display: flex;
     flex-direction: column;
     background: rgba(20, 22, 21, 0.96);
@@ -232,6 +240,7 @@ const CSS = `
     padding: 8px;
     border: 1px solid rgba(242, 234, 216, 0.1);
     background: rgba(255, 255, 255, 0.035);
+    color: #f2ead8;
     cursor: pointer;
   }
 
@@ -402,7 +411,7 @@ const CSS = `
 
   @media (max-width: 700px) {
     .hud-chat {
-      width: min(310px, calc(100vw - 86px));
+      width: min(310px, calc(var(--hud-canvas-width) - 24px));
       min-height: 112px;
     }
 
@@ -412,11 +421,16 @@ const CSS = `
     }
 
     .hud-window {
-      left: 12px;
-      right: 12px;
-      bottom: 72px;
+      left: calc(var(--hud-canvas-left) + var(--hud-inset));
+      right: calc(100% - var(--hud-canvas-left) - var(--hud-canvas-width) + var(--hud-inset));
+      bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 58px);
       width: auto;
-      max-height: calc(100vh - 92px);
+      max-height: calc(var(--hud-canvas-height) - 82px);
+    }
+
+    .hud-dock {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width: min(260px, calc(var(--hud-canvas-width) - 24px));
     }
 
     .skills-layout,
@@ -454,14 +468,19 @@ export class GameHudOverlay {
     this.layer.appendChild(this.windowRoot);
 
     this.render();
+    this.updateCanvasBounds();
 
     window.addEventListener("keydown", this.handleKeyDown);
+    window.addEventListener("resize", this.updateCanvasBounds);
+    this.scene.scale.on(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     this.scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
   }
 
   destroy = () => {
     window.removeEventListener("keydown", this.handleKeyDown);
+    window.removeEventListener("resize", this.updateCanvasBounds);
+    this.scene.scale.off(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.layer.remove();
     this.styleEl.remove();
   };
@@ -503,10 +522,10 @@ export class GameHudOverlay {
     dock.setAttribute("aria-label", "Game panels");
 
     const panels: Array<{ id: PanelId; label: string; title: string }> = [
-      { id: "equipment", label: "EQ", title: "Equipment" },
-      { id: "inventory", label: "BAG", title: "Inventory" },
-      { id: "skills", label: "SK", title: "Skills" },
-      { id: "party", label: "PTY", title: "Party" },
+      { id: "equipment", label: "Equipment", title: "Equipment" },
+      { id: "inventory", label: "Inventory", title: "Inventory" },
+      { id: "skills", label: "Skills", title: "Skills" },
+      { id: "party", label: "Party", title: "Party" },
     ];
 
     for (const panel of panels) {
@@ -694,5 +713,17 @@ export class GameHudOverlay {
     if (event.key !== "Escape" || !this.activePanel) return;
     this.activePanel = null;
     this.renderActivePanel();
+  };
+
+  private updateCanvasBounds = () => {
+    const canvasRect = this.scene.game.canvas.getBoundingClientRect();
+    const rootRect = this.root.getBoundingClientRect();
+    const left = Math.round(canvasRect.left - rootRect.left);
+    const top = Math.round(canvasRect.top - rootRect.top);
+
+    this.layer.style.setProperty("--hud-canvas-left", `${left}px`);
+    this.layer.style.setProperty("--hud-canvas-top", `${top}px`);
+    this.layer.style.setProperty("--hud-canvas-width", `${Math.round(canvasRect.width)}px`);
+    this.layer.style.setProperty("--hud-canvas-height", `${Math.round(canvasRect.height)}px`);
   };
 }
