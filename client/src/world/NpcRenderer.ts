@@ -1,16 +1,17 @@
 import Phaser from "phaser";
 import { TILE_SIZE } from "../config/map";
+import { WorldLabelOverlay, type WorldLabelHandle } from "../ui/WorldLabelOverlay";
 import type { PlacedNpcDefinition } from "./npcs";
 
 const NPC_DEPTH = 18;
-const NPC_NAME_LABEL_FONT_SIZE = "7px";
-const NPC_TITLE_LABEL_FONT_SIZE = "6px";
-const NPC_LABEL_RESOLUTION = 4;
+const NPC_NAME_LABEL_FONT_SIZE = 13;
+const NPC_TITLE_LABEL_FONT_SIZE = 11;
 
 export class NpcRenderer {
   private containers: Phaser.GameObjects.Container[] = [];
+  private labels: WorldLabelHandle[] = [];
 
-  constructor(private scene: Phaser.Scene) {}
+  constructor(private scene: Phaser.Scene, private labelOverlay: WorldLabelOverlay) {}
 
   render(npcs: PlacedNpcDefinition[]) {
     this.clear();
@@ -24,36 +25,40 @@ export class NpcRenderer {
     for (const container of this.containers) {
       container.destroy(true);
     }
+    for (const label of this.labels) {
+      label.destroy();
+    }
     this.containers = [];
+    this.labels = [];
   }
 
   private createNpcContainer(npc: PlacedNpcDefinition) {
     const sprite = this.scene.add.image(0, 0, npc.spriteKey);
-    const nameLabel = this.createLabel(npc.name, -TILE_SIZE / 2 - 8, NPC_NAME_LABEL_FONT_SIZE, "#ffffff");
-    const titleLabel = this.createLabel(`<${npc.title}>`, -TILE_SIZE / 2 - 3, NPC_TITLE_LABEL_FONT_SIZE, "#ffd98a");
-
-    return this.scene.add
+    const container = this.scene.add
       .container(
         npc.tileX * TILE_SIZE + TILE_SIZE / 2,
         npc.tileY * TILE_SIZE + TILE_SIZE / 2,
-        [sprite, nameLabel, titleLabel],
+        [sprite],
       )
       .setDepth(NPC_DEPTH);
-  }
 
-  private createLabel(text: string, y: number, fontSize: string, color: string) {
-    const label = this.scene.add
-      .text(0, y, text, {
-        fontFamily: "Arial, sans-serif",
-        fontSize,
-        color,
-        stroke: "#000000",
-        strokeThickness: 1,
-        resolution: NPC_LABEL_RESOLUTION,
-      })
-      .setOrigin(0.5, 1);
+    this.labels.push(this.labelOverlay.addLabel({
+      target: container,
+      text: npc.name,
+      offsetY: -TILE_SIZE / 2 - 8,
+      color: "#ffffff",
+      fontSize: NPC_NAME_LABEL_FONT_SIZE,
+      className: "world-label-name",
+    }));
+    this.labels.push(this.labelOverlay.addLabel({
+      target: container,
+      text: `<${npc.title}>`,
+      offsetY: -TILE_SIZE / 2 - 3,
+      color: "#ffd98a",
+      fontSize: NPC_TITLE_LABEL_FONT_SIZE,
+      className: "world-label-title",
+    }));
 
-    label.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-    return label;
+    return container;
   }
 }

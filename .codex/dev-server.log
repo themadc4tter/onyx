@@ -6,3 +6,5 @@
 > @onyx/server@1.0.0 dev
 > tsx watch src/index.ts
 
+21:41:11 [tsx] change in ./src\index.ts Rerunning...
+c

@@ -16,6 +16,7 @@ import type { Facing, Position, RemotePlayerData } from "../types";
 import { supabase } from "../lib/supabase";
 import { NpcRenderer } from "../world/NpcRenderer";
 import { getNpcsForZone, type NpcDefinition, type PlacedNpcDefinition } from "../world/npcs";
+import { WorldLabelOverlay, type WorldLabelHandle } from "../ui/WorldLabelOverlay";
 
 interface Profile {
   id: string;
@@ -24,6 +25,7 @@ interface Profile {
 
 interface RemotePlayerState {
   container: Phaser.GameObjects.Container;
+  nameLabel: WorldLabelHandle;
   tileX: number;
   tileY: number;
   moveQueue: Position[];
@@ -62,8 +64,7 @@ interface CachedTiledMap {
 
 const PLAYER_SPRITE_KEY = "player-male-tone1";
 const PLAYER_SPRITE_URL = "assets/characters/male_tone1.png";
-const NAME_LABEL_FONT_SIZE = "7px";
-const NAME_LABEL_RESOLUTION = 4;
+const NAME_LABEL_FONT_SIZE = 13;
 const FOREGROUND_DEPTH = 21;
 const LOCAL_MOVE_DURATION_MS = 120;
 const REMOTE_MOVE_DURATION_MS = 120;
@@ -96,6 +97,7 @@ export class GameScene extends Phaser.Scene {
   private pendingMoves: PredictedMove[] = [];
 
   private playerContainer!: Phaser.GameObjects.Container;
+  private labelOverlay!: WorldLabelOverlay;
   private remotePlayers = new Map<string, RemotePlayerState>();
   private npcRenderer!: NpcRenderer;
 
@@ -161,6 +163,7 @@ export class GameScene extends Phaser.Scene {
     this.tileY = this.startPos?.tileY ?? spawn.tileY;
     this.facing = this.startPos?.facing ?? "down";
 
+    this.labelOverlay = new WorldLabelOverlay(this);
     this.buildPlayer();
     this.buildNpcs();
     this.setupCamera();
@@ -271,15 +274,15 @@ export class GameScene extends Phaser.Scene {
 
   private buildPlayer() {
     const sprite = this.add.image(0, 0, PLAYER_SPRITE_KEY);
-    const label = this.createNameLabel(this.profile.username);
 
-    this.playerContainer = this.add.container(0, 0, [sprite, label]);
+    this.playerContainer = this.add.container(0, 0, [sprite]);
     this.playerContainer.setDepth(20);
     this.syncContainerToTile();
+    this.createNameLabel(this.playerContainer, this.profile.username);
   }
 
   private buildNpcs() {
-    this.npcRenderer = new NpcRenderer(this);
+    this.npcRenderer = new NpcRenderer(this, this.labelOverlay);
     this.npcRenderer.render(this.getPlacedNpcsForZone());
   }
 
@@ -310,20 +313,15 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  private createNameLabel(username: string) {
-    const label = this.add
-      .text(0, -TILE_SIZE / 2 - 2, username, {
-        fontFamily: "Arial, sans-serif",
-        fontSize: NAME_LABEL_FONT_SIZE,
-        color: "#ffffff",
-        stroke: "#000000",
-        strokeThickness: 1,
-        resolution: NAME_LABEL_RESOLUTION,
-      })
-      .setOrigin(0.5, 1);
-
-    label.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-    return label;
+  private createNameLabel(target: Phaser.GameObjects.Container, username: string) {
+    return this.labelOverlay.addLabel({
+      target,
+      text: username,
+      offsetY: -TILE_SIZE / 2 - 2,
+      color: "#ffffff",
+      fontSize: NAME_LABEL_FONT_SIZE,
+      className: "world-label-name",
+    });
   }
 
   private syncContainerToTile() {
@@ -371,18 +369,19 @@ export class GameScene extends Phaser.Scene {
     if (this.remotePlayers.has(data.socketId)) return;
 
     const sprite = this.add.image(0, 0, PLAYER_SPRITE_KEY);
-    const label = this.createNameLabel(data.username);
 
     const container = this.add
       .container(
         data.position.tileX * TILE_SIZE + TILE_SIZE / 2,
         data.position.tileY * TILE_SIZE + TILE_SIZE / 2,
-        [sprite, label],
+        [sprite],
       )
       .setDepth(19);
+    const nameLabel = this.createNameLabel(container, data.username);
 
     this.remotePlayers.set(data.socketId, {
       container,
+      nameLabel,
       tileX: data.position.tileX,
       tileY: data.position.tileY,
       moveQueue: [],
@@ -422,6 +421,7 @@ export class GameScene extends Phaser.Scene {
   private removeRemotePlayer(socketId: string) {
     const rp = this.remotePlayers.get(socketId);
     if (!rp) return;
+    rp.nameLabel.destroy();
     rp.container.destroy(true);
     this.remotePlayers.delete(socketId);
   }

@@ -20,3 +20,25 @@ Error: spawn EPERM
 }
 
 Node.js v18.17.1
+node:internal/process/esm_loader:97
+    internalBinding('errors').triggerUncaughtException(
+                              ^
+
+Error: spawn EPERM
+    at ChildProcess.spawn (node:internal/child_process:413:11)
+    at Object.spawn (node:child_process:757:9)
+    at ensureServiceIsRunning (C:\Users\Olivi\Documents\repo\onyx\node_modules\esbuild\lib\main.js:2268:29)
+    at startSyncServiceWorker (C:\Users\Olivi\Documents\repo\onyx\node_modules\esbuild\lib\main.js:2474:19)
+    at Object.<anonymous> (C:\Users\Olivi\Documents\repo\onyx\node_modules\esbuild\lib\main.js:2515:3)
+    at Module._compile (node:internal/modules/cjs/loader:1256:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1310:10)
+    at Module.load (node:internal/modules/cjs/loader:1119:32)
+    at Module._load (node:internal/modules/cjs/loader:960:12)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:81:12) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'spawn',
+  name: 'TransformError'
+}
+
+Node.js v18.17.1
