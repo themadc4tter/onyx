@@ -314,7 +314,8 @@ const CSS = `
     font-size: 13px;
   }
 
-  .inventory-header {
+  .inventory-header,
+  .equipment-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -324,7 +325,8 @@ const CSS = `
     font-size: 13px;
   }
 
-  .inventory-actions {
+  .inventory-actions,
+  .equipment-actions {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -447,12 +449,28 @@ const CSS = `
   .equipment-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px 8px;
+  }
+
+  .equipment-slot-frame {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+  }
+
+  .equipment-slot-label {
+    color: rgba(242, 234, 216, 0.82);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.1;
   }
 
   .equipment-slot {
-    min-height: 74px;
-    align-items: stretch;
+    min-height: 66px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    cursor: pointer;
   }
 
   .equipment-slot.filled {
@@ -463,6 +481,11 @@ const CSS = `
   .equipment-slot.uncommon { border-color: rgba(95, 191, 137, 0.7); }
   .equipment-slot.rare { border-color: rgba(114, 173, 255, 0.78); }
 
+  .equipment-slot.selected {
+    outline: 2px solid #e5c36b;
+    outline-offset: 2px;
+  }
+
   .equipment-slot-main {
     min-width: 0;
     display: grid;
@@ -470,6 +493,10 @@ const CSS = `
     gap: 7px;
     align-items: center;
     flex: 1;
+  }
+
+  .equipment-slot.empty .equipment-slot-main {
+    grid-template-columns: 1fr;
   }
 
   .equipment-slot-empty {
@@ -489,28 +516,15 @@ const CSS = `
     object-fit: contain;
   }
 
+  .equipment-slot .slot-item {
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
   .equipment-stat-line {
     color: rgba(242, 234, 216, 0.68);
     font-size: 11px;
     line-height: 1.2;
-  }
-
-  .equipment-unequip-button {
-    align-self: center;
-    min-width: 66px;
-    height: 28px;
-    border: 1px solid rgba(221, 198, 144, 0.34);
-    background: rgba(0, 0, 0, 0.24);
-    color: #f2ead8;
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  .equipment-unequip-button:hover {
-    border-color: #e5c36b;
-    color: #ffe7a8;
   }
 
   .slot-item,
@@ -593,6 +607,7 @@ export class GameHudOverlay {
   private inventory: InventoryState;
   private equipment: EquipmentState;
   private selectedInventorySlotIndex: number | null = null;
+  private selectedEquipmentSlot: EquipmentSlot | null = null;
   private draggedInventorySlotIndex: number | null = null;
 
   constructor(
@@ -968,12 +983,33 @@ export class GameHudOverlay {
 
   private handleEquipmentChanged = (equipment: EquipmentState) => {
     this.equipment = equipment;
+    if (
+      this.selectedEquipmentSlot !== null &&
+      !this.equipment.slots[this.selectedEquipmentSlot]
+    ) {
+      this.selectedEquipmentSlot = null;
+    }
     if (this.activePanel === "equipment") {
       this.renderActivePanel();
     }
   };
 
   private createEquipmentPanel() {
+    const panel = document.createElement("div");
+    const equippedSlots = Object.values(this.equipment.slots).filter(Boolean).length;
+    panel.innerHTML = `
+      <div class="equipment-header">
+        <span>${equippedSlots} / ${EQUIPMENT_SLOTS.length} equipped</span>
+        <div class="equipment-actions">
+          <button class="inventory-action-button unequip" type="button">Unequip</button>
+        </div>
+      </div>
+    `;
+
+    const unequipButton = panel.querySelector<HTMLButtonElement>(".inventory-action-button.unequip")!;
+    unequipButton.disabled = !this.getSelectedEquipmentItem();
+    unequipButton.addEventListener("click", () => this.unequipSelectedEquipmentItem());
+
     const layout = document.createElement("div");
     layout.className = "equipment-layout";
 
@@ -988,19 +1024,32 @@ export class GameHudOverlay {
     stats.appendChild(this.createEquipmentStatsPanel());
 
     layout.append(slots, stats);
-    return layout;
+    panel.appendChild(layout);
+    return panel;
   }
 
   private createEquipmentSlot(equipmentSlot: EquipmentSlot) {
     const equippedItem = this.equipment.slots[equipmentSlot];
     const item = equippedItem ? getItemDefinition(equippedItem.itemId) : null;
+    const frame = document.createElement("div");
+    frame.className = "equipment-slot-frame";
+
+    const label = document.createElement("span");
+    label.className = "equipment-slot-label";
+    label.textContent = this.formatEquipmentSlot(equipmentSlot);
+    frame.appendChild(label);
+
     const slot = document.createElement("div");
     slot.className = [
       "equipment-slot",
       item ? "filled" : "",
+      item ? "" : "empty",
       item?.rarity ?? "",
+      this.selectedEquipmentSlot === equipmentSlot ? "selected" : "",
     ].filter(Boolean).join(" ");
     slot.title = item ? `${item.name}\n${item.description}` : "";
+    slot.addEventListener("click", () => this.selectEquipmentSlot(equipmentSlot));
+    slot.addEventListener("dblclick", () => this.unequipEquipmentItem(equipmentSlot));
 
     const main = document.createElement("div");
     main.className = "equipment-slot-main";
@@ -1015,11 +1064,6 @@ export class GameHudOverlay {
 
     const text = document.createElement("div");
     text.className = "equipment-slot-text";
-
-    const label = document.createElement("span");
-    label.className = "slot-label";
-    label.textContent = this.formatEquipmentSlot(equipmentSlot);
-    text.appendChild(label);
 
     const itemName = document.createElement("strong");
     itemName.className = item ? "slot-item" : "slot-item equipment-slot-empty";
@@ -1036,19 +1080,29 @@ export class GameHudOverlay {
 
     main.appendChild(text);
     slot.appendChild(main);
+    frame.appendChild(slot);
 
-    if (item) {
-      const button = document.createElement("button");
-      button.className = "equipment-unequip-button";
-      button.type = "button";
-      button.textContent = "Unequip";
-      button.addEventListener("click", () => {
-        this.socket.emit("equipment:unequip", { slot: equipmentSlot });
-      });
-      slot.appendChild(button);
-    }
+    return frame;
+  }
 
-    return slot;
+  private getSelectedEquipmentItem() {
+    if (this.selectedEquipmentSlot === null) return null;
+    return this.equipment.slots[this.selectedEquipmentSlot] ?? null;
+  }
+
+  private selectEquipmentSlot(equipmentSlot: EquipmentSlot) {
+    this.selectedEquipmentSlot = this.selectedEquipmentSlot === equipmentSlot ? null : equipmentSlot;
+    if (this.activePanel === "equipment") this.renderActivePanel();
+  }
+
+  private unequipSelectedEquipmentItem() {
+    if (this.selectedEquipmentSlot === null) return;
+    this.unequipEquipmentItem(this.selectedEquipmentSlot);
+  }
+
+  private unequipEquipmentItem(equipmentSlot: EquipmentSlot) {
+    if (!this.equipment.slots[equipmentSlot]) return;
+    this.socket.emit("equipment:unequip", { slot: equipmentSlot });
   }
 
   private createEquipmentStatsPanel() {
