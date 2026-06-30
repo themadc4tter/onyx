@@ -25,6 +25,11 @@ export interface InventoryActionResult {
   error?: string;
 }
 
+export interface InventoryItemQuantity {
+  itemId: string;
+  quantity: number;
+}
+
 const INVENTORY_SLOT_COUNT = 24;
 const INVENTORY_SAVE_DELAY_MS = 30_000;
 const INVENTORY_SAVE_RETRY_MS = 30_000;
@@ -225,6 +230,119 @@ export function addItemToInventory(userId: string, itemId: string, quantity: num
     remainingQuantity,
     inventory,
   };
+}
+
+function cloneInventory(inventory: InventoryState): InventoryState {
+  return {
+    slotCount: inventory.slotCount,
+    slots: inventory.slots.map(slot => slot ? { ...slot } : null),
+  };
+}
+
+function addItemToInventoryState(inventory: InventoryState, itemId: string, quantity: number): AddItemResult {
+  const item = getItemDefinition(itemId);
+  if (!item || quantity <= 0) {
+    return {
+      ok: false,
+      addedQuantity: 0,
+      remainingQuantity: quantity,
+      inventory,
+    };
+  }
+
+  let remainingQuantity = quantity;
+
+  for (const slot of inventory.slots) {
+    if (!slot || slot.itemId !== itemId || slot.quantity >= item.maxStack) continue;
+
+    const added = Math.min(item.maxStack - slot.quantity, remainingQuantity);
+    slot.quantity += added;
+    remainingQuantity -= added;
+    if (remainingQuantity === 0) break;
+  }
+
+  while (remainingQuantity > 0) {
+    const emptySlotIndex = inventory.slots.findIndex(slot => slot === null);
+    if (emptySlotIndex === -1) break;
+
+    const added = Math.min(item.maxStack, remainingQuantity);
+    inventory.slots[emptySlotIndex] = {
+      slotIndex: emptySlotIndex,
+      itemId,
+      quantity: added,
+    };
+    remainingQuantity -= added;
+  }
+
+  return {
+    ok: remainingQuantity === 0,
+    addedQuantity: quantity - remainingQuantity,
+    remainingQuantity,
+    inventory,
+  };
+}
+
+function removeItemFromInventoryState(
+  inventory: InventoryState,
+  slotIndex: number,
+  itemId: string,
+  quantity: number,
+): InventoryActionResult {
+  if (!isValidSlotIndex(inventory, slotIndex)) {
+    return { ok: false, inventory, error: "invalid_slot" };
+  }
+
+  const slot = inventory.slots[slotIndex];
+  if (!slot) {
+    return { ok: false, inventory, error: "empty_source" };
+  }
+
+  if (slot.itemId !== itemId || quantity <= 0 || quantity > slot.quantity) {
+    return { ok: false, inventory, error: "invalid_quantity" };
+  }
+
+  slot.quantity -= quantity;
+  if (slot.quantity <= 0) {
+    inventory.slots[slotIndex] = null;
+  }
+
+  return { ok: true, inventory };
+}
+
+export function exchangeInventoryItems(
+  userAId: string,
+  userBId: string,
+  offerA: Array<InventoryItemQuantity & { slotIndex: number }>,
+  offerB: Array<InventoryItemQuantity & { slotIndex: number }>,
+): InventoryActionResult {
+  const inventoryA = getInventory(userAId);
+  const inventoryB = getInventory(userBId);
+  const previewA = cloneInventory(inventoryA);
+  const previewB = cloneInventory(inventoryB);
+
+  for (const item of offerA) {
+    const result = removeItemFromInventoryState(previewA, item.slotIndex, item.itemId, item.quantity);
+    if (!result.ok) return { ok: false, inventory: inventoryA, error: result.error };
+  }
+
+  for (const item of offerB) {
+    const result = removeItemFromInventoryState(previewB, item.slotIndex, item.itemId, item.quantity);
+    if (!result.ok) return { ok: false, inventory: inventoryB, error: result.error };
+  }
+
+  for (const item of offerA) {
+    const result = addItemToInventoryState(previewB, item.itemId, item.quantity);
+    if (!result.ok) return { ok: false, inventory: inventoryB, error: "inventory_full" };
+  }
+
+  for (const item of offerB) {
+    const result = addItemToInventoryState(previewA, item.itemId, item.quantity);
+    if (!result.ok) return { ok: false, inventory: inventoryA, error: "inventory_full" };
+  }
+
+  inventoryA.slots = previewA.slots;
+  inventoryB.slots = previewB.slots;
+  return { ok: true, inventory: inventoryA };
 }
 
 function isValidSlotIndex(inventory: InventoryState, slotIndex: number) {

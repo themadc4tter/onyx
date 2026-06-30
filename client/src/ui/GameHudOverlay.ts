@@ -18,6 +18,30 @@ interface SkillMock {
 interface GameHudOverlayOptions {
   musicEnabled: boolean;
   onMusicEnabledChange: (enabled: boolean) => void;
+  socialPlayers?: SocialPlayer[];
+}
+
+interface SocialPlayer {
+  socketId: string;
+  username: string;
+}
+
+interface TradeOfferItem {
+  slotIndex: number;
+  itemId: string;
+  quantity: number;
+}
+
+interface TradeStatePayload {
+  id: string;
+  partnerUsername: string;
+  ownOffer: TradeOfferItem[];
+  otherOffer: TradeOfferItem[];
+  ownLocked: boolean;
+  otherLocked: boolean;
+  ownConfirmed: boolean;
+  otherConfirmed: boolean;
+  canConfirm: boolean;
 }
 
 const HUD_LAYER_ID = "game-hud-layer";
@@ -596,6 +620,154 @@ const CSS = `
     color: #ffe7a8;
   }
 
+  .trade-window {
+    position: absolute;
+    left: 50%;
+    top: calc(var(--hud-canvas-top) + var(--hud-inset));
+    width: min(720px, calc(var(--hud-canvas-width) - 24px));
+    max-height: min(620px, calc(var(--hud-canvas-height) - 24px));
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    background: rgba(20, 22, 21, 0.97);
+    border: 1px solid rgba(229, 195, 107, 0.7);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.58);
+    pointer-events: auto;
+  }
+
+  .trade-body {
+    min-height: 0;
+    overflow: auto;
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .trade-offers {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .trade-panel {
+    min-width: 0;
+    border: 1px solid rgba(242, 234, 216, 0.1);
+    background: rgba(255, 255, 255, 0.035);
+    padding: 10px;
+  }
+
+  .trade-panel-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    color: #ffe7a8;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .trade-status {
+    color: rgba(242, 234, 216, 0.7);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .trade-offer-list {
+    display: grid;
+    gap: 6px;
+    min-height: 92px;
+  }
+
+  .trade-offer-item {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    min-height: 34px;
+    padding: 6px;
+    border: 1px solid rgba(242, 234, 216, 0.08);
+    background: rgba(0, 0, 0, 0.22);
+    color: #f2ead8;
+    font-size: 12px;
+  }
+
+  .trade-offer-item.empty {
+    grid-template-columns: 1fr;
+    color: rgba(242, 234, 216, 0.48);
+    text-align: center;
+  }
+
+  .trade-remove-button {
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(242, 234, 216, 0.16);
+    background: rgba(0, 0, 0, 0.24);
+    color: #f2ead8;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .trade-remove-button:hover:not(:disabled) {
+    border-color: rgba(242, 105, 86, 0.9);
+    color: #ffb5a8;
+  }
+
+  .trade-remove-button:disabled {
+    cursor: default;
+    opacity: 0.38;
+  }
+
+  .trade-inventory-title {
+    margin-bottom: 8px;
+    color: rgba(242, 234, 216, 0.82);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .trade-inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(42px, 1fr));
+    gap: 7px;
+  }
+
+  .trade-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .trade-action-button {
+    min-width: 86px;
+    height: 32px;
+    border: 1px solid rgba(221, 198, 144, 0.34);
+    background: rgba(0, 0, 0, 0.24);
+    color: #f2ead8;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .trade-action-button:hover:not(:disabled) {
+    border-color: #e5c36b;
+    color: #ffe7a8;
+  }
+
+  .trade-action-button.confirm {
+    border-color: rgba(95, 191, 137, 0.65);
+  }
+
+  .trade-action-button.cancel:hover:not(:disabled) {
+    border-color: rgba(242, 105, 86, 0.9);
+    color: #ffb5a8;
+  }
+
+  .trade-action-button:disabled {
+    cursor: default;
+    opacity: 0.42;
+  }
+
   @media (max-width: 700px) {
     .hud-chat {
       width: min(310px, calc(var(--hud-canvas-width) - 24px));
@@ -632,6 +804,20 @@ const CSS = `
     .inventory-grid {
       grid-template-columns: repeat(4, minmax(42px, 1fr));
     }
+
+    .trade-window {
+      top: calc(var(--hud-canvas-top) + 8px);
+      width: min(360px, calc(var(--hud-canvas-width) - 16px));
+      max-height: calc(var(--hud-canvas-height) - 16px);
+    }
+
+    .trade-offers {
+      grid-template-columns: 1fr;
+    }
+
+    .trade-inventory-grid {
+      grid-template-columns: repeat(4, minmax(42px, 1fr));
+    }
   }
 `;
 
@@ -639,6 +825,7 @@ export class GameHudOverlay {
   private root: HTMLElement;
   private layer: HTMLDivElement;
   private windowRoot: HTMLDivElement;
+  private tradeRoot: HTMLDivElement;
   private styleEl: HTMLStyleElement;
   private activePanel: PanelId | null = null;
   private selectedSkill = SKILLS[0];
@@ -650,6 +837,8 @@ export class GameHudOverlay {
   private selectedInventorySlotIndex: number | null = null;
   private selectedEquipmentSlot: EquipmentSlot | null = null;
   private draggedInventorySlotIndex: number | null = null;
+  private socialPlayers: SocialPlayer[] = [];
+  private tradeState: TradeStatePayload | null = null;
 
   constructor(
     private scene: Phaser.Scene,
@@ -664,6 +853,7 @@ export class GameHudOverlay {
     this.inventory = initialInventory ?? createEmptyInventory();
     this.equipment = initialEquipment ?? createEmptyEquipment();
     this.musicEnabled = options?.musicEnabled ?? true;
+    this.socialPlayers = options?.socialPlayers ?? [];
     this.root = root;
     this.styleEl = document.createElement("style");
     this.styleEl.textContent = CSS;
@@ -673,6 +863,9 @@ export class GameHudOverlay {
     this.windowRoot = document.createElement("div");
     this.windowRoot.className = "hud-window-root";
     this.layer.appendChild(this.windowRoot);
+    this.tradeRoot = document.createElement("div");
+    this.tradeRoot.className = "hud-window-root";
+    this.layer.appendChild(this.tradeRoot);
     this.chat = new HudChat(this.socket);
 
     this.render();
@@ -682,6 +875,14 @@ export class GameHudOverlay {
     window.addEventListener("resize", this.updateCanvasBounds);
     this.socket.on("inventory:changed", this.handleInventoryChanged);
     this.socket.on("equipment:changed", this.handleEquipmentChanged);
+    this.socket.on("trade:request", this.handleTradeRequest);
+    this.socket.on("trade:requestSent", this.handleTradeRequestSent);
+    this.socket.on("trade:declined", this.handleTradeDeclined);
+    this.socket.on("trade:started", this.handleTradeStateChanged);
+    this.socket.on("trade:updated", this.handleTradeStateChanged);
+    this.socket.on("trade:cancelled", this.handleTradeCancelled);
+    this.socket.on("trade:completed", this.handleTradeCompleted);
+    this.socket.on("trade:error", this.handleTradeError);
     this.scene.scale.on(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     this.scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
@@ -692,6 +893,14 @@ export class GameHudOverlay {
     window.removeEventListener("resize", this.updateCanvasBounds);
     this.socket.off("inventory:changed", this.handleInventoryChanged);
     this.socket.off("equipment:changed", this.handleEquipmentChanged);
+    this.socket.off("trade:request", this.handleTradeRequest);
+    this.socket.off("trade:requestSent", this.handleTradeRequestSent);
+    this.socket.off("trade:declined", this.handleTradeDeclined);
+    this.socket.off("trade:started", this.handleTradeStateChanged);
+    this.socket.off("trade:updated", this.handleTradeStateChanged);
+    this.socket.off("trade:cancelled", this.handleTradeCancelled);
+    this.socket.off("trade:completed", this.handleTradeCompleted);
+    this.socket.off("trade:error", this.handleTradeError);
     this.scene.scale.off(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.chat.destroy();
     this.layer.remove();
@@ -1024,6 +1233,9 @@ export class GameHudOverlay {
     if (this.activePanel === "inventory") {
       this.renderActivePanel();
     }
+    if (this.tradeState) {
+      this.renderTradeWindow();
+    }
   };
 
   private handleEquipmentChanged = (equipment: EquipmentState) => {
@@ -1226,19 +1438,44 @@ export class GameHudOverlay {
   private createPartyPanel() {
     const panel = document.createElement("div");
     panel.className = "party-summary";
-    panel.innerHTML = `
-      <div class="detail-title">Party</div>
-      <p class="detail-copy">Mock party state for dungeon prep, ready checks, and social play.</p>
-      <div class="party-list">
-        <div class="party-row"><span class="party-name">Olive</span><strong class="party-role">Ready</strong></div>
-        <div class="party-row"><span class="party-name">Mira</span><strong class="party-role">Gathering</strong></div>
-        <div class="party-row"><span class="party-name">Rowan</span><strong class="party-role">At gate</strong></div>
-      </div>
-      <div class="party-actions">
-        <button class="hud-action-button" type="button">Invite</button>
-        <button class="hud-action-button" type="button">Ready Check</button>
-      </div>
-    `;
+
+    const title = document.createElement("div");
+    title.className = "detail-title";
+    title.textContent = "Nearby Players";
+    panel.appendChild(title);
+
+    const list = document.createElement("div");
+    list.className = "party-list";
+
+    if (this.socialPlayers.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "party-row";
+      empty.innerHTML = `<span class="party-name">No nearby players</span><strong class="party-role">-</strong>`;
+      list.appendChild(empty);
+    } else {
+      for (const player of this.socialPlayers) {
+        const row = document.createElement("div");
+        row.className = "party-row";
+
+        const name = document.createElement("span");
+        name.className = "party-name";
+        name.textContent = player.username;
+
+        const button = document.createElement("button");
+        button.className = "hud-action-button";
+        button.type = "button";
+        button.textContent = "Trade";
+        button.disabled = Boolean(this.tradeState);
+        button.addEventListener("click", () => {
+          this.socket.emit("trade:request", { targetSocketId: player.socketId });
+        });
+
+        row.append(name, button);
+        list.appendChild(row);
+      }
+    }
+
+    panel.appendChild(list);
     return panel;
   }
 
@@ -1265,6 +1502,292 @@ export class GameHudOverlay {
     });
 
     return panel;
+  }
+
+  setSocialPlayers(players: SocialPlayer[]) {
+    this.socialPlayers = players;
+    if (this.activePanel === "party") this.renderActivePanel();
+  }
+
+  addSocialPlayer(player: SocialPlayer) {
+    this.socialPlayers = this.socialPlayers
+      .filter(existing => existing.socketId !== player.socketId)
+      .concat(player);
+    if (this.activePanel === "party") this.renderActivePanel();
+  }
+
+  removeSocialPlayer(socketId: string) {
+    this.socialPlayers = this.socialPlayers.filter(player => player.socketId !== socketId);
+    if (this.activePanel === "party") this.renderActivePanel();
+  }
+
+  private handleTradeRequest = (payload: { requestId?: string; fromUsername?: string }) => {
+    if (!payload?.requestId || !payload.fromUsername) return;
+
+    const accepted = window.confirm(`${payload.fromUsername} wants to trade.`);
+    this.socket.emit(accepted ? "trade:accept" : "trade:decline", {
+      requestId: payload.requestId,
+    });
+  };
+
+  private handleTradeRequestSent = (payload: { targetUsername?: string }) => {
+    this.addSystemMessage(`Trade request sent to ${payload.targetUsername ?? "player"}.`);
+  };
+
+  private handleTradeDeclined = (payload: { byUsername?: string }) => {
+    this.addSystemMessage(`${payload.byUsername ?? "Player"} declined your trade request.`);
+  };
+
+  private handleTradeStateChanged = (state: TradeStatePayload) => {
+    this.tradeState = state;
+    this.selectedInventorySlotIndex = null;
+    this.renderTradeWindow();
+    if (this.activePanel === "party" || this.activePanel === "inventory") {
+      this.renderActivePanel();
+    }
+  };
+
+  private handleTradeCancelled = (payload: { reason?: string }) => {
+    this.tradeState = null;
+    this.renderTradeWindow();
+    this.addSystemMessage(this.getTradeCancelledMessage(payload?.reason));
+    if (this.activePanel === "party" || this.activePanel === "inventory") {
+      this.renderActivePanel();
+    }
+  };
+
+  private handleTradeCompleted = () => {
+    this.tradeState = null;
+    this.renderTradeWindow();
+    this.addSystemMessage("Trade completed.");
+    if (this.activePanel === "party" || this.activePanel === "inventory") {
+      this.renderActivePanel();
+    }
+  };
+
+  private handleTradeError = (payload: { message?: string }) => {
+    this.addSystemMessage(payload?.message ?? "Trade action failed.");
+  };
+
+  private renderTradeWindow() {
+    this.tradeRoot.replaceChildren();
+    if (!this.tradeState) return;
+
+    const windowEl = document.createElement("section");
+    windowEl.className = "trade-window";
+    windowEl.setAttribute("aria-label", "Trade");
+
+    const header = document.createElement("header");
+    header.className = "hud-window-header";
+
+    const title = document.createElement("div");
+    title.className = "hud-window-title";
+    title.textContent = `Trade with ${this.tradeState.partnerUsername}`;
+
+    const close = document.createElement("button");
+    close.className = "hud-close-button";
+    close.type = "button";
+    close.setAttribute("aria-label", "Cancel trade");
+    close.innerHTML = "&times;";
+    close.addEventListener("click", () => this.socket.emit("trade:cancel"));
+    header.append(title, close);
+
+    const body = document.createElement("div");
+    body.className = "trade-body";
+
+    const offers = document.createElement("div");
+    offers.className = "trade-offers";
+    offers.append(
+      this.createTradeOfferPanel("Your offer", this.tradeState.ownOffer, this.tradeState.ownLocked, true),
+      this.createTradeOfferPanel(
+        `${this.tradeState.partnerUsername}'s offer`,
+        this.tradeState.otherOffer,
+        this.tradeState.otherLocked,
+        false,
+      ),
+    );
+
+    const inventoryPanel = document.createElement("div");
+    inventoryPanel.className = "trade-panel";
+    const inventoryTitle = document.createElement("div");
+    inventoryTitle.className = "trade-inventory-title";
+    inventoryTitle.textContent = this.tradeState.ownLocked ? "Unlock to change your offer" : "Click inventory items to offer them";
+    inventoryPanel.append(inventoryTitle, this.createTradeInventoryGrid());
+
+    const actions = document.createElement("div");
+    actions.className = "trade-actions";
+
+    const lockButton = document.createElement("button");
+    lockButton.className = "trade-action-button";
+    lockButton.type = "button";
+    lockButton.textContent = this.tradeState.ownLocked ? "Unlock" : "Lock";
+    lockButton.addEventListener("click", () => {
+      this.socket.emit("trade:lock", { locked: !this.tradeState?.ownLocked });
+    });
+
+    const confirmButton = document.createElement("button");
+    confirmButton.className = "trade-action-button confirm";
+    confirmButton.type = "button";
+    confirmButton.textContent = this.tradeState.canConfirm ? "Confirm" : "Waiting";
+    confirmButton.disabled = !this.tradeState.canConfirm || this.tradeState.ownConfirmed;
+    confirmButton.addEventListener("click", () => this.socket.emit("trade:confirm"));
+
+    const cancelButton = document.createElement("button");
+    cancelButton.className = "trade-action-button cancel";
+    cancelButton.type = "button";
+    cancelButton.textContent = "Cancel";
+    cancelButton.addEventListener("click", () => this.socket.emit("trade:cancel"));
+
+    actions.append(lockButton, confirmButton, cancelButton);
+    body.append(offers, inventoryPanel, actions);
+    windowEl.append(header, body);
+    this.tradeRoot.appendChild(windowEl);
+  }
+
+  private createTradeOfferPanel(titleText: string, offer: TradeOfferItem[], locked: boolean, isOwnOffer: boolean) {
+    const panel = document.createElement("div");
+    panel.className = "trade-panel";
+
+    const title = document.createElement("div");
+    title.className = "trade-panel-title";
+
+    const name = document.createElement("span");
+    name.textContent = titleText;
+
+    const status = document.createElement("span");
+    status.className = "trade-status";
+    status.textContent = locked ? "Locked" : "Editing";
+
+    title.append(name, status);
+    panel.appendChild(title);
+
+    const list = document.createElement("div");
+    list.className = "trade-offer-list";
+
+    if (offer.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "trade-offer-item empty";
+      empty.textContent = "Nothing offered";
+      list.appendChild(empty);
+    } else {
+      for (const offeredItem of offer) {
+        list.appendChild(this.createTradeOfferItem(offeredItem, isOwnOffer));
+      }
+    }
+
+    panel.appendChild(list);
+    return panel;
+  }
+
+  private createTradeOfferItem(offeredItem: TradeOfferItem, isOwnOffer: boolean) {
+    const item = getItemDefinition(offeredItem.itemId);
+    const row = document.createElement("div");
+    row.className = "trade-offer-item";
+
+    if (item) {
+      const icon = document.createElement("img");
+      icon.className = "inventory-item-icon";
+      icon.src = item.iconUrl;
+      icon.alt = item.name;
+      row.appendChild(icon);
+    } else {
+      const spacer = document.createElement("span");
+      row.appendChild(spacer);
+    }
+
+    const name = document.createElement("span");
+    name.textContent = `${item?.name ?? offeredItem.itemId}${offeredItem.quantity > 1 ? ` x${offeredItem.quantity}` : ""}`;
+    row.appendChild(name);
+
+    const remove = document.createElement("button");
+    remove.className = "trade-remove-button";
+    remove.type = "button";
+    remove.innerHTML = "&times;";
+    remove.disabled = !isOwnOffer || Boolean(this.tradeState?.ownLocked);
+    remove.addEventListener("click", () => {
+      this.socket.emit("trade:removeItem", { slotIndex: offeredItem.slotIndex });
+    });
+    row.appendChild(remove);
+
+    return row;
+  }
+
+  private createTradeInventoryGrid() {
+    const grid = document.createElement("div");
+    grid.className = "trade-inventory-grid";
+    const offeredSlotIndexes = new Set(this.tradeState?.ownOffer.map(item => item.slotIndex) ?? []);
+
+    for (let slotIndex = 0; slotIndex < this.inventory.slots.length; slotIndex += 1) {
+      const slotItem = this.inventory.slots[slotIndex];
+      const item = slotItem ? getItemDefinition(slotItem.itemId) : null;
+      const slot = document.createElement("button");
+      slot.type = "button";
+      slot.className = [
+        "inventory-slot",
+        item ? "filled" : "",
+        item?.rarity ?? "",
+        offeredSlotIndexes.has(slotIndex) ? "selected" : "",
+      ].filter(Boolean).join(" ");
+      slot.disabled = !slotItem || Boolean(this.tradeState?.ownLocked);
+      slot.title = item ? `${item.name}\n${item.description}` : "";
+
+      if (slotItem && item) {
+        const icon = document.createElement("img");
+        icon.className = "inventory-item-icon";
+        icon.src = item.iconUrl;
+        icon.alt = item.name;
+        slot.appendChild(icon);
+
+        const name = document.createElement("span");
+        name.className = "inventory-item-name";
+        name.textContent = item.name;
+        slot.appendChild(name);
+
+        if (slotItem.quantity > 1) {
+          const count = document.createElement("span");
+          count.className = "item-count";
+          count.textContent = String(slotItem.quantity);
+          slot.appendChild(count);
+        }
+
+        slot.addEventListener("click", () => this.offerInventorySlot(slotIndex));
+      }
+
+      grid.appendChild(slot);
+    }
+
+    return grid;
+  }
+
+  private offerInventorySlot(slotIndex: number) {
+    const slot = this.inventory.slots[slotIndex];
+    if (!slot || this.tradeState?.ownLocked) return;
+
+    let quantity = 1;
+    if (slot.quantity > 1) {
+      const itemName = getItemDefinition(slot.itemId)?.name ?? slot.itemId;
+      const requestedQuantity = window.prompt(`Offer how many ${itemName}?`, String(slot.quantity));
+      if (requestedQuantity === null) return;
+
+      quantity = Number(requestedQuantity);
+      if (!Number.isInteger(quantity) || quantity <= 0 || quantity > slot.quantity) {
+        this.addSystemMessage(`Enter a whole number from 1 to ${slot.quantity}.`);
+        return;
+      }
+    }
+
+    this.socket.emit("trade:addItem", { slotIndex, quantity });
+  }
+
+  private getTradeCancelledMessage(reason?: string) {
+    const messages: Record<string, string> = {
+      cancelled: "Trade cancelled.",
+      disconnect: "Trade cancelled because a player disconnected.",
+      movement: "Trade cancelled because a player moved.",
+      range: "Trade cancelled because you are too far apart.",
+    };
+
+    return messages[reason ?? ""] ?? "Trade cancelled.";
   }
 
   private getPanelTitle(panelId: PanelId) {

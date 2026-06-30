@@ -25,6 +25,20 @@ import {
   unequipItem,
 } from "./game/equipment";
 import { getItemDefinition } from "./game/items";
+import {
+  acceptTradeRequest,
+  addTradeOfferItem,
+  cancelTradeForUser,
+  confirmTrade,
+  createTradeRequest,
+  declineTradeRequest,
+  getTradeParticipants,
+  getTradeStateForUser,
+  removeTradeOfferItem,
+  setTradeLocked,
+  type TradeParticipant,
+  type TradeSession,
+} from "./game/trading";
 
 const PORT = process.env.PORT ?? 3001;
 const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
@@ -72,6 +86,19 @@ interface EquipmentEquipPayload {
 }
 interface EquipmentUnequipPayload {
   slot?: string;
+}
+interface TradeRequestPayload {
+  targetSocketId?: string;
+}
+interface TradeRequestResponsePayload {
+  requestId?: string;
+}
+interface TradeOfferPayload {
+  slotIndex?: number;
+  quantity?: number;
+}
+interface TradeRemoveOfferPayload {
+  slotIndex?: number;
 }
 interface ConnectedPlayer {
   socketId: string;
@@ -192,6 +219,25 @@ function getInventoryErrorMessage(error?: string) {
   return messages[error ?? ""] ?? "Inventory action failed.";
 }
 
+function getTradeErrorMessage(error?: string) {
+  const messages: Record<string, string> = {
+    already_trading: "One of you is already trading.",
+    invalid_offer: "That item cannot be offered.",
+    not_locked: "Both players must lock the trade first.",
+    not_trading: "You are not in a trade.",
+    out_of_range: "You are too far away to trade.",
+    request_not_found: "That trade request is no longer available.",
+    request_pending: "A trade request is already pending.",
+    self_trade: "You cannot trade with yourself.",
+    target_unavailable: "That player is not available to trade.",
+    trade_failed: "Trade failed.",
+    trade_locked: "Unlock the trade before changing your offer.",
+    inventory_full: "One of you does not have enough inventory space.",
+  };
+
+  return messages[error ?? ""] ?? "Trade action failed.";
+}
+
 function emitInventoryActionResult(socket: Socket, userId: string, ok: boolean, error?: string) {
   if (!ok) {
     socket.emit("chat:error", { message: getInventoryErrorMessage(error) });
@@ -224,6 +270,53 @@ function normalizeChatPayload(payload: unknown): NormalizedChatPayload | null {
   };
 }
 
+function getPlayerByUserId(userId: string) {
+  return [...connectedPlayers.values()].find(player => player.userId === userId) ?? null;
+}
+
+function getTradeParticipant(player: ConnectedPlayer): TradeParticipant {
+  return {
+    userId: player.userId,
+    socketId: player.socketId,
+    username: player.username,
+  };
+}
+
+function arePlayersCloseEnoughToTrade(a: ConnectedPlayer, b: ConnectedPlayer) {
+  if (a.zoneId !== b.zoneId) return false;
+
+  const dx = Math.abs(a.position.tileX - b.position.tileX);
+  const dy = Math.abs(a.position.tileY - b.position.tileY);
+  return Math.max(dx, dy) <= 2;
+}
+
+function emitTradeError(socket: Socket, error?: string) {
+  socket.emit("trade:error", { message: getTradeErrorMessage(error) });
+}
+
+function emitTradeUpdate(io: Server, session: TradeSession) {
+  for (const participant of getTradeParticipants(session)) {
+    const state = getTradeStateForUser(session, participant.userId);
+    if (!state) continue;
+    io.to(participant.socketId).emit("trade:updated", state);
+  }
+}
+
+function cancelTrade(io: Server, userId: string, reason: string) {
+  const session = cancelTradeForUser(userId);
+  if (!session) return;
+
+  for (const participant of getTradeParticipants(session)) {
+    io.to(participant.socketId).emit("trade:cancelled", { reason });
+  }
+}
+
+function validateTradeParticipantsInRange(session: TradeSession) {
+  const first = getPlayerByUserId(session.a.userId);
+  const second = getPlayerByUserId(session.b.userId);
+  return Boolean(first && second && arePlayersCloseEnoughToTrade(first, second));
+}
+
 async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) {
   const oldZoneId = socket.data.zoneId as string;
   const newZoneId = exit.toZoneId;
@@ -234,6 +327,7 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
     .map(getPlayerSnapshot);
 
   const player = connectedPlayers.get(socket.id)!;
+  cancelTrade(io, player.userId, "movement");
   player.position = newPos;
   player.zoneId   = newZoneId;
   player.lastMoveAt = 0;
@@ -397,6 +491,7 @@ io.on("connection", async (socket) => {
     player.position = accepted;
     player.lastMoveAt = now;
     player.lastProcessedMoveSeq = seq;
+    cancelTrade(io, player.userId, "movement");
 
     // Check for zone exit
     const currentZone = ZONES[currentZoneId];
@@ -446,6 +541,162 @@ io.on("connection", async (socket) => {
     }
 
     io.emit("chat:message", message);
+  });
+
+  socket.on("trade:request", (payload: TradeRequestPayload) => {
+    const player = connectedPlayers.get(socket.id);
+    const target = payload?.targetSocketId ? connectedPlayers.get(payload.targetSocketId) : null;
+    if (!player || !target) {
+      emitTradeError(socket, "target_unavailable");
+      return;
+    }
+
+    if (!arePlayersCloseEnoughToTrade(player, target)) {
+      emitTradeError(socket, "out_of_range");
+      return;
+    }
+
+    const result = createTradeRequest(getTradeParticipant(player), getTradeParticipant(target));
+    if (!result.ok || !result.request) {
+      emitTradeError(socket, result.error);
+      return;
+    }
+
+    socket.emit("trade:requestSent", {
+      requestId: result.request.id,
+      targetUsername: target.username,
+    });
+    io.to(target.socketId).emit("trade:request", {
+      requestId: result.request.id,
+      fromUsername: player.username,
+    });
+  });
+
+  socket.on("trade:decline", (payload: TradeRequestResponsePayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player || !payload?.requestId) return;
+
+    const result = declineTradeRequest(player.userId, payload.requestId);
+    if (!result.ok || !result.request) {
+      emitTradeError(socket, result.error);
+      return;
+    }
+
+    io.to(result.request.from.socketId).emit("trade:declined", {
+      byUsername: player.username,
+    });
+  });
+
+  socket.on("trade:accept", (payload: TradeRequestResponsePayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player || !payload?.requestId) return;
+
+    const result = acceptTradeRequest(player.userId, payload.requestId);
+    if (!result.ok || !result.session) {
+      emitTradeError(socket, result.error);
+      return;
+    }
+
+    if (!validateTradeParticipantsInRange(result.session)) {
+      cancelTrade(io, player.userId, "range");
+      emitTradeError(socket, "out_of_range");
+      return;
+    }
+
+    for (const participant of getTradeParticipants(result.session)) {
+      const state = getTradeStateForUser(result.session, participant.userId);
+      if (state) io.to(participant.socketId).emit("trade:started", state);
+    }
+  });
+
+  socket.on("trade:addItem", (payload: TradeOfferPayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+
+    const result = addTradeOfferItem(
+      player.userId,
+      Number(payload?.slotIndex),
+      Number(payload?.quantity),
+    );
+    if (!result.ok || !result.session) {
+      emitTradeError(socket, result.error);
+      return;
+    }
+
+    emitTradeUpdate(io, result.session);
+  });
+
+  socket.on("trade:removeItem", (payload: TradeRemoveOfferPayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+
+    const result = removeTradeOfferItem(player.userId, Number(payload?.slotIndex));
+    if (!result.ok || !result.session) {
+      emitTradeError(socket, result.error);
+      return;
+    }
+
+    emitTradeUpdate(io, result.session);
+  });
+
+  socket.on("trade:lock", (payload: { locked?: boolean }) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+
+    const result = setTradeLocked(player.userId, payload?.locked !== false);
+    if (!result.ok || !result.session) {
+      emitTradeError(socket, result.error);
+      return;
+    }
+
+    emitTradeUpdate(io, result.session);
+  });
+
+  socket.on("trade:cancel", () => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+
+    cancelTrade(io, player.userId, "cancelled");
+  });
+
+  socket.on("trade:confirm", async () => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+
+    const activeResult = setTradeLocked(player.userId, true);
+    if (!activeResult.ok || !activeResult.session) {
+      emitTradeError(socket, activeResult.error);
+      return;
+    }
+
+    if (!validateTradeParticipantsInRange(activeResult.session)) {
+      cancelTrade(io, player.userId, "range");
+      return;
+    }
+
+    const result = confirmTrade(player.userId);
+    if (!result.ok || !result.session) {
+      emitTradeError(socket, result.error);
+      if (result.session) emitTradeUpdate(io, result.session);
+      return;
+    }
+
+    if (!result.completed) {
+      emitTradeUpdate(io, result.session);
+      return;
+    }
+
+    await Promise.all([
+      saveInventory(result.session.a.userId),
+      saveInventory(result.session.b.userId),
+    ]).catch(error => {
+      console.error("[trade] failed to save completed trade", error);
+    });
+
+    for (const participant of getTradeParticipants(result.session)) {
+      io.to(participant.socketId).emit("inventory:changed", getInventoryPayload(participant.userId));
+      io.to(participant.socketId).emit("trade:completed");
+    }
   });
 
   socket.on("herb:pick", (payload: HerbPickPayload) => {
@@ -577,6 +828,7 @@ io.on("connection", async (socket) => {
   socket.on("disconnect", async () => {
     const player = connectedPlayers.get(socket.id);
     if (player) {
+      cancelTrade(io, player.userId, "disconnect");
       flushSave(socket.id, player.userId, player.zoneId, player.position);
       await flushDirtyInventory(player.userId).catch(error => {
         console.error(`[inventory] failed to flush inventory for ${player.userId} on disconnect`, error);

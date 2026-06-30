@@ -37,6 +37,7 @@ export class GameScene extends Phaser.Scene {
   private socket!: Socket;
   private profile!: Profile;
   private initPlayers: RemotePlayerData[] = [];
+  private socialPlayers: RemotePlayerData[] = [];
   private zoneId: string = DEFAULT_ZONE_ID;
   private startPos: Position | null = null;
   private herbSpawnStates: HerbSpawnState[] = [];
@@ -74,6 +75,7 @@ export class GameScene extends Phaser.Scene {
     this.socket = data.socket;
     this.profile = data.profile;
     this.initPlayers = data.initPlayers ?? [];
+    this.socialPlayers = this.initPlayers;
     this.zoneId = data.zoneId ?? DEFAULT_ZONE_ID;
     this.mapKey = getZoneMapConfig(this.zoneId).mapKey;
     this.startPos = data.startPos ?? null;
@@ -138,6 +140,10 @@ export class GameScene extends Phaser.Scene {
     this.hudOverlay = new GameHudOverlay(this, this.socket, this.inventory, this.equipment, {
       musicEnabled: this.musicEnabled,
       onMusicEnabledChange: this.setMusicEnabled,
+      socialPlayers: this.socialPlayers.map(player => ({
+        socketId: player.socketId,
+        username: player.username,
+      })),
     });
     this.herbSpawners = new HerbSpawnerManager(this, this.socket, this.map, this.player, message => {
       this.hudOverlay.addSystemMessage(message);
@@ -240,6 +246,13 @@ export class GameScene extends Phaser.Scene {
 
     this.socket.on("player:joined", (data: RemotePlayerData) => {
       this.remotePlayers.add(data);
+      this.socialPlayers = this.socialPlayers
+        .filter(player => player.socketId !== data.socketId)
+        .concat(data);
+      this.hudOverlay?.addSocialPlayer({
+        socketId: data.socketId,
+        username: data.username,
+      });
     });
 
     this.socket.on("player:moved", (data: { socketId: string; tileX: number; tileY: number; facing: Facing }) => {
@@ -257,6 +270,8 @@ export class GameScene extends Phaser.Scene {
 
     this.socket.on("player:left", (data: { socketId: string }) => {
       this.remotePlayers.remove(data.socketId);
+      this.socialPlayers = this.socialPlayers.filter(player => player.socketId !== data.socketId);
+      this.hudOverlay?.removeSocialPlayer(data.socketId);
     });
 
     this.socket.on("zone:changed", (payload: {
