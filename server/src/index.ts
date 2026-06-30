@@ -5,7 +5,7 @@ import { Server, Socket } from "socket.io";
 import cors from "cors";
 import { supabase } from "./lib/supabase";
 import { isTileWalkable, normalizeZoneId, ZONES, type HerbSpawn, type ZoneExit } from "./config/map";
-import { addItemToInventory, getInventory, loadInventory, saveInventory, setInventory } from "./game/inventory";
+import { addItemToInventory, getInventory, loadInventory, saveInventory } from "./game/inventory";
 import { getItemDefinition } from "./game/items";
 
 const PORT = process.env.PORT ?? 3001;
@@ -119,6 +119,13 @@ function getInventoryPayload(userId: string): InventoryPayload {
     slotCount: inventory.slotCount,
     slots: inventory.slots.map(slot => slot ? { ...slot } : null),
   };
+}
+
+function persistInventoryChange(socket: Socket, userId: string) {
+  saveInventory(userId).catch(error => {
+    console.error("[inventory] failed to save inventory", error);
+    socket.emit("chat:error", { message: "Inventory save failed. Your current session still has the item." });
+  });
 }
 
 function normalizeChatPayload(payload: unknown): NormalizedChatPayload | null {
@@ -351,7 +358,7 @@ io.on("connection", async (socket) => {
     io.emit("chat:message", message);
   });
 
-  socket.on("herb:pick", async (payload: HerbPickPayload) => {
+  socket.on("herb:pick", (payload: HerbPickPayload) => {
     const player = connectedPlayers.get(socket.id);
     const herbId = payload?.id;
     if (!player || !herbId) return;
@@ -366,7 +373,6 @@ io.on("connection", async (socket) => {
       return;
     }
 
-    const previousInventory = getInventoryPayload(player.userId);
     const addResult = addItemToInventory(player.userId, spawn.itemId, 1);
     const item = getItemDefinition(spawn.itemId);
     if (!addResult.ok) {
@@ -374,19 +380,11 @@ io.on("connection", async (socket) => {
       return;
     }
 
-    try {
-      await saveInventory(player.userId, addResult.inventory);
-    } catch (error) {
-      setInventory(player.userId, previousInventory);
-      console.error("[inventory] failed to save inventory", error);
-      socket.emit("chat:error", { message: "Inventory could not be saved." });
-      return;
-    }
-
     spawn.available = false;
     io.to(player.zoneId).emit("herb:state", { id: spawn.id, available: false });
     socket.emit("inventory:changed", getInventoryPayload(player.userId));
     socket.emit("herb:picked", { itemId: spawn.itemId, itemName: item?.name ?? spawn.itemId });
+    persistInventoryChange(socket, player.userId);
 
     setTimeout(() => {
       spawn.available = true;

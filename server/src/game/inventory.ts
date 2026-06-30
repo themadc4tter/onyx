@@ -45,13 +45,6 @@ export function getInventory(userId: string) {
   return inventory;
 }
 
-export function setInventory(userId: string, inventory: InventoryState) {
-  inventories.set(userId, {
-    slotCount: inventory.slotCount,
-    slots: inventory.slots.map(slot => slot ? { ...slot } : null),
-  });
-}
-
 export async function loadInventory(userId: string) {
   const inventory = createEmptyInventory();
   const { data, error } = await supabase
