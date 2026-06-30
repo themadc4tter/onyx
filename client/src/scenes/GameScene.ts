@@ -65,6 +65,7 @@ interface CachedTiledMap {
 const PLAYER_SPRITE_KEY = "player-male-tone1";
 const PLAYER_SPRITE_URL = "assets/characters/male_tone1.png";
 const NAME_LABEL_FONT_SIZE = 13;
+const CAMERA_ZOOM = 2;
 const FOREGROUND_DEPTH = 21;
 const LOCAL_MOVE_DURATION_MS = 120;
 const REMOTE_MOVE_DURATION_MS = 120;
@@ -350,9 +351,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private setupCamera() {
-    this.cameras.main.setZoom(2);
-    this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
-    this.cameras.main.startFollow(this.playerContainer, true);
+    const camera = this.cameras.main;
+    camera.setZoom(CAMERA_ZOOM);
+
+    const visibleWorldWidth = camera.width / CAMERA_ZOOM;
+    const visibleWorldHeight = camera.height / CAMERA_ZOOM;
+    const boundsX = Math.min(0, (this.map.widthInPixels - visibleWorldWidth) / 2);
+    const boundsY = Math.min(0, (this.map.heightInPixels - visibleWorldHeight) / 2);
+    const boundsWidth = Math.max(this.map.widthInPixels, visibleWorldWidth);
+    const boundsHeight = Math.max(this.map.heightInPixels, visibleWorldHeight);
+
+    camera.setBounds(boundsX, boundsY, boundsWidth, boundsHeight);
+    camera.startFollow(this.playerContainer, true);
   }
 
   private setupInput() {
