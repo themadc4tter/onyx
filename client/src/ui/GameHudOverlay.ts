@@ -185,9 +185,8 @@ const CSS = `
   }
 
   .hud-window-skills {
-    top: calc(var(--hud-canvas-top) + var(--hud-inset));
     bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 58px);
-    max-height: none;
+    max-height: min(720px, calc(var(--hud-canvas-height) - 82px));
   }
 
   .hud-window-header {
@@ -445,8 +444,7 @@ const CSS = `
     }
 
     .hud-window-skills {
-      top: calc(var(--hud-canvas-top) + var(--hud-inset));
-      max-height: none;
+      max-height: calc(var(--hud-canvas-height) - 82px);
     }
 
     .hud-dock {
