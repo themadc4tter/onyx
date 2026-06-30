@@ -27,6 +27,11 @@ interface Profile {
 
 const CAMERA_ZOOM = 2;
 const MUSIC_VOLUME = 0.35;
+const MUSIC_SETTING_STORAGE_KEY = "onyx.musicEnabled";
+
+function readMusicEnabledSetting() {
+  return localStorage.getItem(MUSIC_SETTING_STORAGE_KEY) !== "false";
+}
 
 export class GameScene extends Phaser.Scene {
   private socket!: Socket;
@@ -50,6 +55,7 @@ export class GameScene extends Phaser.Scene {
   private worldMapBuilder!: WorldMapBuilder;
   private herbSpawners!: HerbSpawnerManager;
   private currentMusic: Phaser.Sound.BaseSound | null = null;
+  private musicEnabled = readMusicEnabledSetting();
 
   constructor() {
     super({ key: "GameScene" });
@@ -129,7 +135,10 @@ export class GameScene extends Phaser.Scene {
     this.setupCamera();
     this.playZoneMusic();
     this.setupServerEvents();
-    this.hudOverlay = new GameHudOverlay(this, this.socket, this.inventory, this.equipment);
+    this.hudOverlay = new GameHudOverlay(this, this.socket, this.inventory, this.equipment, {
+      musicEnabled: this.musicEnabled,
+      onMusicEnabledChange: this.setMusicEnabled,
+    });
     this.herbSpawners = new HerbSpawnerManager(this, this.socket, this.map, this.player, message => {
       this.hudOverlay.addSystemMessage(message);
     }, this.herbSpawnStates);
@@ -187,6 +196,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     const startMusic = () => {
+      if (!this.musicEnabled) return;
       if (!this.currentMusic?.isPlaying) {
         this.currentMusic?.play();
       }
@@ -199,6 +209,29 @@ export class GameScene extends Phaser.Scene {
 
     startMusic();
   }
+
+  private setMusicEnabled = (enabled: boolean) => {
+    this.musicEnabled = enabled;
+    localStorage.setItem(MUSIC_SETTING_STORAGE_KEY, String(enabled));
+
+    if (!enabled) {
+      this.currentMusic?.pause();
+      return;
+    }
+
+    const resumeMusic = () => {
+      if (this.currentMusic && !this.currentMusic.isPlaying) {
+        this.currentMusic.play();
+      }
+    };
+
+    if (this.sound.locked) {
+      this.sound.once(Phaser.Sound.Events.UNLOCKED, resumeMusic);
+      return;
+    }
+
+    resumeMusic();
+  };
 
   private setupServerEvents() {
     this.socket.on("move:ack", (ack: MoveAck | Position) => {

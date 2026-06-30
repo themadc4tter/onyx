@@ -5,7 +5,7 @@ import { createEmptyInventory, type InventoryState } from "../game/inventory";
 import { getItemDefinition } from "../game/items";
 import { HudChat } from "./chat/HudChat";
 
-type PanelId = "skills" | "inventory" | "equipment" | "party";
+type PanelId = "skills" | "inventory" | "equipment" | "party" | "settings";
 
 interface SkillMock {
   name: string;
@@ -13,6 +13,11 @@ interface SkillMock {
   currentXp: number;
   totalXp: number;
   nextUnlock: string;
+}
+
+interface GameHudOverlayOptions {
+  musicEnabled: boolean;
+  onMusicEnabledChange: (enabled: boolean) => void;
 }
 
 const HUD_LAYER_ID = "game-hud-layer";
@@ -116,9 +121,9 @@ const CSS = `
     right: calc(100% - var(--hud-canvas-left) - var(--hud-canvas-width) + var(--hud-inset));
     bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + var(--hud-inset));
     display: grid;
-    grid-template-columns: repeat(4, minmax(82px, 1fr));
+    grid-template-columns: repeat(5, minmax(74px, 1fr));
     gap: 8px;
-    width: min(408px, calc(var(--hud-canvas-width) - 24px));
+    width: min(470px, calc(var(--hud-canvas-width) - 24px));
     pointer-events: auto;
   }
 
@@ -274,6 +279,7 @@ const CSS = `
 
   .skill-detail,
   .equipment-stats,
+  .settings-summary,
   .party-summary {
     border: 1px solid rgba(242, 234, 216, 0.1);
     background: rgba(255, 255, 255, 0.035);
@@ -542,6 +548,40 @@ const CSS = `
     margin-top: 12px;
   }
 
+  .settings-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 38px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(242, 234, 216, 0.08);
+    font-size: 13px;
+  }
+
+  .settings-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #ffe7a8;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .settings-toggle input {
+    width: 18px;
+    height: 18px;
+    accent-color: #e5c36b;
+    cursor: pointer;
+  }
+
   .hud-action-button {
     min-height: 34px;
     border: 1px solid rgba(221, 198, 144, 0.34);
@@ -606,6 +646,7 @@ export class GameHudOverlay {
   private chat: HudChat;
   private inventory: InventoryState;
   private equipment: EquipmentState;
+  private musicEnabled: boolean;
   private selectedInventorySlotIndex: number | null = null;
   private selectedEquipmentSlot: EquipmentSlot | null = null;
   private draggedInventorySlotIndex: number | null = null;
@@ -615,12 +656,14 @@ export class GameHudOverlay {
     private socket: Socket,
     initialInventory?: InventoryState,
     initialEquipment?: EquipmentState,
+    private options?: GameHudOverlayOptions,
   ) {
     const root = document.getElementById("game-root");
     if (!root) throw new Error("Missing #game-root element for game HUD");
 
     this.inventory = initialInventory ?? createEmptyInventory();
     this.equipment = initialEquipment ?? createEmptyEquipment();
+    this.musicEnabled = options?.musicEnabled ?? true;
     this.root = root;
     this.styleEl = document.createElement("style");
     this.styleEl.textContent = CSS;
@@ -680,6 +723,7 @@ export class GameHudOverlay {
       { id: "inventory", label: "Inventory", title: "Inventory" },
       { id: "skills", label: "Skills", title: "Skills" },
       { id: "party", label: "Party", title: "Party" },
+      { id: "settings", label: "Settings", title: "Settings" },
     ];
 
     for (const panel of panels) {
@@ -732,6 +776,7 @@ export class GameHudOverlay {
     if (this.activePanel === "inventory") body.appendChild(this.createInventoryPanel());
     if (this.activePanel === "equipment") body.appendChild(this.createEquipmentPanel());
     if (this.activePanel === "party") body.appendChild(this.createPartyPanel());
+    if (this.activePanel === "settings") body.appendChild(this.createSettingsPanel());
 
     this.windowRoot.appendChild(panel);
   }
@@ -1197,12 +1242,38 @@ export class GameHudOverlay {
     return panel;
   }
 
+  private createSettingsPanel() {
+    const panel = document.createElement("div");
+    panel.className = "settings-summary";
+    panel.innerHTML = `
+      <div class="settings-list">
+        <div class="settings-row">
+          <span class="stat-label">Music</span>
+          <label class="settings-toggle">
+            <input class="settings-music-toggle" type="checkbox" ${this.musicEnabled ? "checked" : ""}>
+            <span>${this.musicEnabled ? "Enabled" : "Disabled"}</span>
+          </label>
+        </div>
+      </div>
+    `;
+
+    const toggle = panel.querySelector<HTMLInputElement>(".settings-music-toggle")!;
+    toggle.addEventListener("change", () => {
+      this.musicEnabled = toggle.checked;
+      this.options?.onMusicEnabledChange(toggle.checked);
+      if (this.activePanel === "settings") this.renderActivePanel();
+    });
+
+    return panel;
+  }
+
   private getPanelTitle(panelId: PanelId) {
     const titles: Record<PanelId, string> = {
       skills: "Skills",
       inventory: "Inventory",
       equipment: "Equipment",
       party: "Party",
+      settings: "Settings",
     };
     return titles[panelId];
   }
