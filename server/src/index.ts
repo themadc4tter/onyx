@@ -5,7 +5,7 @@ import { Server, Socket } from "socket.io";
 import cors from "cors";
 import { supabase } from "./lib/supabase";
 import { isTileWalkable, normalizeZoneId, ZONES, type HerbSpawn, type ZoneExit } from "./config/map";
-import { addItemToInventory, getInventory } from "./game/inventory";
+import { addItemToInventory, getInventory, loadInventory, saveInventory, setInventory } from "./game/inventory";
 import { getItemDefinition } from "./game/items";
 
 const PORT = process.env.PORT ?? 3001;
@@ -117,7 +117,7 @@ function getInventoryPayload(userId: string): InventoryPayload {
   const inventory = getInventory(userId);
   return {
     slotCount: inventory.slotCount,
-    slots: inventory.slots,
+    slots: inventory.slots.map(slot => slot ? { ...slot } : null),
   };
 }
 
@@ -209,6 +209,7 @@ io.on("connection", async (socket) => {
     supabase.from("profiles").select("id, username").eq("id", userId).single(),
     supabase.from("player_state").select("zone_id, tile_x, tile_y, facing").eq("user_id", userId).single(),
   ]);
+  await loadInventory(userId);
 
   const username = profile?.username ?? userId;
 
@@ -350,7 +351,7 @@ io.on("connection", async (socket) => {
     io.emit("chat:message", message);
   });
 
-  socket.on("herb:pick", (payload: HerbPickPayload) => {
+  socket.on("herb:pick", async (payload: HerbPickPayload) => {
     const player = connectedPlayers.get(socket.id);
     const herbId = payload?.id;
     if (!player || !herbId) return;
@@ -365,10 +366,20 @@ io.on("connection", async (socket) => {
       return;
     }
 
+    const previousInventory = getInventoryPayload(player.userId);
     const addResult = addItemToInventory(player.userId, spawn.itemId, 1);
     const item = getItemDefinition(spawn.itemId);
     if (!addResult.ok) {
       socket.emit("chat:error", { message: "Inventory is full." });
+      return;
+    }
+
+    try {
+      await saveInventory(player.userId, addResult.inventory);
+    } catch (error) {
+      setInventory(player.userId, previousInventory);
+      console.error("[inventory] failed to save inventory", error);
+      socket.emit("chat:error", { message: "Inventory could not be saved." });
       return;
     }
 
