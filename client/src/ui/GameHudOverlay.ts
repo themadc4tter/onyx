@@ -1,6 +1,17 @@
 import Phaser from "phaser";
+import type { Socket } from "socket.io-client";
 
 type PanelId = "skills" | "inventory" | "equipment" | "party";
+type ChatChannel = "zone" | "world";
+type ChatMessageChannel = ChatChannel | "system";
+
+interface ChatMessage {
+  id: string;
+  channel: ChatMessageChannel;
+  username: string;
+  text: string;
+  sentAt: string;
+}
 
 interface SkillMock {
   name: string;
@@ -104,7 +115,7 @@ const CSS = `
   .hud-chat-log {
     height: 104px;
     padding: 10px 12px 4px;
-    overflow: hidden;
+    overflow-y: auto;
     font-size: 13px;
     line-height: 1.35;
   }
@@ -113,15 +124,39 @@ const CSS = `
     margin-bottom: 4px;
     color: rgba(242, 234, 216, 0.86);
     text-shadow: 0 1px 1px #000;
+    overflow-wrap: anywhere;
   }
 
   .hud-chat-line.system { color: #e5c36b; }
-  .hud-chat-line.party { color: #83c7ff; }
+  .hud-chat-line.zone .chat-channel { color: #7fc9a0; }
+  .hud-chat-line.world .chat-channel { color: #e5c36b; }
+  .hud-chat-line.party .chat-channel { color: #83c7ff; }
+
+  .chat-channel,
+  .chat-author {
+    font-weight: 700;
+  }
+
+  .hud-chat-controls {
+    display: grid;
+    grid-template-columns: 78px 1fr;
+    gap: 6px;
+    margin: 0 8px 8px;
+  }
+
+  .hud-chat-channel {
+    height: 24px;
+    border: 1px solid rgba(221, 198, 144, 0.22);
+    background: rgba(0, 0, 0, 0.34);
+    color: rgba(242, 234, 216, 0.9);
+    font: inherit;
+    font-size: 12px;
+    outline: none;
+  }
 
   .hud-chat-input {
-    width: calc(100% - 16px);
+    width: 100%;
     height: 24px;
-    margin: 0 8px 8px;
     padding: 0 8px;
     border: 1px solid rgba(221, 198, 144, 0.22);
     background: rgba(0, 0, 0, 0.34);
@@ -471,8 +506,12 @@ export class GameHudOverlay {
   private activePanel: PanelId | null = null;
   private selectedSkill = SKILLS[0];
   private buttons = new Map<PanelId, HTMLButtonElement>();
+  private chatChannel: ChatChannel = "zone";
+  private chatInput!: HTMLInputElement;
+  private chatLog!: HTMLDivElement;
+  private chatSelect!: HTMLSelectElement;
 
-  constructor(private scene: Phaser.Scene) {
+  constructor(private scene: Phaser.Scene, private socket: Socket) {
     const root = document.getElementById("game-root");
     if (!root) throw new Error("Missing #game-root element for game HUD");
 
@@ -488,9 +527,12 @@ export class GameHudOverlay {
 
     this.render();
     this.updateCanvasBounds();
+    this.addSystemMessage("Welcome to Onyx.");
 
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("resize", this.updateCanvasBounds);
+    this.socket.on("chat:message", this.handleChatMessage);
+    this.socket.on("chat:error", this.handleChatError);
     this.scene.scale.on(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     this.scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
@@ -499,6 +541,8 @@ export class GameHudOverlay {
   destroy = () => {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("resize", this.updateCanvasBounds);
+    this.socket.off("chat:message", this.handleChatMessage);
+    this.socket.off("chat:error", this.handleChatError);
     this.scene.scale.off(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.layer.remove();
     this.styleEl.remove();
@@ -524,14 +568,28 @@ export class GameHudOverlay {
     chat.className = "hud-chat";
     chat.setAttribute("aria-label", "Chat");
     chat.innerHTML = `
-      <div class="hud-chat-log">
-        <div class="hud-chat-line system">Welcome to Onyx.</div>
-        <div class="hud-chat-line">Mira: Iron veins are up near the north path.</div>
-        <div class="hud-chat-line party">Party: Meet at the dungeon gate?</div>
-        <div class="hud-chat-line">Rowan: Bringing tonics.</div>
+      <div class="hud-chat-log" aria-live="polite"></div>
+      <div class="hud-chat-controls">
+        <select class="hud-chat-channel" aria-label="Chat channel">
+          <option value="zone">Zone</option>
+          <option value="world">World</option>
+        </select>
+        <input class="hud-chat-input" type="text" placeholder="Message Zone" maxlength="240" />
       </div>
-      <input class="hud-chat-input" type="text" placeholder="Press Enter to chat" />
     `;
+
+    this.chatLog = chat.querySelector<HTMLDivElement>(".hud-chat-log")!;
+    this.chatInput = chat.querySelector<HTMLInputElement>(".hud-chat-input")!;
+    this.chatSelect = chat.querySelector<HTMLSelectElement>(".hud-chat-channel")!;
+
+    this.chatSelect.addEventListener("change", () => {
+      this.chatChannel = this.chatSelect.value as ChatChannel;
+      this.updateChatPlaceholder();
+      this.chatInput.focus();
+    });
+    this.chatSelect.addEventListener("keydown", (event) => event.stopPropagation());
+    this.chatInput.addEventListener("keydown", this.handleChatInputKeyDown);
+
     return chat;
   }
 
@@ -731,10 +789,20 @@ export class GameHudOverlay {
   }
 
   private handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Enter" && !this.isTextInputFocused()) {
+      event.preventDefault();
+      this.chatInput.focus();
+      return;
+    }
+
     if (event.key !== "Escape" || !this.activePanel) return;
     this.activePanel = null;
     this.renderActivePanel();
   };
+
+  isTextInputFocused() {
+    return document.activeElement === this.chatInput;
+  }
 
   private updateCanvasBounds = () => {
     const canvasRect = this.scene.game.canvas.getBoundingClientRect();
@@ -747,4 +815,132 @@ export class GameHudOverlay {
     this.layer.style.setProperty("--hud-canvas-width", `${Math.round(canvasRect.width)}px`);
     this.layer.style.setProperty("--hud-canvas-height", `${Math.round(canvasRect.height)}px`);
   };
+
+  private handleChatInputKeyDown = (event: KeyboardEvent) => {
+    event.stopPropagation();
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      this.chatInput.blur();
+      return;
+    }
+
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    const rawText = this.chatInput.value.trim();
+    if (!rawText) {
+      this.chatInput.blur();
+      return;
+    }
+
+    this.sendChat(rawText);
+    this.chatInput.value = "";
+  };
+
+  private sendChat(rawText: string) {
+    const parsed = this.parseChatInput(rawText);
+    if (!parsed) return;
+
+    if (parsed.switchOnly) {
+      this.setChatChannel(parsed.channel);
+      return;
+    }
+
+    this.socket.emit("chat:send", {
+      channel: parsed.channel,
+      text: parsed.text,
+    });
+  }
+
+  private parseChatInput(rawText: string): { channel: ChatChannel; text: string; switchOnly?: boolean } | null {
+    if (!rawText.startsWith("/")) return { channel: this.chatChannel, text: rawText };
+
+    const [commandWithSlash, ...rest] = rawText.split(/\s+/);
+    const command = commandWithSlash.slice(1).toLowerCase();
+    const text = rest.join(" ").trim();
+
+    if (command === "z" || command === "zone") {
+      return text ? { channel: "zone", text } : { channel: "zone", text: "", switchOnly: true };
+    }
+
+    if (command === "w" || command === "world") {
+      return text ? { channel: "world", text } : { channel: "world", text: "", switchOnly: true };
+    }
+
+    if (command === "p" || command === "party") {
+      this.addSystemMessage("Party chat will be available once the party system exists.");
+      return null;
+    }
+
+    this.addSystemMessage(`Unknown chat command: /${command}`);
+    return null;
+  }
+
+  private setChatChannel(channel: ChatChannel) {
+    this.chatChannel = channel;
+    this.chatSelect.value = channel;
+    this.updateChatPlaceholder();
+    this.addSystemMessage(`Chat channel set to ${this.getChannelLabel(channel)}.`);
+  }
+
+  private updateChatPlaceholder() {
+    this.chatInput.placeholder = `Message ${this.getChannelLabel(this.chatChannel)}`;
+  }
+
+  private handleChatMessage = (message: ChatMessage) => {
+    this.addChatMessage(message);
+  };
+
+  private handleChatError = (payload: { message?: string }) => {
+    this.addSystemMessage(payload.message ?? "Message could not be sent.");
+  };
+
+  private addSystemMessage(text: string) {
+    this.addChatMessage({
+      id: `system-${Date.now()}-${Math.random()}`,
+      channel: "system",
+      username: "System",
+      text,
+      sentAt: new Date().toISOString(),
+    });
+  }
+
+  private addChatMessage(message: ChatMessage) {
+    const line = document.createElement("div");
+    line.className = `hud-chat-line ${message.channel}`;
+
+    if (message.channel === "system") {
+      line.textContent = message.text;
+    } else {
+      const channel = document.createElement("span");
+      channel.className = "chat-channel";
+      channel.textContent = `[${this.getChannelLabel(message.channel)}] `;
+
+      const author = document.createElement("span");
+      author.className = "chat-author";
+      author.textContent = `${message.username}: `;
+
+      const text = document.createElement("span");
+      text.textContent = message.text;
+
+      line.append(channel, author, text);
+    }
+
+    this.chatLog.appendChild(line);
+
+    while (this.chatLog.childElementCount > 80) {
+      this.chatLog.firstElementChild?.remove();
+    }
+
+    this.chatLog.scrollTop = this.chatLog.scrollHeight;
+  }
+
+  private getChannelLabel(channel: ChatChannel) {
+    const labels: Record<ChatChannel, string> = {
+      zone: "Zone",
+      world: "World",
+    };
+    return labels[channel];
+  }
 }

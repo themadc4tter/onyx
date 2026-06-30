@@ -10,9 +10,19 @@ const PORT = process.env.PORT ?? 3001;
 const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
 
 type Facing = "up" | "down" | "left" | "right";
+type ChatChannel = "zone" | "world";
 interface Position { tileX: number; tileY: number; facing: Facing; }
 interface MovePayload extends Position { seq?: number; }
 interface MoveAck { seq: number; position: Position; }
+interface ChatSendPayload { channel?: ChatChannel; text?: string; }
+interface NormalizedChatPayload { channel: ChatChannel; text: string; }
+interface ChatMessage {
+  id: string;
+  channel: ChatChannel;
+  username: string;
+  text: string;
+  sentAt: string;
+}
 interface ConnectedPlayer {
   socketId: string;
   userId: string;
@@ -21,12 +31,15 @@ interface ConnectedPlayer {
   zoneId: string;
   lastMoveAt: number;
   lastProcessedMoveSeq: number;
+  lastChatAt: number;
 }
 
 const connectedPlayers = new Map<string, ConnectedPlayer>();
 const MOVE_INTERVAL_MS = 120;
 const MOVE_RATE_TOLERANCE_MS = 30;
 const MIN_MOVE_INTERVAL_MS = MOVE_INTERVAL_MS - MOVE_RATE_TOLERANCE_MS;
+const CHAT_RATE_LIMIT_MS = 800;
+const MAX_CHAT_LENGTH = 240;
 
 // Debounced position saves: map of socketId → pending timeout
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -60,6 +73,21 @@ function flushSave(socketId: string, userId: string, zoneId: string, pos: Positi
 function emitMoveAck(socket: Socket, seq: number, position: Position) {
   const ack: MoveAck = { seq, position };
   socket.emit("move:ack", ack);
+}
+
+function normalizeChatPayload(payload: unknown): NormalizedChatPayload | null {
+  const candidate = payload as ChatSendPayload;
+  const channel = candidate?.channel;
+  const text = typeof candidate?.text === "string" ? candidate.text.trim() : "";
+
+  if ((channel !== "zone" && channel !== "world") || text.length === 0) {
+    return null;
+  }
+
+  return {
+    channel,
+    text: text.slice(0, MAX_CHAT_LENGTH),
+  };
 }
 
 async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) {
@@ -165,6 +193,7 @@ io.on("connection", async (socket) => {
     zoneId,
     lastMoveAt: 0,
     lastProcessedMoveSeq: 0,
+    lastChatAt: 0,
   });
 
   await socket.join(zoneId);
@@ -224,6 +253,43 @@ io.on("connection", async (socket) => {
     emitMoveAck(socket, seq, accepted);
     socket.to(currentZoneId).emit("player:moved", { socketId: socket.id, tileX, tileY, facing });
     scheduleSave(socket.id, player.userId, currentZoneId, accepted);
+  });
+
+  socket.on("chat:send", (payload: unknown) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) {
+      socket.emit("chat:error", { message: "You are not connected to chat." });
+      return;
+    }
+
+    const normalized = normalizeChatPayload(payload);
+    if (!normalized) {
+      socket.emit("chat:error", { message: "Message could not be sent." });
+      return;
+    }
+
+    const now = Date.now();
+    if (now - player.lastChatAt < CHAT_RATE_LIMIT_MS) {
+      socket.emit("chat:error", { message: "You are sending messages too quickly." });
+      return;
+    }
+
+    player.lastChatAt = now;
+
+    const message: ChatMessage = {
+      id: `${now}-${socket.id}`,
+      channel: normalized.channel,
+      username: player.username,
+      text: normalized.text,
+      sentAt: new Date(now).toISOString(),
+    };
+
+    if (message.channel === "zone") {
+      io.to(player.zoneId).emit("chat:message", message);
+      return;
+    }
+
+    io.emit("chat:message", message);
   });
 
   // ─── Disconnect ────────────────────────────────────────────────────────────

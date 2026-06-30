@@ -172,7 +172,7 @@ export class GameScene extends Phaser.Scene {
     this.setupCamera();
     this.setupInput();
     this.setupServerEvents();
-    this.hudOverlay = new GameHudOverlay(this);
+    this.hudOverlay = new GameHudOverlay(this, this.socket);
 
     for (const p of this.initPlayers) this.addRemotePlayer(p);
   }
@@ -490,6 +490,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   update() {
+    if (this.hudOverlay?.isTextInputFocused()) return;
+
     const pressedDirection = this.readPressedDirection();
     const direction = pressedDirection ?? this.readHeldDirection();
 
