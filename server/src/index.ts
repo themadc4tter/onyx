@@ -118,6 +118,7 @@ const MIN_MOVE_INTERVAL_MS = MOVE_INTERVAL_MS - MOVE_RATE_TOLERANCE_MS;
 const CHAT_RATE_LIMIT_MS = 800;
 const MAX_CHAT_LENGTH = 240;
 const HERB_RESPAWN_MS = 10_000;
+const TRADE_RANGE_TILES = 5;
 const herbSpawnStates = new Map<string, Map<string, HerbSpawnState>>();
 
 // Debounced position saves: map of socketId → pending timeout
@@ -287,7 +288,7 @@ function arePlayersCloseEnoughToTrade(a: ConnectedPlayer, b: ConnectedPlayer) {
 
   const dx = Math.abs(a.position.tileX - b.position.tileX);
   const dy = Math.abs(a.position.tileY - b.position.tileY);
-  return Math.max(dx, dy) <= 2;
+  return Math.max(dx, dy) <= TRADE_RANGE_TILES;
 }
 
 function emitTradeError(socket: Socket, error?: string) {

@@ -143,7 +143,12 @@ export class GameScene extends Phaser.Scene {
       socialPlayers: this.socialPlayers.map(player => ({
         socketId: player.socketId,
         username: player.username,
+        position: {
+          tileX: player.position.tileX,
+          tileY: player.position.tileY,
+        },
       })),
+      getLocalTilePosition: () => this.player.getTilePosition(),
     });
     this.herbSpawners = new HerbSpawnerManager(this, this.socket, this.map, this.player, message => {
       this.hudOverlay.addSystemMessage(message);
@@ -252,11 +257,31 @@ export class GameScene extends Phaser.Scene {
       this.hudOverlay?.addSocialPlayer({
         socketId: data.socketId,
         username: data.username,
+        position: {
+          tileX: data.position.tileX,
+          tileY: data.position.tileY,
+        },
       });
     });
 
     this.socket.on("player:moved", (data: { socketId: string; tileX: number; tileY: number; facing: Facing }) => {
       this.remotePlayers.move(data.socketId, data.tileX, data.tileY, data.facing);
+      this.socialPlayers = this.socialPlayers.map(player =>
+        player.socketId === data.socketId
+          ? {
+              ...player,
+              position: {
+                tileX: data.tileX,
+                tileY: data.tileY,
+                facing: data.facing,
+              },
+            }
+          : player,
+      );
+      this.hudOverlay?.updateSocialPlayerPosition(data.socketId, {
+        tileX: data.tileX,
+        tileY: data.tileY,
+      });
     });
 
     this.socket.on("player:equipmentChanged", (data: { socketId: string; equipment: EquipmentState }) => {

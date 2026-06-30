@@ -5,7 +5,7 @@ import { createEmptyInventory, type InventoryState } from "../game/inventory";
 import { getItemDefinition } from "../game/items";
 import { HudChat } from "./chat/HudChat";
 
-type PanelId = "skills" | "inventory" | "equipment" | "party" | "settings";
+type PanelId = "skills" | "inventory" | "equipment" | "social" | "settings";
 
 interface SkillMock {
   name: string;
@@ -19,11 +19,18 @@ interface GameHudOverlayOptions {
   musicEnabled: boolean;
   onMusicEnabledChange: (enabled: boolean) => void;
   socialPlayers?: SocialPlayer[];
+  getLocalTilePosition?: () => TilePosition;
+}
+
+interface TilePosition {
+  tileX: number;
+  tileY: number;
 }
 
 interface SocialPlayer {
   socketId: string;
   username: string;
+  position: TilePosition;
 }
 
 interface TradeOfferItem {
@@ -46,6 +53,8 @@ interface TradeStatePayload {
 
 const HUD_LAYER_ID = "game-hud-layer";
 const HUD_INSET_PX = 12;
+const SOCIAL_RANGE_TILES = 5;
+const SOCIAL_REFRESH_MS = 2_000;
 
 const SKILLS: SkillMock[] = [
   { name: "Melee", level: 12, currentXp: 124, totalXp: 200, nextUnlock: "Guarding Stance" },
@@ -104,7 +113,6 @@ const CSS = `
   .hud-chat-line.system { color: #e5c36b; }
   .hud-chat-line.zone .chat-channel { color: #7fc9a0; }
   .hud-chat-line.world .chat-channel { color: #e5c36b; }
-  .hud-chat-line.party .chat-channel { color: #83c7ff; }
 
   .chat-channel,
   .chat-author {
@@ -267,7 +275,7 @@ const CSS = `
   .skill-name,
   .stat-label,
   .slot-label,
-  .party-name {
+  .social-player-name {
     font-size: 13px;
   }
 
@@ -304,7 +312,7 @@ const CSS = `
   .skill-detail,
   .equipment-stats,
   .settings-summary,
-  .party-summary {
+  .social-summary {
     border: 1px solid rgba(242, 234, 216, 0.1);
     background: rgba(255, 255, 255, 0.035);
     padding: 12px;
@@ -326,7 +334,7 @@ const CSS = `
 
   .unlock-list,
   .stat-list,
-  .party-list {
+  .social-list {
     display: grid;
     gap: 8px;
   }
@@ -334,7 +342,7 @@ const CSS = `
   .unlock-item,
   .stat-row,
   .equipment-slot,
-  .party-row {
+  .social-row {
     display: flex;
     justify-content: space-between;
     gap: 12px;
@@ -559,17 +567,28 @@ const CSS = `
 
   .slot-item,
   .stat-value,
-  .party-role {
+  .social-role {
     color: #ffe7a8;
     font-size: 13px;
     text-align: right;
   }
 
-  .party-actions {
+  .social-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     margin-top: 12px;
+  }
+
+  .social-empty {
+    justify-content: center;
+    color: rgba(242, 234, 216, 0.62);
+    font-style: italic;
+  }
+
+  .social-trade-button {
+    min-width: 104px;
+    padding: 0 14px;
   }
 
   .settings-list {
@@ -838,6 +857,7 @@ export class GameHudOverlay {
   private selectedEquipmentSlot: EquipmentSlot | null = null;
   private draggedInventorySlotIndex: number | null = null;
   private socialPlayers: SocialPlayer[] = [];
+  private socialRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private tradeState: TradeStatePayload | null = null;
 
   constructor(
@@ -891,6 +911,7 @@ export class GameHudOverlay {
   destroy = () => {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("resize", this.updateCanvasBounds);
+    this.stopSocialRefresh();
     this.socket.off("inventory:changed", this.handleInventoryChanged);
     this.socket.off("equipment:changed", this.handleEquipmentChanged);
     this.socket.off("trade:request", this.handleTradeRequest);
@@ -931,7 +952,7 @@ export class GameHudOverlay {
       { id: "equipment", label: "Equipment", title: "Equipment" },
       { id: "inventory", label: "Inventory", title: "Inventory" },
       { id: "skills", label: "Skills", title: "Skills" },
-      { id: "party", label: "Party", title: "Party" },
+      { id: "social", label: "Social", title: "Social" },
       { id: "settings", label: "Settings", title: "Settings" },
     ];
 
@@ -952,6 +973,7 @@ export class GameHudOverlay {
 
   private togglePanel(panelId: PanelId) {
     this.activePanel = this.activePanel === panelId ? null : panelId;
+    this.syncSocialRefresh();
     this.renderActivePanel();
   }
 
@@ -977,6 +999,7 @@ export class GameHudOverlay {
 
     panel.querySelector<HTMLButtonElement>(".hud-close-button")?.addEventListener("click", () => {
       this.activePanel = null;
+      this.syncSocialRefresh();
       this.renderActivePanel();
     });
 
@@ -984,7 +1007,7 @@ export class GameHudOverlay {
     if (this.activePanel === "skills") body.appendChild(this.createSkillsPanel());
     if (this.activePanel === "inventory") body.appendChild(this.createInventoryPanel());
     if (this.activePanel === "equipment") body.appendChild(this.createEquipmentPanel());
-    if (this.activePanel === "party") body.appendChild(this.createPartyPanel());
+    if (this.activePanel === "social") body.appendChild(this.createSocialPanel());
     if (this.activePanel === "settings") body.appendChild(this.createSettingsPanel());
 
     this.windowRoot.appendChild(panel);
@@ -1435,9 +1458,9 @@ export class GameHudOverlay {
       .join(" ");
   }
 
-  private createPartyPanel() {
+  private createSocialPanel() {
     const panel = document.createElement("div");
-    panel.className = "party-summary";
+    panel.className = "social-summary";
 
     const title = document.createElement("div");
     title.className = "detail-title";
@@ -1445,24 +1468,26 @@ export class GameHudOverlay {
     panel.appendChild(title);
 
     const list = document.createElement("div");
-    list.className = "party-list";
+    list.className = "social-list";
 
-    if (this.socialPlayers.length === 0) {
+    const nearbyPlayers = this.getNearbySocialPlayers();
+
+    if (nearbyPlayers.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "party-row";
-      empty.innerHTML = `<span class="party-name">No nearby players</span><strong class="party-role">-</strong>`;
+      empty.className = "social-row social-empty";
+      empty.textContent = "There are no players nearby.";
       list.appendChild(empty);
     } else {
-      for (const player of this.socialPlayers) {
+      for (const player of nearbyPlayers) {
         const row = document.createElement("div");
-        row.className = "party-row";
+        row.className = "social-row";
 
         const name = document.createElement("span");
-        name.className = "party-name";
+        name.className = "social-player-name";
         name.textContent = player.username;
 
         const button = document.createElement("button");
-        button.className = "hud-action-button";
+        button.className = "hud-action-button social-trade-button";
         button.type = "button";
         button.textContent = "Trade";
         button.disabled = Boolean(this.tradeState);
@@ -1506,19 +1531,64 @@ export class GameHudOverlay {
 
   setSocialPlayers(players: SocialPlayer[]) {
     this.socialPlayers = players;
-    if (this.activePanel === "party") this.renderActivePanel();
+    if (this.activePanel === "social") this.renderActivePanel();
   }
 
   addSocialPlayer(player: SocialPlayer) {
     this.socialPlayers = this.socialPlayers
       .filter(existing => existing.socketId !== player.socketId)
       .concat(player);
-    if (this.activePanel === "party") this.renderActivePanel();
+    if (this.activePanel === "social") this.renderActivePanel();
+  }
+
+  updateSocialPlayerPosition(socketId: string, position: TilePosition) {
+    this.socialPlayers = this.socialPlayers.map(player =>
+      player.socketId === socketId
+        ? { ...player, position }
+        : player,
+    );
   }
 
   removeSocialPlayer(socketId: string) {
     this.socialPlayers = this.socialPlayers.filter(player => player.socketId !== socketId);
-    if (this.activePanel === "party") this.renderActivePanel();
+    if (this.activePanel === "social") this.renderActivePanel();
+  }
+
+  private getNearbySocialPlayers() {
+    const localPosition = this.options?.getLocalTilePosition?.();
+    if (!localPosition) return [];
+
+    return this.socialPlayers.filter(player => {
+      const dx = Math.abs(player.position.tileX - localPosition.tileX);
+      const dy = Math.abs(player.position.tileY - localPosition.tileY);
+      return Math.max(dx, dy) <= SOCIAL_RANGE_TILES;
+    });
+  }
+
+  private syncSocialRefresh() {
+    if (this.activePanel === "social") {
+      this.startSocialRefresh();
+      return;
+    }
+
+    this.stopSocialRefresh();
+  }
+
+  private startSocialRefresh() {
+    if (this.socialRefreshTimer) return;
+
+    this.socialRefreshTimer = setInterval(() => {
+      if (this.activePanel === "social") {
+        this.renderActivePanel();
+      }
+    }, SOCIAL_REFRESH_MS);
+  }
+
+  private stopSocialRefresh() {
+    if (!this.socialRefreshTimer) return;
+
+    clearInterval(this.socialRefreshTimer);
+    this.socialRefreshTimer = null;
   }
 
   private handleTradeRequest = (payload: { requestId?: string; fromUsername?: string }) => {
@@ -1542,7 +1612,7 @@ export class GameHudOverlay {
     this.tradeState = state;
     this.selectedInventorySlotIndex = null;
     this.renderTradeWindow();
-    if (this.activePanel === "party" || this.activePanel === "inventory") {
+    if (this.activePanel === "social" || this.activePanel === "inventory") {
       this.renderActivePanel();
     }
   };
@@ -1551,7 +1621,7 @@ export class GameHudOverlay {
     this.tradeState = null;
     this.renderTradeWindow();
     this.addSystemMessage(this.getTradeCancelledMessage(payload?.reason));
-    if (this.activePanel === "party" || this.activePanel === "inventory") {
+    if (this.activePanel === "social" || this.activePanel === "inventory") {
       this.renderActivePanel();
     }
   };
@@ -1560,7 +1630,7 @@ export class GameHudOverlay {
     this.tradeState = null;
     this.renderTradeWindow();
     this.addSystemMessage("Trade completed.");
-    if (this.activePanel === "party" || this.activePanel === "inventory") {
+    if (this.activePanel === "social" || this.activePanel === "inventory") {
       this.renderActivePanel();
     }
   };
@@ -1795,7 +1865,7 @@ export class GameHudOverlay {
       skills: "Skills",
       inventory: "Inventory",
       equipment: "Equipment",
-      party: "Party",
+      social: "Social",
       settings: "Settings",
     };
     return titles[panelId];
@@ -1810,6 +1880,7 @@ export class GameHudOverlay {
 
     if (event.key !== "Escape" || !this.activePanel) return;
     this.activePanel = null;
+    this.syncSocialRefresh();
     this.renderActivePanel();
   };
 
