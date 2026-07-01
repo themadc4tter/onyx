@@ -1,0 +1,27 @@
+{
+  "name": "@onyx/shared",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/esm/index.js"
+    },
+    "./items": {
+      "types": "./dist/types/items.d.ts",
+      "import": "./dist/esm/items.js",
+      "require": "./dist/cjs/items.js",
+      "default": "./dist/esm/items.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.2"
+  }
+}

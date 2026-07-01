@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@onyx/shared": "*",
     "@supabase/supabase-js": "^2.44.4",
     "phaser": "^3.80.1",
     "socket.io-client": "^4.7.5"

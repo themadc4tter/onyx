@@ -3,9 +3,16 @@ services:
     name: onyx-server
     runtime: node
     rootDir: .
-    buildCommand: npm install --include=dev && npm run build --workspace=server
+    buildCommand: npm install --include=dev && npm run build --workspace=shared && npm run build --workspace=server
     startCommand: npm start --workspace=server
     plan: starter        # paid tier — no cold starts (required for persistent WebSockets)
+    buildFilter:
+      paths:
+        - server/**
+        - shared/**
+        - package.json
+        - package-lock.json
+        - render.yaml
     envVars:
       - key: NODE_ENV
         value: production
@@ -19,9 +26,16 @@ services:
   - type: web
     name: onyx-client
     runtime: static
-    rootDir: client
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
+    rootDir: .
+    buildCommand: npm install --include=dev && npm run build --workspace=shared && npm run build --workspace=client
+    staticPublishPath: client/dist
+    buildFilter:
+      paths:
+        - client/**
+        - shared/**
+        - package.json
+        - package-lock.json
+        - render.yaml
     envVars:
       - key: VITE_SERVER_URL
         sync: false      # fill in manually: the onyx-server Render URL
