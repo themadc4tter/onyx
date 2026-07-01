@@ -13,11 +13,12 @@ export class AutoAttackSlashEffect {
   play(origin: Phaser.Math.Vector2, target: Phaser.Math.Vector2) {
     const angleToTarget = Phaser.Math.Angle.Between(origin.x, origin.y, target.x, target.y);
     const swingDirection = Math.random() < 0.5 ? -1 : 1;
+    const swing = { progress: 0 };
     const container = this.scene.add
       .container(origin.x, origin.y)
       .setDepth(SLASH_DEPTH)
-      .setRotation(angleToTarget - (SWING_ARC_RADIANS / 2) * swingDirection)
       .setAlpha(0.95);
+    this.setSwingRotation(container, angleToTarget, swingDirection, swing.progress);
 
     const glow = this.createCrescent(0xffffff, 0.26, SLASH_RADIUS + 2, SLASH_THICKNESS + 3);
     const slash = this.createCrescent(0xffffff, 0.86, SLASH_RADIUS, SLASH_THICKNESS);
@@ -26,15 +27,31 @@ export class AutoAttackSlashEffect {
     container.add([glow, slash, leadingEdge]);
 
     this.scene.tweens.add({
+      targets: swing,
+      progress: 1,
+      duration: SLASH_DURATION_MS,
+      ease: "Cubic.easeOut",
+      onUpdate: () => this.setSwingRotation(container, angleToTarget, swingDirection, swing.progress),
+      onComplete: () => container.destroy(true),
+    });
+    this.scene.tweens.add({
       targets: container,
-      rotation: angleToTarget + (SWING_ARC_RADIANS / 2) * swingDirection,
       alpha: 0,
       scaleX: 1.08,
       scaleY: 1.08,
       duration: SLASH_DURATION_MS,
       ease: "Cubic.easeOut",
-      onComplete: () => container.destroy(true),
     });
+  }
+
+  private setSwingRotation(
+    container: Phaser.GameObjects.Container,
+    angleToTarget: number,
+    swingDirection: number,
+    progress: number,
+  ) {
+    const swingOffset = Phaser.Math.Linear(-SWING_ARC_RADIANS / 2, SWING_ARC_RADIANS / 2, progress);
+    container.setRotation(angleToTarget + swingOffset * swingDirection);
   }
 
   private createCrescent(color: number, alpha: number, radius: number, thickness: number) {
