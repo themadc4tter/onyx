@@ -40,9 +40,11 @@ const TARGET_RETICLE_GLOW_END = 0xfff0bc;
 const AUTO_ATTACK_RETICLE_CORE_COLOR = 0xff8a2a;
 const AUTO_ATTACK_RETICLE_GLOW_START = 0xff6a1f;
 const AUTO_ATTACK_RETICLE_GLOW_END = 0xff2f2f;
-const TARGET_RETICLE_SIZE = TILE_SIZE + 5;
-const TARGET_RETICLE_CORNER_LENGTH = 8;
+const TARGET_RETICLE_SIZE = TILE_SIZE + 1;
+const TARGET_RETICLE_CORNER_LENGTH = 5;
 const TARGET_RETICLE_PULSE_MS = 1_400;
+const TARGET_RETICLE_GLOW_WIDTH = 2;
+const TARGET_RETICLE_CORE_WIDTH = 1;
 
 export const MOB_SPRITE_ASSETS = Object.values(MOB_DEFINITIONS).map(mob => ({
   key: mob.spriteKey,
@@ -296,8 +298,8 @@ export class MobSpawnerManager {
       : Phaser.Math.Linear(0.24, 0.5, pulse);
 
     reticle.clear();
-    this.strokeTargetReticle(reticle, 4, glowColor, glowAlpha);
-    this.strokeTargetReticle(reticle, 1, coreColor, 0.96);
+    this.strokeTargetReticle(reticle, TARGET_RETICLE_GLOW_WIDTH, glowColor, glowAlpha);
+    this.strokeTargetReticle(reticle, TARGET_RETICLE_CORE_WIDTH, coreColor, 0.96);
   }
 
   private strokeTargetReticle(reticle: Phaser.GameObjects.Graphics, lineWidth: number, color: number, alpha: number) {
