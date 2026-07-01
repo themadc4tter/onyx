@@ -27,8 +27,16 @@ interface SkillMock {
 interface GameHudOverlayOptions {
   musicEnabled: boolean;
   onMusicEnabledChange: (enabled: boolean) => void;
+  onClearTarget?: () => void;
   socialPlayers?: SocialPlayer[];
   getLocalTilePosition?: () => TilePosition;
+}
+
+interface TargetProfile {
+  id: string;
+  name: string;
+  hp: number;
+  maxHp: number;
 }
 
 interface TilePosition {
@@ -108,6 +116,63 @@ const CSS = `
   .chat-channel,
   .chat-author {
     font-weight: 700;
+  }
+
+  .hud-target-frame {
+    position: absolute;
+    left: calc(var(--hud-canvas-left) + var(--hud-inset));
+    top: calc(var(--hud-canvas-top) + var(--hud-inset));
+    width: min(260px, calc(var(--hud-canvas-width) - 24px));
+    min-height: 58px;
+    padding: 9px 10px;
+    display: grid;
+    grid-template-columns: 1fr 28px;
+    gap: 8px;
+    background: rgba(20, 22, 21, 0.92);
+    border: 1px solid rgba(229, 195, 107, 0.58);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.42);
+    pointer-events: auto;
+  }
+
+  .hud-target-name {
+    min-width: 0;
+    color: #ffe7a8;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hud-target-close {
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(242, 234, 216, 0.18);
+    background: rgba(0, 0, 0, 0.22);
+    color: #f2ead8;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .hud-target-close:hover {
+    border-color: #e5c36b;
+    color: #ffe7a8;
+  }
+
+  .hud-target-health {
+    grid-column: 1 / -1;
+    height: 10px;
+    border: 1px solid rgba(242, 234, 216, 0.16);
+    background: rgba(0, 0, 0, 0.48);
+    overflow: hidden;
+  }
+
+  .hud-target-health-fill {
+    display: block;
+    height: 100%;
+    background: #b94646;
   }
 
   .hud-chat-controls {
@@ -844,6 +909,7 @@ const CSS = `
 export class GameHudOverlay {
   private root: HTMLElement;
   private layer: HTMLDivElement;
+  private targetRoot: HTMLDivElement;
   private windowRoot: HTMLDivElement;
   private tradeRoot: HTMLDivElement;
   private styleEl: HTMLStyleElement;
@@ -860,6 +926,7 @@ export class GameHudOverlay {
   private socialPlayers: SocialPlayer[] = [];
   private socialRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private tradeState: TradeStatePayload | null = null;
+  private targetProfile: TargetProfile | null = null;
 
   constructor(
     private scene: Phaser.Scene,
@@ -881,6 +948,8 @@ export class GameHudOverlay {
     document.head.appendChild(this.styleEl);
 
     this.layer = this.ensureLayer(root);
+    this.targetRoot = document.createElement("div");
+    this.layer.appendChild(this.targetRoot);
     this.windowRoot = document.createElement("div");
     this.windowRoot.className = "hud-window-root";
     this.layer.appendChild(this.windowRoot);
@@ -942,6 +1011,55 @@ export class GameHudOverlay {
   private render() {
     this.layer.appendChild(this.chat.element);
     this.layer.appendChild(this.createDock());
+  }
+
+  setTargetProfile(target: TargetProfile | null) {
+    this.targetProfile = target;
+    this.renderTargetFrame();
+  }
+
+  private renderTargetFrame() {
+    this.targetRoot.replaceChildren();
+    if (!this.targetProfile) return;
+
+    const hpRatio = this.targetProfile.maxHp > 0
+      ? Phaser.Math.Clamp(this.targetProfile.hp / this.targetProfile.maxHp, 0, 1)
+      : 0;
+
+    const frame = document.createElement("section");
+    frame.className = "hud-target-frame";
+    frame.setAttribute("aria-label", "Target");
+
+    const name = document.createElement("div");
+    name.className = "hud-target-name";
+    name.textContent = this.targetProfile.name;
+
+    const close = document.createElement("button");
+    close.className = "hud-target-close";
+    close.type = "button";
+    close.setAttribute("aria-label", "Clear target");
+    close.innerHTML = "&times;";
+    close.addEventListener("click", () => this.requestClearTarget());
+
+    const health = document.createElement("div");
+    health.className = "hud-target-health";
+
+    const healthFill = document.createElement("span");
+    healthFill.className = "hud-target-health-fill";
+    healthFill.style.width = `${Math.round(hpRatio * 100)}%`;
+    health.appendChild(healthFill);
+
+    frame.append(name, close, health);
+    this.targetRoot.appendChild(frame);
+  }
+
+  private requestClearTarget() {
+    if (this.options?.onClearTarget) {
+      this.options.onClearTarget();
+      return;
+    }
+
+    this.setTargetProfile(null);
   }
 
   private createDock() {
@@ -1872,10 +1990,18 @@ export class GameHudOverlay {
       return;
     }
 
-    if (event.key !== "Escape" || !this.activePanel) return;
-    this.activePanel = null;
-    this.syncSocialRefresh();
-    this.renderActivePanel();
+    if (event.key !== "Escape" || this.isTextInputFocused()) return;
+
+    if (this.activePanel) {
+      this.activePanel = null;
+      this.syncSocialRefresh();
+      this.renderActivePanel();
+      return;
+    }
+
+    if (this.targetProfile) {
+      this.requestClearTarget();
+    }
   };
 
   isTextInputFocused() {

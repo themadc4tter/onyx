@@ -13,6 +13,18 @@ interface RenderedMob extends MobSpawnState {
   nameLabel: WorldLabelHandle;
 }
 
+export interface MobTargetProfile {
+  id: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+}
+
+interface MobSpawnerManagerOptions {
+  initialStates?: MobSpawnState[];
+  onTargetChanged?: (target: MobTargetProfile | null) => void;
+}
+
 const MOB_DEPTH = 17;
 const HP_BAR_WIDTH = 18;
 const HP_BAR_HEIGHT = 3;
@@ -26,25 +38,37 @@ export class MobSpawnerManager {
   private testDamageKey: Phaser.Input.Keyboard.Key;
   private mobs = new Map<string, RenderedMob>();
   private selectedMobId: string | null = null;
+  private onTargetChanged: (target: MobTargetProfile | null) => void;
 
   constructor(
     private scene: Phaser.Scene,
     private socket: Socket,
     private labelOverlay: WorldLabelOverlay,
-    initialStates: MobSpawnState[] = [],
+    options: MobSpawnerManagerOptions = {},
   ) {
+    this.onTargetChanged = options.onTargetChanged ?? (() => {});
     this.testDamageKey = this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.T);
-    this.createMobs(initialStates);
+    this.createMobs(options.initialStates ?? []);
     this.bindServerEvents();
   }
 
   update(inputBlocked: boolean) {
     if (inputBlocked || !Phaser.Input.Keyboard.JustDown(this.testDamageKey)) return;
 
-    const target = this.getSelectedAliveMob() ?? this.getFirstAliveMob();
+    const target = this.getSelectedAliveMob();
     if (!target) return;
 
     this.socket.emit("mob:testDamage", { id: target.id });
+  }
+
+  clearTarget() {
+    if (!this.selectedMobId) return;
+
+    this.selectedMobId = null;
+    this.onTargetChanged(null);
+    for (const renderedMob of this.mobs.values()) {
+      this.updateMobVisuals(renderedMob);
+    }
   }
 
   private createMobs(states: MobSpawnState[]) {
@@ -105,6 +129,7 @@ export class MobSpawnerManager {
 
   private bindServerEvents() {
     this.socket.on("mob:state", this.handleMobState);
+    this.scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.handlePointerDown);
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     this.scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
   }
@@ -119,7 +144,7 @@ export class MobSpawnerManager {
 
     if (wasAlive && !state.alive) {
       if (this.selectedMobId === state.id) {
-        this.selectedMobId = null;
+        this.clearTarget();
       }
       this.scene.tweens.add({
         targets: mob.container,
@@ -140,6 +165,15 @@ export class MobSpawnerManager {
         ease: "Sine.easeOut",
       });
     }
+
+    if (state.alive && this.selectedMobId === state.id) {
+      this.emitSelectedTarget();
+    }
+  };
+
+  private handlePointerDown = (_pointer: Phaser.Input.Pointer, gameObjects: Phaser.GameObjects.GameObject[]) => {
+    if (gameObjects.length > 0) return;
+    this.clearTarget();
   };
 
   private updateMobVisuals(mob: RenderedMob) {
@@ -153,18 +187,31 @@ export class MobSpawnerManager {
     const mob = this.mobs.get(mobId);
     if (!mob?.alive) return;
 
-    this.selectedMobId = this.selectedMobId === mobId ? null : mobId;
+    this.selectedMobId = mobId;
+    this.emitSelectedTarget();
     for (const renderedMob of this.mobs.values()) {
       this.updateMobVisuals(renderedMob);
     }
   }
 
-  private getSelectedAliveMob() {
-    return this.selectedMobId ? this.getAliveMob(this.selectedMobId) : null;
+  private emitSelectedTarget() {
+    const target = this.getSelectedAliveMob();
+    if (!target) {
+      this.onTargetChanged(null);
+      return;
+    }
+
+    const definition = getMobDefinition(target.mobId);
+    this.onTargetChanged({
+      id: target.id,
+      name: definition?.name ?? target.mobId,
+      hp: target.hp,
+      maxHp: target.maxHp,
+    });
   }
 
-  private getFirstAliveMob() {
-    return [...this.mobs.values()].find(mob => mob.alive) ?? null;
+  private getSelectedAliveMob() {
+    return this.selectedMobId ? this.getAliveMob(this.selectedMobId) : null;
   }
 
   private getAliveMob(mobId: string) {
@@ -174,6 +221,7 @@ export class MobSpawnerManager {
 
   private destroy = () => {
     this.socket.off("mob:state", this.handleMobState);
+    this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.handlePointerDown);
     for (const mob of this.mobs.values()) {
       mob.nameLabel.destroy();
       mob.container.destroy(true);

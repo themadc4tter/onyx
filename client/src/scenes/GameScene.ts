@@ -165,11 +165,15 @@ export class GameScene extends Phaser.Scene {
         },
       })),
       getLocalTilePosition: () => this.player.getTilePosition(),
+      onClearTarget: () => this.mobSpawners?.clearTarget(),
     });
     this.herbSpawners = new HerbSpawnerManager(this, this.socket, this.map, this.player, message => {
       this.hudOverlay.addSystemMessage(message);
     }, this.herbSpawnStates);
-    this.mobSpawners = new MobSpawnerManager(this, this.socket, this.labelOverlay, this.mobSpawnStates);
+    this.mobSpawners = new MobSpawnerManager(this, this.socket, this.labelOverlay, {
+      initialStates: this.mobSpawnStates,
+      onTargetChanged: target => this.hudOverlay.setTargetProfile(target),
+    });
   }
 
   update() {
