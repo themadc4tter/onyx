@@ -4,6 +4,7 @@ import path from "node:path";
 export const DEFAULT_ZONE_ID = "settlement";
 
 const TILE_SIZE = 16;
+const DEFAULT_MOB_ID = "orc_scout";
 const MAP_DEFINITIONS = {
   settlement: "settlement.tmj",
   east_meadow: "east_meadow.tmj",
@@ -30,6 +31,11 @@ interface TiledObject {
   y: number;
   width?: number;
   height?: number;
+  properties?: Array<{
+    name: string;
+    type?: string;
+    value: unknown;
+  }>;
 }
 
 interface TiledObjectLayer {
@@ -63,6 +69,13 @@ export interface HerbSpawn {
   itemId: string;
 }
 
+export interface MobSpawn {
+  id: string;
+  tileX: number;
+  tileY: number;
+  mobId: string;
+}
+
 export interface ZoneConfig {
   collisionData: number[];
   cols: number;
@@ -70,6 +83,7 @@ export interface ZoneConfig {
   spawn: { x: number; y: number };
   exits: ZoneExit[];
   herbSpawns: HerbSpawn[];
+  mobSpawns: MobSpawn[];
 }
 
 interface LoadedZone extends Omit<ZoneConfig, "exits"> {
@@ -77,6 +91,7 @@ interface LoadedZone extends Omit<ZoneConfig, "exits"> {
   entries: Map<string, { x: number; y: number }>;
   exitObjects: TiledObject[];
   herbSpawnObjects: TiledObject[];
+  mobSpawnObjects: TiledObject[];
 }
 
 function findMapPath(filename: string) {
@@ -157,6 +172,11 @@ function getTargetZoneId(exitObject: TiledObject): ZoneId {
   return target;
 }
 
+function getStringProperty(object: TiledObject, propertyNames: string[]) {
+  const property = object.properties?.find(candidate => propertyNames.includes(candidate.name));
+  return typeof property?.value === "string" && property.value.length > 0 ? property.value : null;
+}
+
 function loadZone(zoneId: ZoneId): LoadedZone {
   const mapPath = MAP_PATHS[zoneId];
   const tiledMap = JSON.parse(fs.readFileSync(mapPath, "utf8")) as TiledMap;
@@ -188,9 +208,11 @@ function loadZone(zoneId: ZoneId): LoadedZone {
     rows: tiledMap.height,
     spawn: toTilePosition(spawn, tiledMap),
     herbSpawns: [],
+    mobSpawns: [],
     entries,
     exitObjects: objectLayer.objects.filter(object => object.type === "exit" || object.name.startsWith("exit_")),
     herbSpawnObjects: objectLayer.objects.filter(object => object.type === "herb_spawn"),
+    mobSpawnObjects: objectLayer.objects.filter(object => object.type === "mob_spawner"),
   };
 }
 
@@ -242,6 +264,22 @@ function buildZoneConfigs() {
           tileX: position.x,
           tileY: position.y,
           itemId: "moonleaf",
+        };
+      }),
+      mobSpawns: zone.mobSpawnObjects.map((object, index) => {
+        const position = toTilePosition(object, {
+          width: zone.cols,
+          height: zone.rows,
+          tilewidth: TILE_SIZE,
+          tileheight: TILE_SIZE,
+          layers: [],
+        });
+
+        return {
+          id: object.name || `${zone.zoneId}_mob_${index + 1}`,
+          tileX: position.x,
+          tileY: position.y,
+          mobId: getStringProperty(object, ["mobId", "mob_id", "mob"]) ?? DEFAULT_MOB_ID,
         };
       }),
     };

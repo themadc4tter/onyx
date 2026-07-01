@@ -25,6 +25,7 @@ import {
   unequipItem,
 } from "./game/equipment";
 import { getItemDefinition } from "@onyx/shared/items";
+import { getMobDefinition } from "@onyx/shared/mobs";
 import {
   acceptTradeRequest,
   addTradeOfferItem,
@@ -52,6 +53,8 @@ import type {
   InventoryMovePayload,
   InventoryPayload,
   InventorySplitPayload,
+  MobSpawnState,
+  MobTestDamagePayload,
   MoveAck,
   MovePayload,
   NormalizedChatPayload,
@@ -84,8 +87,10 @@ const MIN_MOVE_INTERVAL_MS = MOVE_INTERVAL_MS - MOVE_RATE_TOLERANCE_MS;
 const CHAT_RATE_LIMIT_MS = 800;
 const MAX_CHAT_LENGTH = 240;
 const HERB_RESPAWN_MS = 10_000;
+const MOB_RESPAWN_MS = 10_000;
 const TRADE_RANGE_TILES = 5;
 const herbSpawnStates = new Map<string, Map<string, HerbSpawnState>>();
+const mobSpawnStates = new Map<string, Map<string, MobSpawnState>>();
 
 // Debounced position saves: map of socketId → pending timeout
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -143,6 +148,41 @@ function getHerbSpawnStates(zoneId: string) {
 function getHerbSpawnState(zoneId: string, herbId: string) {
   getHerbSpawnStates(zoneId);
   return herbSpawnStates.get(zoneId)?.get(herbId) ?? null;
+}
+
+function getMobSpawnStates(zoneId: string) {
+  const zone = ZONES[zoneId];
+  if (!zone) return [];
+
+  let zoneStates = mobSpawnStates.get(zoneId);
+  if (!zoneStates) {
+    zoneStates = new Map();
+    mobSpawnStates.set(zoneId, zoneStates);
+  }
+
+  for (const spawn of zone.mobSpawns) {
+    if (zoneStates.has(spawn.id)) continue;
+
+    const mob = getMobDefinition(spawn.mobId);
+    if (!mob) {
+      console.warn(`[mob]        unknown mob "${spawn.mobId}" for spawn "${spawn.id}" in zone "${zoneId}"`);
+      continue;
+    }
+
+    zoneStates.set(spawn.id, {
+      ...spawn,
+      hp: mob.maxHp,
+      maxHp: mob.maxHp,
+      alive: true,
+    });
+  }
+
+  return [...zoneStates.values()];
+}
+
+function getMobSpawnState(zoneId: string, mobSpawnId: string) {
+  getMobSpawnStates(zoneId);
+  return mobSpawnStates.get(zoneId)?.get(mobSpawnId) ?? null;
 }
 
 function getInventoryPayload(userId: string): InventoryPayload {
@@ -310,6 +350,7 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
     position: newPos,
     initPlayers: newZonePlayers,
     herbSpawns: getHerbSpawnStates(newZoneId),
+    mobSpawns: getMobSpawnStates(newZoneId),
     inventory: getInventoryPayload(player.userId),
     equipment: getEquipmentPayload(player.userId),
   });
@@ -414,6 +455,7 @@ io.on("connection", async (socket) => {
     position: startPos,
     zoneId,
     herbSpawns: getHerbSpawnStates(zoneId),
+    mobSpawns: getMobSpawnStates(zoneId),
     inventory: getInventoryPayload(userId),
     equipment: getEquipmentPayload(userId),
   });
@@ -683,6 +725,34 @@ io.on("connection", async (socket) => {
       spawn.available = true;
       io.to(player.zoneId).emit("herb:state", { id: spawn.id, available: true });
     }, HERB_RESPAWN_MS);
+  });
+
+  socket.on("mob:testDamage", (payload: MobTestDamagePayload) => {
+    const player = connectedPlayers.get(socket.id);
+    const mobSpawnId = payload?.id;
+    if (!player || !mobSpawnId) return;
+
+    const zoneId = player.zoneId;
+    const mob = getMobSpawnState(zoneId, mobSpawnId);
+    if (!mob || !mob.alive) return;
+
+    mob.hp = Math.max(0, mob.hp - 1);
+    if (mob.hp > 0) {
+      io.to(zoneId).emit("mob:state", { ...mob });
+      return;
+    }
+
+    mob.alive = false;
+    io.to(zoneId).emit("mob:state", { ...mob });
+
+    setTimeout(() => {
+      const currentMob = getMobSpawnState(zoneId, mobSpawnId);
+      if (!currentMob) return;
+
+      currentMob.hp = currentMob.maxHp;
+      currentMob.alive = true;
+      io.to(zoneId).emit("mob:state", { ...currentMob });
+    }, MOB_RESPAWN_MS);
   });
 
   socket.on("inventory:move", (payload: InventoryMovePayload) => {

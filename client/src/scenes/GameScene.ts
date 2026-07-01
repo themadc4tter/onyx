@@ -6,6 +6,7 @@ import type {
   EquipmentPayload,
   HerbSpawnState,
   InventoryPayload,
+  MobSpawnState,
   MoveAck,
   PlayerEquipmentChangedPayload,
   PlayerLeftPayload,
@@ -27,6 +28,7 @@ import {
   HERB_SPRITE_ASSET_KEY,
   HERB_SPRITE_URL,
 } from "../world/HerbSpawnerManager";
+import { MobSpawnerManager, MOB_SPRITE_ASSETS } from "../world/MobSpawnerManager";
 import { LocalPlayerController } from "../player/LocalPlayerController";
 import { PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL } from "../player/playerAssets";
 
@@ -46,6 +48,7 @@ export class GameScene extends Phaser.Scene {
   private zoneId: string = DEFAULT_ZONE_ID;
   private startPos: Position | null = null;
   private herbSpawnStates: HerbSpawnState[] = [];
+  private mobSpawnStates: MobSpawnState[] = [];
   private inventory: InventoryPayload | undefined;
   private equipment: EquipmentPayload | undefined;
   private mapKey = getZoneMapConfig(DEFAULT_ZONE_ID).mapKey;
@@ -60,6 +63,7 @@ export class GameScene extends Phaser.Scene {
   private player!: LocalPlayerController;
   private worldMapBuilder!: WorldMapBuilder;
   private herbSpawners!: HerbSpawnerManager;
+  private mobSpawners!: MobSpawnerManager;
   private currentMusic: Phaser.Sound.BaseSound | null = null;
   private musicEnabled = readMusicEnabledSetting();
 
@@ -74,6 +78,7 @@ export class GameScene extends Phaser.Scene {
     zoneId?: string;
     startPos?: Position;
     herbSpawns?: HerbSpawnState[];
+    mobSpawns?: MobSpawnState[];
     inventory?: InventoryPayload;
     equipment?: EquipmentPayload;
   }) {
@@ -85,6 +90,7 @@ export class GameScene extends Phaser.Scene {
     this.mapKey = getZoneMapConfig(this.zoneId).mapKey;
     this.startPos = data.startPos ?? null;
     this.herbSpawnStates = data.herbSpawns ?? [];
+    this.mobSpawnStates = data.mobSpawns ?? [];
     this.inventory = data.inventory;
     this.equipment = data.equipment;
   }
@@ -106,6 +112,11 @@ export class GameScene extends Phaser.Scene {
     this.load.image(PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL);
     if (!this.textures.exists(HERB_SPRITE_ASSET_KEY)) {
       this.load.image(HERB_SPRITE_ASSET_KEY, HERB_SPRITE_URL);
+    }
+    for (const asset of MOB_SPRITE_ASSETS) {
+      if (!this.textures.exists(asset.key)) {
+        this.load.image(asset.key, asset.url);
+      }
     }
     for (const npc of getNpcsForZone(this.zoneId)) {
       if (!this.textures.exists(npc.spriteKey)) {
@@ -158,12 +169,14 @@ export class GameScene extends Phaser.Scene {
     this.herbSpawners = new HerbSpawnerManager(this, this.socket, this.map, this.player, message => {
       this.hudOverlay.addSystemMessage(message);
     }, this.herbSpawnStates);
+    this.mobSpawners = new MobSpawnerManager(this, this.socket, this.mobSpawnStates);
   }
 
   update() {
     const inputBlocked = this.hudOverlay?.isTextInputFocused() ?? false;
     this.player.update(inputBlocked);
     this.herbSpawners?.update(inputBlocked);
+    this.mobSpawners?.update(inputBlocked);
   }
 
   private showLoadingIndicator() {
@@ -313,6 +326,7 @@ export class GameScene extends Phaser.Scene {
         zoneId: payload.zoneId,
         startPos: payload.position,
         herbSpawns: payload.herbSpawns ?? [],
+        mobSpawns: payload.mobSpawns ?? [],
         inventory: payload.inventory,
         equipment: payload.equipment,
       });

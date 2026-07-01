@@ -70,11 +70,22 @@ export interface HerbSpawnState {
   available: boolean;
 }
 
+export interface MobSpawnState {
+  id: string;
+  tileX: number;
+  tileY: number;
+  mobId: string;
+  hp: number;
+  maxHp: number;
+  alive: boolean;
+}
+
 export interface ProfilePayload {
   profile: PlayerProfile;
   zoneId: string;
   position: Position;
   herbSpawns?: HerbSpawnState[];
+  mobSpawns?: MobSpawnState[];
   inventory?: InventoryPayload;
   equipment?: EquipmentPayload;
 }
@@ -84,6 +95,7 @@ export interface ZoneChangedPayload {
   position: Position;
   initPlayers: RemotePlayerData[];
   herbSpawns?: HerbSpawnState[];
+  mobSpawns?: MobSpawnState[];
   inventory?: InventoryPayload;
   equipment?: EquipmentPayload;
 }
@@ -125,6 +137,12 @@ export interface HerbStatePayload {
 export interface HerbPickedPayload {
   itemId?: string;
   itemName?: string;
+}
+
+export interface MobStatePayload extends MobSpawnState {}
+
+export interface MobTestDamagePayload {
+  id?: string;
 }
 
 export interface InventoryMovePayload {

@@ -139,6 +139,10 @@
 - Combat should support some form of class or specialization identity without permanently locking players into a class like World of Warcraft.
 - Combat should combine auto-attacks, player abilities, and encounter mechanics.
 - Auto-attacks should provide a baseline for gear, stats, and DPS checks.
+- Initial auto-attack combat should work by clicking a target, then clicking Auto Attack as an ability, similar to World of Warcraft.
+- Once Auto Attack is active, the player should periodically attack the selected target while the target remains in range.
+- Initial melee auto-attack range should be any target within 1 tile, including diagonal tiles.
+- Facing should not affect initial auto-attack range because the game does not currently have combat-facing rules.
 - Player abilities should support moment-to-moment decisions such as interrupts, defensive actions, support, burst damage, or utility.
 - Encounter mechanics can include dodging, interrupts, positioning, or other boss-specific rules.
 - Boss complexity can vary: some bosses can be simple DPS checks while others can be more mechanically involved.

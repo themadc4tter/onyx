@@ -59,6 +59,7 @@ export class BootScene extends Phaser.Scene {
           zoneId: data.zoneId,
           startPos: data.position,
           herbSpawns: data.herbSpawns ?? [],
+          mobSpawns: data.mobSpawns ?? [],
           inventory: data.inventory,
           equipment: data.equipment,
         });

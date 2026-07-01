@@ -529,6 +529,19 @@
                  "width":0,
                  "x":504,
                  "y":280
+                }, 
+                {
+                 "height":0,
+                 "id":8,
+                 "name":"orc_spawner_1",
+                 "opacity":1,
+                 "point":true,
+                 "rotation":0,
+                 "type":"mob_spawner",
+                 "visible":true,
+                 "width":0,
+                 "x":392,
+                 "y":248
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -596,7 +609,7 @@
          "y":0
         }],
  "nextlayerid":11,
- "nextobjectid":8,
+ "nextobjectid":9,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.2",
