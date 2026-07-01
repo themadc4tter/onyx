@@ -13,11 +13,13 @@ interface WorldLabel {
   element: HTMLDivElement;
   target: Phaser.GameObjects.Components.Transform & Partial<Pick<Phaser.GameObjects.Container, "getWorldPoint">>;
   offsetY: number;
+  visible: boolean;
 }
 
 export interface WorldLabelHandle {
   destroy: () => void;
   setText: (text: string) => void;
+  setVisible: (visible: boolean) => void;
 }
 
 const LABEL_LAYER_ID = "world-label-layer";
@@ -52,6 +54,7 @@ export class WorldLabelOverlay {
       element,
       target: options.target,
       offsetY: options.offsetY,
+      visible: true,
     };
     this.labels.add(label);
     this.positionLabel(label);
@@ -60,6 +63,10 @@ export class WorldLabelOverlay {
       destroy: () => this.removeLabel(label),
       setText: (text: string) => {
         element.textContent = text;
+        this.positionLabel(label);
+      },
+      setVisible: (visible: boolean) => {
+        label.visible = visible;
         this.positionLabel(label);
       },
     };
@@ -119,7 +126,7 @@ export class WorldLabelOverlay {
       screenY > this.scene.scale.height + 40
     );
 
-    label.element.style.opacity = offscreen ? "0" : "1";
+    label.element.style.opacity = offscreen || !label.visible ? "0" : "1";
     label.element.style.transform = `translate3d(${Math.round(cssX)}px, ${Math.round(cssY)}px, 0) translate(-50%, -100%)`;
   }
 }

@@ -3,14 +3,14 @@ import type { Socket } from "socket.io-client";
 import { getMobDefinition, MOB_DEFINITIONS } from "@onyx/shared/mobs";
 import type { MobSpawnState, MobStatePayload } from "@onyx/shared/protocol";
 import { TILE_SIZE } from "../config/map";
+import { WorldLabelOverlay, type WorldLabelHandle } from "../ui/WorldLabelOverlay";
 
 interface RenderedMob extends MobSpawnState {
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Image;
-  nameText: Phaser.GameObjects.Text;
-  hpText: Phaser.GameObjects.Text;
   hpFill: Phaser.GameObjects.Rectangle;
   selection: Phaser.GameObjects.Rectangle;
+  nameLabel: WorldLabelHandle;
 }
 
 const MOB_DEPTH = 17;
@@ -30,6 +30,7 @@ export class MobSpawnerManager {
   constructor(
     private scene: Phaser.Scene,
     private socket: Socket,
+    private labelOverlay: WorldLabelOverlay,
     initialStates: MobSpawnState[] = [],
   ) {
     this.testDamageKey = this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.T);
@@ -67,31 +68,24 @@ export class MobSpawnerManager {
     const hpFill = this.scene.add
       .rectangle(-HP_BAR_WIDTH / 2, -TILE_SIZE / 2 - 5, HP_BAR_WIDTH, HP_BAR_HEIGHT, 0xc94f4f)
       .setOrigin(0, 0.5);
-    const nameText = this.scene.add
-      .text(0, -TILE_SIZE / 2 - 18, definition.name, {
-        color: "#ffffff",
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: "7px",
-        resolution: 2,
-      })
-      .setOrigin(0.5);
-    const hpText = this.scene.add
-      .text(0, -TILE_SIZE / 2 - 12, "", {
-        color: "#ffd98a",
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: "6px",
-        resolution: 2,
-      })
-      .setOrigin(0.5);
 
     const container = this.scene.add
       .container(
         state.tileX * TILE_SIZE + TILE_SIZE / 2,
         state.tileY * TILE_SIZE + TILE_SIZE / 2,
-        [selection, sprite, hpBackground, hpFill, nameText, hpText],
+        [selection, sprite, hpBackground, hpFill],
       )
       .setDepth(MOB_DEPTH)
       .setVisible(state.alive);
+    const nameLabel = this.labelOverlay.addLabel({
+      target: container,
+      text: definition.name,
+      offsetY: -TILE_SIZE / 2 - 7,
+      color: "#ffffff",
+      fontSize: 13,
+      className: "world-label-name",
+    });
+    nameLabel.setVisible(state.alive);
 
     sprite.setInteractive({ useHandCursor: true });
     sprite.on("pointerdown", () => this.selectMob(state.id));
@@ -100,10 +94,9 @@ export class MobSpawnerManager {
       ...state,
       container,
       sprite,
-      nameText,
-      hpText,
       hpFill,
       selection,
+      nameLabel,
     };
     this.mobs.set(state.id, mob);
     this.updateMobVisuals(mob);
@@ -152,8 +145,8 @@ export class MobSpawnerManager {
   private updateMobVisuals(mob: RenderedMob) {
     const hpRatio = mob.maxHp > 0 ? Phaser.Math.Clamp(mob.hp / mob.maxHp, 0, 1) : 0;
     mob.hpFill.setDisplaySize(Math.max(0.1, HP_BAR_WIDTH * hpRatio), HP_BAR_HEIGHT);
-    mob.hpText.setText(`${mob.hp}/${mob.maxHp}`);
     mob.selection.setVisible(mob.alive && this.selectedMobId === mob.id);
+    mob.nameLabel.setVisible(mob.alive);
   }
 
   private selectMob(mobId: string) {
@@ -182,6 +175,7 @@ export class MobSpawnerManager {
   private destroy = () => {
     this.socket.off("mob:state", this.handleMobState);
     for (const mob of this.mobs.values()) {
+      mob.nameLabel.destroy();
       mob.container.destroy(true);
     }
     this.mobs.clear();

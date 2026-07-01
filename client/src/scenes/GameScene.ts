@@ -169,7 +169,7 @@ export class GameScene extends Phaser.Scene {
     this.herbSpawners = new HerbSpawnerManager(this, this.socket, this.map, this.player, message => {
       this.hudOverlay.addSystemMessage(message);
     }, this.herbSpawnStates);
-    this.mobSpawners = new MobSpawnerManager(this, this.socket, this.mobSpawnStates);
+    this.mobSpawners = new MobSpawnerManager(this, this.socket, this.labelOverlay, this.mobSpawnStates);
   }
 
   update() {
