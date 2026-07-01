@@ -173,14 +173,17 @@ export class GameScene extends Phaser.Scene {
     this.mobSpawners = new MobSpawnerManager(this, this.socket, this.labelOverlay, {
       initialStates: this.mobSpawnStates,
       onTargetChanged: target => this.hudOverlay.setTargetProfile(target),
+      addSystemMessage: message => this.hudOverlay.addSystemMessage(message),
+      getLocalTilePosition: () => this.player.getTilePosition(),
+      isLocalPlayerMoving: () => this.player.isMoving(),
     });
   }
 
   update() {
-    const inputBlocked = this.hudOverlay?.isTextInputFocused() ?? false;
-    this.player.update(inputBlocked);
-    this.herbSpawners?.update(inputBlocked);
-    this.mobSpawners?.update(inputBlocked);
+    const textInputBlocked = this.hudOverlay?.isTextInputFocused() ?? false;
+    this.player.update(textInputBlocked);
+    this.herbSpawners?.update(textInputBlocked);
+    this.mobSpawners?.update(textInputBlocked);
   }
 
   private showLoadingIndicator() {

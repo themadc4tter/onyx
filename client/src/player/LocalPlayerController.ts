@@ -102,6 +102,10 @@ export class LocalPlayerController {
     };
   }
 
+  isMoving() {
+    return this.moving;
+  }
+
   setEquipment(equipment: EquipmentState) {
     this.equipmentOverlays.setEquipment(equipment);
   }

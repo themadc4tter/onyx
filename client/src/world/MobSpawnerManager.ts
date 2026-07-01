@@ -23,11 +23,16 @@ export interface MobTargetProfile {
 interface MobSpawnerManagerOptions {
   initialStates?: MobSpawnState[];
   onTargetChanged?: (target: MobTargetProfile | null) => void;
+  addSystemMessage?: (message: string) => void;
+  getLocalTilePosition?: () => { tileX: number; tileY: number };
+  isLocalPlayerMoving?: () => boolean;
 }
 
 const MOB_DEPTH = 17;
 const HP_BAR_WIDTH = 18;
 const HP_BAR_HEIGHT = 3;
+const AUTO_ATTACK_WINDUP_MS = 1_000;
+const AUTO_ATTACK_RANGE_TILES = 1;
 
 export const MOB_SPRITE_ASSETS = Object.values(MOB_DEFINITIONS).map(mob => ({
   key: mob.spriteKey,
@@ -39,6 +44,11 @@ export class MobSpawnerManager {
   private mobs = new Map<string, RenderedMob>();
   private selectedMobId: string | null = null;
   private onTargetChanged: (target: MobTargetProfile | null) => void;
+  private addSystemMessage: (message: string) => void;
+  private getLocalTilePosition: () => { tileX: number; tileY: number } | null;
+  private isLocalPlayerMoving: () => boolean;
+  private autoAttackEnabled = false;
+  private windupStartedAt: number | null = null;
 
   constructor(
     private scene: Phaser.Scene,
@@ -47,23 +57,26 @@ export class MobSpawnerManager {
     options: MobSpawnerManagerOptions = {},
   ) {
     this.onTargetChanged = options.onTargetChanged ?? (() => {});
+    this.addSystemMessage = options.addSystemMessage ?? (() => {});
+    this.getLocalTilePosition = options.getLocalTilePosition ?? (() => null);
+    this.isLocalPlayerMoving = options.isLocalPlayerMoving ?? (() => false);
     this.testDamageKey = this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.T);
     this.createMobs(options.initialStates ?? []);
     this.bindServerEvents();
   }
 
   update(inputBlocked: boolean) {
-    if (inputBlocked || !Phaser.Input.Keyboard.JustDown(this.testDamageKey)) return;
+    if (!inputBlocked && Phaser.Input.Keyboard.JustDown(this.testDamageKey)) {
+      this.toggleAutoAttack();
+    }
 
-    const target = this.getSelectedAliveMob();
-    if (!target) return;
-
-    this.socket.emit("mob:testDamage", { id: target.id });
+    this.updateAutoAttack();
   }
 
   clearTarget() {
     if (!this.selectedMobId) return;
 
+    this.disableAutoAttack("Auto-attack off.");
     this.selectedMobId = null;
     this.onTargetChanged(null);
     for (const renderedMob of this.mobs.values()) {
@@ -175,6 +188,72 @@ export class MobSpawnerManager {
     if (gameObjects.length > 0) return;
     this.clearTarget();
   };
+
+  private toggleAutoAttack() {
+    if (this.autoAttackEnabled) {
+      this.disableAutoAttack("Auto-attack off.");
+      return;
+    }
+
+    const target = this.getSelectedAliveMob();
+    if (!target) return;
+
+    this.autoAttackEnabled = true;
+    this.addSystemMessage("Auto-attack on.");
+  }
+
+  private disableAutoAttack(message?: string) {
+    if (!this.autoAttackEnabled && this.windupStartedAt === null) return;
+
+    this.autoAttackEnabled = false;
+    this.windupStartedAt = null;
+    if (message) this.addSystemMessage(message);
+  }
+
+  private updateAutoAttack() {
+    if (!this.autoAttackEnabled) return;
+
+    const target = this.getSelectedAliveMob();
+    if (!target) {
+      this.disableAutoAttack("Auto-attack off.");
+      return;
+    }
+
+    if (this.isLocalPlayerMoving()) {
+      this.windupStartedAt = null;
+      return;
+    }
+
+    if (this.windupStartedAt !== null) {
+      if (this.scene.time.now - this.windupStartedAt < AUTO_ATTACK_WINDUP_MS) return;
+
+      this.performAutoAttack(target);
+      this.windupStartedAt = null;
+      return;
+    }
+
+    if (!this.isTargetInAutoAttackRange(target)) return;
+
+    this.windupStartedAt = this.scene.time.now;
+  }
+
+  private performAutoAttack(target: RenderedMob) {
+    if (!target.alive || !this.isTargetInAutoAttackRange(target)) return;
+
+    const definition = getMobDefinition(target.mobId);
+    this.socket.emit("mob:testDamage", { id: target.id });
+    this.addSystemMessage(`You attack ${definition?.name ?? target.mobId}.`);
+  }
+
+  private isTargetInAutoAttackRange(target: RenderedMob) {
+    const position = this.getLocalTilePosition();
+    if (!position) return false;
+
+    return (
+      Math.abs(position.tileX - target.tileX) <= AUTO_ATTACK_RANGE_TILES &&
+      Math.abs(position.tileY - target.tileY) <= AUTO_ATTACK_RANGE_TILES
+    );
+  }
 
   private updateMobVisuals(mob: RenderedMob) {
     const hpRatio = mob.maxHp > 0 ? Phaser.Math.Clamp(mob.hp / mob.maxHp, 0, 1) : 0;
