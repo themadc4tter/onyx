@@ -64,6 +64,22 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
       },
     },
   },
+  bronze_sword: {
+    id: "bronze_sword",
+    name: "Bronze Sword",
+    description: "A weak sword.",
+    iconUrl: "assets/equipment/main_hand/sword1_1.png",
+    maxStack: 1,
+    rarity: "common",
+    type: "equipment",
+    equipment: {
+      slot: "main_hand",
+      twoHanded: false,
+      stats: {
+        attack_damage: 4,
+      },
+    },
+  },
   wooden_buckler: {
     id: "wooden_buckler",
     name: "Wooden Buckler",
