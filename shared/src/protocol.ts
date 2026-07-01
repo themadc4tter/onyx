@@ -141,8 +141,28 @@ export interface HerbPickedPayload {
 
 export interface MobStatePayload extends MobSpawnState {}
 
-export interface MobTestDamagePayload {
+export interface MobAutoAttackPayload {
   id?: string;
+}
+
+export interface MobMeleeImpactPayload {
+  attackerSocketId: string;
+  targetId: string;
+  originTileX: number;
+  originTileY: number;
+  targetTileX: number;
+  targetTileY: number;
+}
+
+export interface MobProjectileFiredPayload {
+  projectileId: string;
+  attackerSocketId: string;
+  targetId: string;
+  originTileX: number;
+  originTileY: number;
+  targetTileX: number;
+  targetTileY: number;
+  durationMs: number;
 }
 
 export interface InventoryMovePayload {

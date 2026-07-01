@@ -68,6 +68,11 @@ export class MobSpawnerManager {
     return false;
   }
 
+  getMobWorldPosition(mobId: string) {
+    const mob = this.mobs.get(mobId);
+    return mob ? { x: mob.container.x, y: mob.container.y } : null;
+  }
+
   private createMob(state: MobSpawnState) {
     const definition = getMobDefinition(state.mobId);
     if (!definition || this.mobs.has(state.id)) return null;

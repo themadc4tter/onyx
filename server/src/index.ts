@@ -24,6 +24,7 @@ import {
   saveEquipment,
   unequipItem,
 } from "./game/equipment";
+import { applyMobDamage, resolveAutoAttack } from "./game/combat";
 import { getItemDefinition } from "@onyx/shared/items";
 import { getMobDefinition } from "@onyx/shared/mobs";
 import {
@@ -54,7 +55,7 @@ import type {
   InventoryPayload,
   InventorySplitPayload,
   MobSpawnState,
-  MobTestDamagePayload,
+  MobAutoAttackPayload,
   MoveAck,
   MovePayload,
   NormalizedChatPayload,
@@ -183,6 +184,24 @@ function getMobSpawnStates(zoneId: string) {
 function getMobSpawnState(zoneId: string, mobSpawnId: string) {
   getMobSpawnStates(zoneId);
   return mobSpawnStates.get(zoneId)?.get(mobSpawnId) ?? null;
+}
+
+function damageMob(zoneId: string, mobSpawnId: string, damage: number) {
+  const mob = getMobSpawnState(zoneId, mobSpawnId);
+  if (!mob || !mob.alive) return;
+
+  const defeated = applyMobDamage(mob, damage);
+  io.to(zoneId).emit("mob:state", { ...mob });
+  if (!defeated) return;
+
+  setTimeout(() => {
+    const currentMob = getMobSpawnState(zoneId, mobSpawnId);
+    if (!currentMob) return;
+
+    currentMob.hp = currentMob.maxHp;
+    currentMob.alive = true;
+    io.to(zoneId).emit("mob:state", { ...currentMob });
+  }, MOB_RESPAWN_MS);
 }
 
 function isMobBlockingTile(zoneId: string, tileX: number, tileY: number) {
@@ -739,7 +758,7 @@ io.on("connection", async (socket) => {
     }, HERB_RESPAWN_MS);
   });
 
-  socket.on("mob:testDamage", (payload: MobTestDamagePayload) => {
+  socket.on("mob:autoAttack", (payload: MobAutoAttackPayload) => {
     const player = connectedPlayers.get(socket.id);
     const mobSpawnId = payload?.id;
     if (!player || !mobSpawnId) return;
@@ -748,23 +767,19 @@ io.on("connection", async (socket) => {
     const mob = getMobSpawnState(zoneId, mobSpawnId);
     if (!mob || !mob.alive) return;
 
-    mob.hp = Math.max(0, mob.hp - 1);
-    if (mob.hp > 0) {
-      io.to(zoneId).emit("mob:state", { ...mob });
+    const result = resolveAutoAttack({ player, mob });
+    if (!result.ok) return;
+
+    if (result.mode === "melee") {
+      io.to(zoneId).emit("mob:meleeImpact", result.impact);
+      damageMob(zoneId, mobSpawnId, result.damage);
       return;
     }
 
-    mob.alive = false;
-    io.to(zoneId).emit("mob:state", { ...mob });
-
+    io.to(zoneId).emit("mob:projectileFired", result.projectile);
     setTimeout(() => {
-      const currentMob = getMobSpawnState(zoneId, mobSpawnId);
-      if (!currentMob) return;
-
-      currentMob.hp = currentMob.maxHp;
-      currentMob.alive = true;
-      io.to(zoneId).emit("mob:state", { ...currentMob });
-    }, MOB_RESPAWN_MS);
+      damageMob(zoneId, mobSpawnId, result.damage);
+    }, result.projectile.durationMs);
   });
 
   socket.on("inventory:move", (payload: InventoryMovePayload) => {

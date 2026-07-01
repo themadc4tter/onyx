@@ -324,9 +324,58 @@ export function isTileWalkable(zoneId: string, tileX: number, tileY: number): bo
   refreshZonesIfChanged();
 
   const zone = ZONES[zoneId];
-  if (!zone) return false;
-  if (tileX < 0 || tileX >= zone.cols || tileY < 0 || tileY >= zone.rows) return false;
+  if (!zone || !isTileInsideZone(zone, tileX, tileY)) return false;
 
   const index = tileY * zone.cols + tileX;
   return zone.collisionData[index] === 0;
+}
+
+export function hasLineOfSight(
+  zoneId: string,
+  from: { tileX: number; tileY: number },
+  to: { tileX: number; tileY: number },
+): boolean {
+  refreshZonesIfChanged();
+
+  const zone = ZONES[zoneId];
+  if (!zone || !isTileInsideZone(zone, from.tileX, from.tileY) || !isTileInsideZone(zone, to.tileX, to.tileY)) {
+    return false;
+  }
+
+  const fromX = from.tileX + 0.5;
+  const fromY = from.tileY + 0.5;
+  const toX = to.tileX + 0.5;
+  const toY = to.tileY + 0.5;
+  const distance = Math.hypot(toX - fromX, toY - fromY);
+  const steps = Math.max(1, Math.ceil(distance * 8));
+  const checkedTiles = new Set<string>();
+
+  for (let step = 1; step < steps; step += 1) {
+    const progress = step / steps;
+    const tileX = Math.floor(fromX + (toX - fromX) * progress);
+    const tileY = Math.floor(fromY + (toY - fromY) * progress);
+
+    if ((tileX === from.tileX && tileY === from.tileY) || (tileX === to.tileX && tileY === to.tileY)) {
+      continue;
+    }
+
+    const key = `${tileX},${tileY}`;
+    if (checkedTiles.has(key)) continue;
+    checkedTiles.add(key);
+
+    if (!isTileInsideZone(zone, tileX, tileY) || isTileBlocked(zone, tileX, tileY)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isTileInsideZone(zone: ZoneConfig, tileX: number, tileY: number) {
+  return tileX >= 0 && tileX < zone.cols && tileY >= 0 && tileY < zone.rows;
+}
+
+function isTileBlocked(zone: ZoneConfig, tileX: number, tileY: number) {
+  const index = tileY * zone.cols + tileX;
+  return zone.collisionData[index] !== 0;
 }

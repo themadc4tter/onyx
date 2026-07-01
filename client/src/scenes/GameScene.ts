@@ -185,8 +185,9 @@ export class GameScene extends Phaser.Scene {
     });
     this.autoAttack = new AutoAttackController(this, this.socket, {
       getTarget: () => this.targeting.getTarget(),
+      getEquipment: () => this.equipment ?? createEmptyEquipment(),
       getLocalTilePosition: () => this.player.getTilePosition(),
-      getLocalWorldPosition: () => ({ x: this.player.container.x, y: this.player.container.y }),
+      getMobWorldPosition: mobId => this.mobSpawners?.getMobWorldPosition(mobId) ?? null,
       isLocalPlayerMoving: () => this.player.isMoving(),
       onActiveChanged: active => this.targeting.setAutoAttackActive(active),
     });
