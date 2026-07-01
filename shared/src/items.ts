@@ -1,6 +1,8 @@
 export type ItemRarity = "common" | "uncommon" | "rare";
 export type ItemType = "material" | "consumable" | "equipment" | "quest";
 export type EquipmentSlot = "head" | "chest" | "legs" | "feet" | "main_hand" | "off_hand" | "ring" | "charm";
+export type WeaponClass = "melee" | "ranged" | "magic";
+export type WeaponType = "sword" | "bow" | "staff";
 export const EQUIPMENT_SLOTS: EquipmentSlot[] = ["main_hand", "off_hand", "head", "chest", "legs", "feet", "ring", "charm"];
 
 export interface EquipmentStats {
@@ -21,10 +23,14 @@ export type EquipmentDefinition =
   | (BaseEquipmentDefinition & {
       slot: "main_hand";
       twoHanded: boolean;
+      weaponClass: WeaponClass;
+      weaponType: WeaponType;
     })
   | (BaseEquipmentDefinition & {
       slot: NonMainHandEquipmentSlot;
       twoHanded?: never;
+      weaponClass?: never;
+      weaponType?: never;
     });
 
 export interface ItemDefinition {
@@ -59,6 +65,8 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     equipment: {
       slot: "main_hand",
       twoHanded: true,
+      weaponClass: "magic",
+      weaponType: "staff",
       stats: {
         attack_damage: 8,
       },
@@ -75,8 +83,28 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     equipment: {
       slot: "main_hand",
       twoHanded: false,
+      weaponClass: "melee",
+      weaponType: "sword",
       stats: {
         attack_damage: 4,
+      },
+    },
+  },
+  simple_shortbow: {
+    id: "simple_shortbow",
+    name: "Simple Shortbow",
+    description: "A weak shortbow.",
+    iconUrl: "assets/equipment/main_hand/bow1.png",
+    maxStack: 1,
+    rarity: "common",
+    type: "equipment",
+    equipment: {
+      slot: "main_hand",
+      twoHanded: true,
+      weaponClass: "ranged",
+      weaponType: "bow",
+      stats: {
+        attack_damage: 5,
       },
     },
   },
