@@ -52,6 +52,22 @@ export class MobSpawnerManager {
     }
   }
 
+  isBlockingTile(tileX: number, tileY: number) {
+    for (const mob of this.mobs.values()) {
+      const definition = getMobDefinition(mob.mobId);
+      if (
+        mob.alive &&
+        !definition?.playersCanRunThrough &&
+        mob.tileX === tileX &&
+        mob.tileY === tileY
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   private createMob(state: MobSpawnState) {
     const definition = getMobDefinition(state.mobId);
     if (!definition || this.mobs.has(state.id)) return null;

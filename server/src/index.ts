@@ -185,6 +185,18 @@ function getMobSpawnState(zoneId: string, mobSpawnId: string) {
   return mobSpawnStates.get(zoneId)?.get(mobSpawnId) ?? null;
 }
 
+function isMobBlockingTile(zoneId: string, tileX: number, tileY: number) {
+  return getMobSpawnStates(zoneId).some(mob => {
+    const definition = getMobDefinition(mob.mobId);
+    return (
+      mob.alive &&
+      !definition?.playersCanRunThrough &&
+      mob.tileX === tileX &&
+      mob.tileY === tileY
+    );
+  });
+}
+
 function getInventoryPayload(userId: string): InventoryPayload {
   const inventory = getInventory(userId);
   return {
@@ -488,7 +500,7 @@ io.on("connection", async (socket) => {
     const dy = Math.abs(tileY - current.tileY);
     const isOneStep = (dx === 1 && dy === 0) || (dx === 0 && dy === 1);
 
-    if (!isOneStep || !isTileWalkable(currentZoneId, tileX, tileY)) {
+    if (!isOneStep || !isTileWalkable(currentZoneId, tileX, tileY) || isMobBlockingTile(currentZoneId, tileX, tileY)) {
       emitMoveAck(socket, seq, current);
       return;
     }

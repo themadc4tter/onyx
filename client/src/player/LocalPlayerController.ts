@@ -44,6 +44,7 @@ export class LocalPlayerController {
     labelOverlay: WorldLabelOverlay,
     username: string,
     startPosition: Position,
+    private isDynamicTileBlocked: (tileX: number, tileY: number) => boolean = () => false,
   ) {
     this.tileX = startPosition.tileX;
     this.tileY = startPosition.tileY;
@@ -149,7 +150,8 @@ export class LocalPlayerController {
       nextX >= this.map.width ||
       nextY < 0 ||
       nextY >= this.map.height ||
-      this.collisionLayer?.hasTileAt(nextX, nextY)
+      this.collisionLayer?.hasTileAt(nextX, nextY) ||
+      this.isDynamicTileBlocked(nextX, nextY)
     ) {
       this.bump(dx, dy);
       return;

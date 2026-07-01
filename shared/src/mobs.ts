@@ -4,6 +4,7 @@ export interface MobDefinition {
   spriteKey: string;
   spriteUrl: string;
   maxHp: number;
+  playersCanRunThrough: boolean;
 }
 
 export const MOB_DEFINITIONS: Record<string, MobDefinition> = {
@@ -13,6 +14,7 @@ export const MOB_DEFINITIONS: Record<string, MobDefinition> = {
     spriteKey: "mob-orc-scout",
     spriteUrl: "assets/characters/male_orc.png",
     maxHp: 10,
+    playersCanRunThrough: false,
   },
 };
 

@@ -147,6 +147,7 @@ export class GameScene extends Phaser.Scene {
       this.labelOverlay,
       this.profile.username,
       startPosition,
+      (tileX, tileY) => this.mobSpawners?.isBlockingTile(tileX, tileY) ?? false,
     );
     this.npcRenderer = new NpcRenderer(this, this.labelOverlay);
     this.npcRenderer.render(this.worldMapBuilder.getPlacedNpcsForZone(this.zoneId, this.map));
