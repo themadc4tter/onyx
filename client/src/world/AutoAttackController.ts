@@ -4,6 +4,7 @@ import { getItemDefinition } from "@onyx/shared/items";
 import type { MobMeleeImpactPayload, MobProjectileFiredPayload } from "@onyx/shared/protocol";
 import type { EquipmentState } from "../game/equipment";
 import { TILE_SIZE } from "../config/map";
+import { CombatWarningText } from "./CombatWarningText";
 import { AutoAttackProjectileEffect } from "./AutoAttackProjectileEffect";
 import { AutoAttackSlashEffect } from "./AutoAttackSlashEffect";
 import type { Targetable } from "./TargetingManager";
@@ -12,6 +13,7 @@ interface AutoAttackControllerOptions {
   getTarget: () => Targetable | null;
   getEquipment: () => EquipmentState | null;
   getLocalTilePosition: () => { tileX: number; tileY: number } | null;
+  hasLineOfSight: (from: { tileX: number; tileY: number }, to: { tileX: number; tileY: number }) => boolean;
   getMobWorldPosition: (mobId: string) => { x: number; y: number } | null;
   isLocalPlayerMoving: () => boolean;
   onActiveChanged?: (active: boolean) => void;
@@ -39,6 +41,7 @@ const MELEE_RANGE_TILES = 1;
 
 export class AutoAttackController {
   private autoAttackKey: Phaser.Input.Keyboard.Key;
+  private warningText: CombatWarningText;
   private slashEffect: AutoAttackSlashEffect;
   private projectileEffect: AutoAttackProjectileEffect;
   private active = false;
@@ -51,6 +54,7 @@ export class AutoAttackController {
     private options: AutoAttackControllerOptions,
   ) {
     this.autoAttackKey = this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.T);
+    this.warningText = new CombatWarningText(this.scene);
     this.slashEffect = new AutoAttackSlashEffect(this.scene);
     this.projectileEffect = new AutoAttackProjectileEffect(this.scene);
     this.onActiveChanged = options.onActiveChanged ?? (() => {});
@@ -66,6 +70,7 @@ export class AutoAttackController {
     }
 
     this.updateAutoAttack();
+    this.warningText.update();
   }
 
   private toggle() {
@@ -84,6 +89,7 @@ export class AutoAttackController {
 
     this.active = false;
     this.windupStartedAt = null;
+    this.warningText.hide();
     this.onActiveChanged(false);
   }
 
@@ -97,6 +103,15 @@ export class AutoAttackController {
     }
 
     const mode = this.getAutoAttackMode();
+    const warningMessage = this.getWarningMessage(target, mode);
+    if (warningMessage) {
+      this.warningText.show(warningMessage);
+      this.windupStartedAt = null;
+      return;
+    }
+
+    this.warningText.hide();
+
     if (this.options.isLocalPlayerMoving()) {
       this.windupStartedAt = null;
       return;
@@ -113,6 +128,24 @@ export class AutoAttackController {
     if (!this.isTargetInRange(target, mode)) return;
 
     this.windupStartedAt = this.scene.time.now;
+  }
+
+  private getWarningMessage(target: Targetable, mode: AutoAttackMode) {
+    const position = this.options.getLocalTilePosition();
+    if (!position) return null;
+
+    if (!this.isTargetInRange(target, mode)) {
+      return "Out of range";
+    }
+
+    if (
+      (mode.weaponClass === "ranged" || mode.weaponClass === "magic") &&
+      !this.options.hasLineOfSight(position, target)
+    ) {
+      return "No line of sight";
+    }
+
+    return null;
   }
 
   private performAutoAttack(target: Targetable, mode: AutoAttackMode) {
@@ -204,6 +237,7 @@ export class AutoAttackController {
   private destroy = () => {
     this.socket.off("mob:meleeImpact", this.handleMeleeImpact);
     this.socket.off("mob:projectileFired", this.handleProjectileFired);
+    this.warningText.hide();
     this.disable();
   };
 }

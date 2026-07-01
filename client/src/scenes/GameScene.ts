@@ -187,6 +187,7 @@ export class GameScene extends Phaser.Scene {
       getTarget: () => this.targeting.getTarget(),
       getEquipment: () => this.equipment ?? createEmptyEquipment(),
       getLocalTilePosition: () => this.player.getTilePosition(),
+      hasLineOfSight: (from, to) => this.hasLineOfSight(from, to),
       getMobWorldPosition: mobId => this.mobSpawners?.getMobWorldPosition(mobId) ?? null,
       isLocalPlayerMoving: () => this.player.isMoving(),
       onActiveChanged: active => this.targeting.setAutoAttackActive(active),
@@ -232,6 +233,46 @@ export class GameScene extends Phaser.Scene {
 
     camera.setBounds(boundsX, boundsY, boundsWidth, boundsHeight);
     camera.startFollow(this.player.container, true);
+  }
+
+  private hasLineOfSight(
+    from: { tileX: number; tileY: number },
+    to: { tileX: number; tileY: number },
+  ) {
+    if (!this.map || !this.collisionLayer) return true;
+    if (!this.isInsideMap(from.tileX, from.tileY) || !this.isInsideMap(to.tileX, to.tileY)) return false;
+
+    const fromX = from.tileX + 0.5;
+    const fromY = from.tileY + 0.5;
+    const toX = to.tileX + 0.5;
+    const toY = to.tileY + 0.5;
+    const distance = Math.hypot(toX - fromX, toY - fromY);
+    const steps = Math.max(1, Math.ceil(distance * 8));
+    const checkedTiles = new Set<string>();
+
+    for (let step = 1; step < steps; step += 1) {
+      const progress = step / steps;
+      const tileX = Math.floor(fromX + (toX - fromX) * progress);
+      const tileY = Math.floor(fromY + (toY - fromY) * progress);
+
+      if ((tileX === from.tileX && tileY === from.tileY) || (tileX === to.tileX && tileY === to.tileY)) {
+        continue;
+      }
+
+      const key = `${tileX},${tileY}`;
+      if (checkedTiles.has(key)) continue;
+      checkedTiles.add(key);
+
+      if (!this.isInsideMap(tileX, tileY) || this.collisionLayer.hasTileAt(tileX, tileY)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private isInsideMap(tileX: number, tileY: number) {
+    return Boolean(this.map && tileX >= 0 && tileX < this.map.width && tileY >= 0 && tileY < this.map.height);
   }
 
   private playZoneMusic() {
