@@ -88,7 +88,7 @@ export class AutoAttackProjectileEffect {
   }
 
   private fillPixel(graphics: Phaser.GameObjects.Graphics, x: number, y: number, color: number, alpha: number) {
-    const pixelSize = 0.28;
+    const pixelSize = 0.56;
     graphics.fillStyle(color, alpha);
     graphics.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
   }
