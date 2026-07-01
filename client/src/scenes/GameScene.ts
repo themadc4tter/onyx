@@ -173,7 +173,6 @@ export class GameScene extends Phaser.Scene {
     this.mobSpawners = new MobSpawnerManager(this, this.socket, this.labelOverlay, {
       initialStates: this.mobSpawnStates,
       onTargetChanged: target => this.hudOverlay.setTargetProfile(target),
-      addSystemMessage: message => this.hudOverlay.addSystemMessage(message),
       getLocalTilePosition: () => this.player.getTilePosition(),
       isLocalPlayerMoving: () => this.player.isMoving(),
     });

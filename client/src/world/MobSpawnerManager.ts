@@ -23,7 +23,6 @@ export interface MobTargetProfile {
 interface MobSpawnerManagerOptions {
   initialStates?: MobSpawnState[];
   onTargetChanged?: (target: MobTargetProfile | null) => void;
-  addSystemMessage?: (message: string) => void;
   getLocalTilePosition?: () => { tileX: number; tileY: number };
   isLocalPlayerMoving?: () => boolean;
 }
@@ -33,6 +32,8 @@ const HP_BAR_WIDTH = 18;
 const HP_BAR_HEIGHT = 3;
 const AUTO_ATTACK_WINDUP_MS = 1_000;
 const AUTO_ATTACK_RANGE_TILES = 1;
+const TARGET_SELECTION_COLOR = 0xffe07a;
+const AUTO_ATTACK_SELECTION_COLOR = 0xd33d3d;
 
 export const MOB_SPRITE_ASSETS = Object.values(MOB_DEFINITIONS).map(mob => ({
   key: mob.spriteKey,
@@ -44,7 +45,6 @@ export class MobSpawnerManager {
   private mobs = new Map<string, RenderedMob>();
   private selectedMobId: string | null = null;
   private onTargetChanged: (target: MobTargetProfile | null) => void;
-  private addSystemMessage: (message: string) => void;
   private getLocalTilePosition: () => { tileX: number; tileY: number } | null;
   private isLocalPlayerMoving: () => boolean;
   private autoAttackEnabled = false;
@@ -57,7 +57,6 @@ export class MobSpawnerManager {
     options: MobSpawnerManagerOptions = {},
   ) {
     this.onTargetChanged = options.onTargetChanged ?? (() => {});
-    this.addSystemMessage = options.addSystemMessage ?? (() => {});
     this.getLocalTilePosition = options.getLocalTilePosition ?? (() => null);
     this.isLocalPlayerMoving = options.isLocalPlayerMoving ?? (() => false);
     this.testDamageKey = this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.T);
@@ -76,12 +75,10 @@ export class MobSpawnerManager {
   clearTarget() {
     if (!this.selectedMobId) return;
 
-    this.disableAutoAttack("Auto-attack off.");
+    this.disableAutoAttack();
     this.selectedMobId = null;
     this.onTargetChanged(null);
-    for (const renderedMob of this.mobs.values()) {
-      this.updateMobVisuals(renderedMob);
-    }
+    this.refreshMobVisuals();
   }
 
   private createMobs(states: MobSpawnState[]) {
@@ -96,7 +93,7 @@ export class MobSpawnerManager {
 
     const selection = this.scene.add
       .rectangle(0, 0, TILE_SIZE + 4, TILE_SIZE + 4)
-      .setStrokeStyle(1, 0xffe07a, 0.9)
+      .setStrokeStyle(1, TARGET_SELECTION_COLOR, 0.9)
       .setVisible(false);
     const sprite = this.scene.add.image(0, 0, definition.spriteKey);
     const hpBackground = this.scene.add
@@ -191,7 +188,7 @@ export class MobSpawnerManager {
 
   private toggleAutoAttack() {
     if (this.autoAttackEnabled) {
-      this.disableAutoAttack("Auto-attack off.");
+      this.disableAutoAttack();
       return;
     }
 
@@ -199,15 +196,15 @@ export class MobSpawnerManager {
     if (!target) return;
 
     this.autoAttackEnabled = true;
-    this.addSystemMessage("Auto-attack on.");
+    this.updateMobVisuals(target);
   }
 
-  private disableAutoAttack(message?: string) {
+  private disableAutoAttack() {
     if (!this.autoAttackEnabled && this.windupStartedAt === null) return;
 
     this.autoAttackEnabled = false;
     this.windupStartedAt = null;
-    if (message) this.addSystemMessage(message);
+    this.refreshMobVisuals();
   }
 
   private updateAutoAttack() {
@@ -215,7 +212,7 @@ export class MobSpawnerManager {
 
     const target = this.getSelectedAliveMob();
     if (!target) {
-      this.disableAutoAttack("Auto-attack off.");
+      this.disableAutoAttack();
       return;
     }
 
@@ -240,9 +237,7 @@ export class MobSpawnerManager {
   private performAutoAttack(target: RenderedMob) {
     if (!target.alive || !this.isTargetInAutoAttackRange(target)) return;
 
-    const definition = getMobDefinition(target.mobId);
     this.socket.emit("mob:testDamage", { id: target.id });
-    this.addSystemMessage(`You attack ${definition?.name ?? target.mobId}.`);
   }
 
   private isTargetInAutoAttackRange(target: RenderedMob) {
@@ -258,8 +253,16 @@ export class MobSpawnerManager {
   private updateMobVisuals(mob: RenderedMob) {
     const hpRatio = mob.maxHp > 0 ? Phaser.Math.Clamp(mob.hp / mob.maxHp, 0, 1) : 0;
     mob.hpFill.setDisplaySize(Math.max(0.1, HP_BAR_WIDTH * hpRatio), HP_BAR_HEIGHT);
-    mob.selection.setVisible(mob.alive && this.selectedMobId === mob.id);
+    const isSelected = mob.alive && this.selectedMobId === mob.id;
+    const selectionColor = this.autoAttackEnabled && isSelected ? AUTO_ATTACK_SELECTION_COLOR : TARGET_SELECTION_COLOR;
+    mob.selection.setStrokeStyle(1, selectionColor, 0.9).setVisible(isSelected);
     mob.nameLabel.setVisible(mob.alive);
+  }
+
+  private refreshMobVisuals() {
+    for (const renderedMob of this.mobs.values()) {
+      this.updateMobVisuals(renderedMob);
+    }
   }
 
   private selectMob(mobId: string) {
@@ -268,9 +271,7 @@ export class MobSpawnerManager {
 
     this.selectedMobId = mobId;
     this.emitSelectedTarget();
-    for (const renderedMob of this.mobs.values()) {
-      this.updateMobVisuals(renderedMob);
-    }
+    this.refreshMobVisuals();
   }
 
   private emitSelectedTarget() {
