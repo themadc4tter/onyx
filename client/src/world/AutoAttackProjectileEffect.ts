@@ -3,8 +3,22 @@ import type { MobProjectileFiredPayload } from "@onyx/shared/protocol";
 import { TILE_SIZE } from "../config/map";
 
 const PROJECTILE_DEPTH = 24;
-const PROJECTILE_CORE_COLOR = 0xf6e27f;
-const PROJECTILE_GLOW_COLOR = 0xffa84a;
+const PROJECTILE_STYLES = {
+  ranged: {
+    coreColor: 0xf6e27f,
+    glowColor: 0xffa84a,
+    glowAlpha: 0.28,
+    glowRadius: 5,
+    coreRadius: 2.2,
+  },
+  magic: {
+    coreColor: 0xff3b24,
+    glowColor: 0x7a1010,
+    glowAlpha: 0.48,
+    glowRadius: 6.5,
+    coreRadius: 2.8,
+  },
+} as const;
 
 export class AutoAttackProjectileEffect {
   constructor(private scene: Phaser.Scene) {}
@@ -15,10 +29,12 @@ export class AutoAttackProjectileEffect {
   ) {
     const origin = this.tileCenterToWorld(payload.originTileX, payload.originTileY);
     const fallbackTarget = this.tileCenterToWorld(payload.targetTileX, payload.targetTileY);
+    const style = PROJECTILE_STYLES[payload.projectileClass];
     const projectile = this.scene.add.container(origin.x, origin.y).setDepth(PROJECTILE_DEPTH);
-    const glow = this.scene.add.circle(0, 0, 5, PROJECTILE_GLOW_COLOR, 0.28);
-    const core = this.scene.add.circle(0, 0, 2.2, PROJECTILE_CORE_COLOR, 0.96);
-    projectile.add([glow, core]);
+    const glow = this.scene.add.circle(0, 0, style.glowRadius, style.glowColor, style.glowAlpha);
+    const ember = this.scene.add.circle(-3, 0, style.coreRadius * 0.75, style.glowColor, 0.42);
+    const core = this.scene.add.circle(0, 0, style.coreRadius, style.coreColor, 0.96);
+    projectile.add(payload.projectileClass === "magic" ? [glow, ember, core] : [glow, core]);
 
     const startedAt = this.scene.time.now;
     const update = () => {

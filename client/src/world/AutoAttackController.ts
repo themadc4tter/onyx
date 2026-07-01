@@ -30,6 +30,8 @@ type AutoAttackMode =
     }
   | {
       weaponClass: "magic";
+      windupMs: number;
+      attackRange: number;
     };
 
 const UNARMED_WINDUP_MS = 1_000;
@@ -95,11 +97,6 @@ export class AutoAttackController {
     }
 
     const mode = this.getAutoAttackMode();
-    if (mode.weaponClass === "magic") {
-      this.windupStartedAt = null;
-      return;
-    }
-
     if (this.options.isLocalPlayerMoving()) {
       this.windupStartedAt = null;
       return;
@@ -118,7 +115,7 @@ export class AutoAttackController {
     this.windupStartedAt = this.scene.time.now;
   }
 
-  private performAutoAttack(target: Targetable, mode: Exclude<AutoAttackMode, { weaponClass: "magic" }>) {
+  private performAutoAttack(target: Targetable, mode: AutoAttackMode) {
     if (!target.alive || !this.isTargetInRange(target, mode)) return;
 
     if (target.targetType === "mob") {
@@ -146,7 +143,11 @@ export class AutoAttackController {
     }
 
     if (item.equipment.weaponClass === "magic") {
-      return { weaponClass: "magic" };
+      return {
+        weaponClass: "magic",
+        windupMs: item.equipment.attackSpeed * 1_000,
+        attackRange: item.equipment.attackRange,
+      };
     }
 
     if (item.equipment.weaponClass === "ranged") {
@@ -164,11 +165,11 @@ export class AutoAttackController {
     };
   }
 
-  private isTargetInRange(target: Targetable, mode: Exclude<AutoAttackMode, { weaponClass: "magic" }>) {
+  private isTargetInRange(target: Targetable, mode: AutoAttackMode) {
     const position = this.options.getLocalTilePosition();
     if (!position) return false;
 
-    if (mode.weaponClass === "ranged") {
+    if (mode.weaponClass === "ranged" || mode.weaponClass === "magic") {
       return Math.hypot(position.tileX - target.tileX, position.tileY - target.tileY) <= mode.attackRange;
     }
 

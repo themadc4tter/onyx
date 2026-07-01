@@ -156,6 +156,7 @@ export interface MobMeleeImpactPayload {
 
 export interface MobProjectileFiredPayload {
   projectileId: string;
+  projectileClass: "ranged" | "magic";
   attackerSocketId: string;
   targetId: string;
   originTileX: number;

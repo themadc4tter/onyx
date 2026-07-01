@@ -32,6 +32,9 @@ type AutoAttackProfile =
     }
   | {
       weaponClass: "magic";
+      attackSpeedMs: number;
+      attackRange: number;
+      damage: number;
     };
 
 export type CombatAttackResult =
@@ -43,13 +46,13 @@ export type CombatAttackResult =
     }
   | {
       ok: true;
-      mode: "ranged";
+      mode: "ranged" | "magic";
       damage: number;
       projectile: MobProjectileFiredPayload;
     }
   | {
       ok: false;
-      error: "cooldown" | "invalid_target" | "magic_not_ready" | "no_line_of_sight" | "out_of_range";
+      error: "cooldown" | "invalid_target" | "no_line_of_sight" | "out_of_range";
     };
 
 const UNARMED_ATTACK_SPEED_MS = 1_000;
@@ -68,10 +71,6 @@ export function resolveAutoAttack(context: CombatAttackContext): CombatAttackRes
   }
 
   const profile = getAutoAttackProfile(player.userId);
-  if (profile.weaponClass === "magic") {
-    return { ok: false, error: "magic_not_ready" };
-  }
-
   const lastAttackAt = lastAttackAtByUserId.get(player.userId) ?? 0;
   if (nowMs - lastAttackAt + COOLDOWN_GRACE_MS < profile.attackSpeedMs) {
     return { ok: false, error: "cooldown" };
@@ -109,10 +108,11 @@ export function resolveAutoAttack(context: CombatAttackContext): CombatAttackRes
   lastAttackAtByUserId.set(player.userId, nowMs);
   return {
     ok: true,
-    mode: "ranged",
+    mode: profile.weaponClass,
     damage: profile.damage,
     projectile: {
       projectileId: randomUUID(),
+      projectileClass: profile.weaponClass,
       attackerSocketId: player.socketId,
       targetId: mob.id,
       originTileX: player.position.tileX,
@@ -156,7 +156,12 @@ function getAutoAttackProfile(userId: string): AutoAttackProfile {
   }
 
   if (item.equipment.weaponClass === "magic") {
-    return { weaponClass: "magic" };
+    return {
+      weaponClass: "magic",
+      attackSpeedMs: item.equipment.attackSpeed * 1_000,
+      attackRange: item.equipment.attackRange,
+      damage: getAttackDamage(equipment),
+    };
   }
 
   if (item.equipment.weaponClass === "ranged") {
