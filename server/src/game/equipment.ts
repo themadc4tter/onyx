@@ -1,5 +1,5 @@
-import { addItemToInventory, getInventory, type InventoryState } from "./inventory";
-import { EQUIPMENT_SLOTS, getItemDefinition, type EquipmentSlot } from "@onyx/shared/items";
+import { addItemToInventory, getInventory, type InventorySlot, type InventoryState } from "./inventory";
+import { EQUIPMENT_SLOTS, getItemDefinition, type EquipmentSlot, type ItemDefinition } from "@onyx/shared/items";
 import { supabase } from "../lib/supabase";
 
 export interface EquippedItem {
@@ -133,6 +133,20 @@ function getInvalidResult(userId: string, error: string): EquipmentActionResult 
   };
 }
 
+function isTwoHandedItem(item: ItemDefinition | null) {
+  return item?.type === "equipment" && item.equipment?.slot === "main_hand" && item.equipment.twoHanded;
+}
+
+function getEquippedItemDefinition(equippedItem: EquippedItem | null) {
+  return equippedItem ? getItemDefinition(equippedItem.itemId) : null;
+}
+
+function findEmptyInventorySlotIndexes(inventory: InventoryState, excludingSlotIndex: number) {
+  return inventory.slots
+    .map((slot, slotIndex) => (!slot && slotIndex !== excludingSlotIndex ? slotIndex : null))
+    .filter((slotIndex): slotIndex is number => slotIndex !== null);
+}
+
 export function equipInventoryItem(userId: string, inventorySlotIndex: number): EquipmentActionResult {
   const inventory = getInventory(userId);
   if (!Number.isInteger(inventorySlotIndex) || inventorySlotIndex < 0 || inventorySlotIndex >= inventory.slotCount) {
@@ -155,20 +169,45 @@ export function equipInventoryItem(userId: string, inventorySlotIndex: number): 
 
   const equipment = getEquipment(userId);
   const targetSlot = item.equipment.slot;
-  const previouslyEquipped = equipment.slots[targetSlot];
+  const equippedMainHand = equipment.slots.main_hand;
+  const equippedMainHandItem = getEquippedItemDefinition(equippedMainHand);
+  const slotsToUnequip = new Set<EquipmentSlot>([targetSlot]);
+
+  if (isTwoHandedItem(item)) {
+    slotsToUnequip.add("off_hand");
+  } else if (targetSlot === "off_hand" && isTwoHandedItem(equippedMainHandItem)) {
+    slotsToUnequip.add("main_hand");
+  }
+
+  const unequippedItems = [...slotsToUnequip]
+    .map(slot => equipment.slots[slot])
+    .filter((equippedItem): equippedItem is EquippedItem => Boolean(equippedItem));
+  const emptySlotIndexes = findEmptyInventorySlotIndexes(inventory, inventorySlotIndex);
+
+  if (unequippedItems.length > emptySlotIndexes.length + 1) {
+    return getInvalidResult(userId, "inventory_full");
+  }
 
   equipment.slots[targetSlot] = {
     slot: targetSlot,
     itemId: inventorySlot.itemId,
   };
+  for (const slot of slotsToUnequip) {
+    if (slot !== targetSlot) {
+      equipment.slots[slot] = null;
+    }
+  }
 
-  inventory.slots[inventorySlotIndex] = previouslyEquipped
-    ? {
-        slotIndex: inventorySlotIndex,
-        itemId: previouslyEquipped.itemId,
-        quantity: 1,
-      }
-    : null;
+  const returnedInventoryItems: InventorySlot[] = unequippedItems.map((equippedItem, index) => ({
+    slotIndex: index === 0 ? inventorySlotIndex : emptySlotIndexes[index - 1],
+    itemId: equippedItem.itemId,
+    quantity: 1,
+  }));
+
+  inventory.slots[inventorySlotIndex] = null;
+  for (const returnedInventoryItem of returnedInventoryItems) {
+    inventory.slots[returnedInventoryItem.slotIndex] = returnedInventoryItem;
+  }
 
   return {
     ok: true,
