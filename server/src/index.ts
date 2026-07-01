@@ -4,7 +4,7 @@ import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import cors from "cors";
 import { supabase } from "./lib/supabase";
-import { isTileWalkable, normalizeZoneId, ZONES, type HerbSpawn, type ZoneExit } from "./config/map";
+import { isTileWalkable, normalizeZoneId, ZONES, type ZoneExit } from "./config/map";
 import {
   addItemToInventory,
   deleteInventoryItem,
@@ -39,67 +39,33 @@ import {
   type TradeParticipant,
   type TradeSession,
 } from "./game/trading";
+import type {
+  ChatMessage,
+  ChatSendPayload,
+  EquipmentEquipPayload,
+  EquipmentPayload,
+  EquipmentUnequipPayload,
+  Facing,
+  HerbPickPayload,
+  HerbSpawnState,
+  InventoryDeletePayload,
+  InventoryMovePayload,
+  InventoryPayload,
+  InventorySplitPayload,
+  MoveAck,
+  MovePayload,
+  NormalizedChatPayload,
+  Position,
+  TradeOfferPayload,
+  TradeRemoveOfferPayload,
+  TradeRequestPayload,
+  TradeRequestResponsePayload,
+  TradeSetAcceptedPayload,
+} from "@onyx/shared/protocol";
 
 const PORT = process.env.PORT ?? 3001;
 const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
 
-type Facing = "up" | "down" | "left" | "right";
-type ChatChannel = "zone" | "world";
-interface Position { tileX: number; tileY: number; facing: Facing; }
-interface MovePayload extends Position { seq?: number; }
-interface MoveAck { seq: number; position: Position; }
-interface ChatSendPayload { channel?: ChatChannel; text?: string; }
-interface NormalizedChatPayload { channel: ChatChannel; text: string; }
-interface ChatMessage {
-  id: string;
-  channel: ChatChannel;
-  username: string;
-  text: string;
-  sentAt: string;
-}
-interface HerbSpawnState extends HerbSpawn {
-  available: boolean;
-}
-interface HerbPickPayload {
-  id?: string;
-}
-interface InventoryPayload {
-  slotCount: number;
-  slots: ReturnType<typeof getInventory>["slots"];
-}
-interface InventoryMovePayload {
-  fromSlotIndex?: number;
-  toSlotIndex?: number;
-}
-interface InventorySplitPayload {
-  fromSlotIndex?: number;
-  quantity?: number;
-}
-interface InventoryDeletePayload {
-  slotIndex?: number;
-}
-interface EquipmentPayload {
-  slots: ReturnType<typeof getEquipment>["slots"];
-}
-interface EquipmentEquipPayload {
-  inventorySlotIndex?: number;
-}
-interface EquipmentUnequipPayload {
-  slot?: string;
-}
-interface TradeRequestPayload {
-  targetSocketId?: string;
-}
-interface TradeRequestResponsePayload {
-  requestId?: string;
-}
-interface TradeOfferPayload {
-  slotIndex?: number;
-  quantity?: number;
-}
-interface TradeRemoveOfferPayload {
-  slotIndex?: number;
-}
 interface ConnectedPlayer {
   socketId: string;
   userId: string;
@@ -645,7 +611,7 @@ io.on("connection", async (socket) => {
     cancelTrade(io, player.userId, "cancelled");
   });
 
-  socket.on("trade:setAccepted", async (payload: { accepted?: boolean }) => {
+  socket.on("trade:setAccepted", async (payload: TradeSetAcceptedPayload) => {
     const player = connectedPlayers.get(socket.id);
     if (!player) return;
 

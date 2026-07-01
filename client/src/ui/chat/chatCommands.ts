@@ -1,4 +1,4 @@
-import type { ChatChannel } from "./chatTypes";
+import type { ChatChannel } from "@onyx/shared/protocol";
 
 export type ParsedChatInput =
   | { kind: "send"; channel: ChatChannel; text: string }
@@ -28,4 +28,3 @@ export function parseChatInput(rawText: string, activeChannel: ChatChannel): Par
 
   return { kind: "system-message", text: `Unknown chat command: /${command}` };
 }
-

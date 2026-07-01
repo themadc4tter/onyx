@@ -2,14 +2,7 @@ import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { TILED_OBJECT_LAYER, TILE_SIZE } from "../config/map";
 import type { LocalPlayerController } from "../player/LocalPlayerController";
-
-export interface HerbSpawnState {
-  id: string;
-  tileX: number;
-  tileY: number;
-  itemId: string;
-  available: boolean;
-}
+import type { HerbPickedPayload, HerbSpawnState, HerbStatePayload } from "@onyx/shared/protocol";
 
 interface HerbSpawn {
   id: string;
@@ -90,7 +83,7 @@ export class HerbSpawnerManager {
     this.scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
   }
 
-  private handleHerbState = (state: { id: string; available: boolean }) => {
+  private handleHerbState = (state: HerbStatePayload) => {
     const spawn = this.spawns.find(candidate => candidate.id === state.id);
     if (!spawn) return;
 
@@ -109,7 +102,7 @@ export class HerbSpawnerManager {
     });
   };
 
-  private handleHerbPicked = (payload: { itemId?: string; itemName?: string }) => {
+  private handleHerbPicked = (payload: HerbPickedPayload) => {
     this.addSystemMessage(`You picked 1 ${payload.itemName ?? payload.itemId ?? HERB_ITEM_NAME}.`);
   };
 

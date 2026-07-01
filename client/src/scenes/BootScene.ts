@@ -1,26 +1,9 @@
 import Phaser from "phaser";
 import { io, Socket } from "socket.io-client";
 import { supabase } from "../lib/supabase";
-import type { EquipmentState } from "../game/equipment";
-import type { InventoryState } from "../game/inventory";
-import type { Facing, RemotePlayerData } from "../types";
-import type { HerbSpawnState } from "../world/HerbSpawnerManager";
+import type { ProfilePayload, RemotePlayerData } from "@onyx/shared/protocol";
 
 const SERVER_URL = (import.meta.env.VITE_SERVER_URL as string) ?? "http://localhost:3001";
-
-interface Profile {
-  id: string;
-  username: string;
-}
-
-interface ProfileEvent {
-  profile: Profile;
-  zoneId: string;
-  position: { tileX: number; tileY: number; facing: Facing };
-  herbSpawns?: HerbSpawnState[];
-  inventory?: InventoryState;
-  equipment?: EquipmentState;
-}
 
 export class BootScene extends Phaser.Scene {
   private socket!: Socket;
@@ -64,7 +47,7 @@ export class BootScene extends Phaser.Scene {
       statusText.setText("Connected — entering world...").setColor("#00ff88");
     });
 
-    this.socket.on("profile", (data: ProfileEvent) => {
+    this.socket.on("profile", (data: ProfilePayload) => {
       this.addLogoutButton();
 
       this.time.delayedCall(600, () => {

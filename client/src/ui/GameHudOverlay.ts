@@ -3,6 +3,15 @@ import type { Socket } from "socket.io-client";
 import { createEmptyEquipment, EQUIPMENT_SLOTS, type EquipmentSlot, type EquipmentState } from "../game/equipment";
 import { createEmptyInventory, type InventoryState } from "../game/inventory";
 import { getItemDefinition } from "@onyx/shared/items";
+import type {
+  TradeCancelledPayload,
+  TradeDeclinedPayload,
+  TradeErrorPayload,
+  TradeOfferItem,
+  TradeRequestReceivedPayload,
+  TradeRequestSentPayload,
+  TradeStatePayload,
+} from "@onyx/shared/protocol";
 import { HudChat } from "./chat/HudChat";
 
 type PanelId = "skills" | "inventory" | "equipment" | "social" | "settings";
@@ -31,21 +40,6 @@ interface SocialPlayer {
   socketId: string;
   username: string;
   position: TilePosition;
-}
-
-interface TradeOfferItem {
-  slotIndex: number;
-  itemId: string;
-  quantity: number;
-}
-
-interface TradeStatePayload {
-  id: string;
-  partnerUsername: string;
-  ownOffer: TradeOfferItem[];
-  otherOffer: TradeOfferItem[];
-  ownAccepted: boolean;
-  otherAccepted: boolean;
 }
 
 const HUD_LAYER_ID = "game-hud-layer";
@@ -1598,7 +1592,7 @@ export class GameHudOverlay {
     this.socialRefreshTimer = null;
   }
 
-  private handleTradeRequest = (payload: { requestId?: string; fromUsername?: string }) => {
+  private handleTradeRequest = (payload: TradeRequestReceivedPayload) => {
     if (!payload?.requestId || !payload.fromUsername) return;
 
     const accepted = window.confirm(`${payload.fromUsername} wants to trade.`);
@@ -1607,11 +1601,11 @@ export class GameHudOverlay {
     });
   };
 
-  private handleTradeRequestSent = (payload: { targetUsername?: string }) => {
+  private handleTradeRequestSent = (payload: TradeRequestSentPayload) => {
     this.addSystemMessage(`Trade request sent to ${payload.targetUsername ?? "player"}.`);
   };
 
-  private handleTradeDeclined = (payload: { byUsername?: string }) => {
+  private handleTradeDeclined = (payload: TradeDeclinedPayload) => {
     this.addSystemMessage(`${payload.byUsername ?? "Player"} declined your trade request.`);
   };
 
@@ -1624,7 +1618,7 @@ export class GameHudOverlay {
     }
   };
 
-  private handleTradeCancelled = (payload: { reason?: string }) => {
+  private handleTradeCancelled = (payload: TradeCancelledPayload) => {
     this.tradeState = null;
     this.renderTradeWindow();
     this.addSystemMessage(this.getTradeCancelledMessage(payload?.reason));
@@ -1642,7 +1636,7 @@ export class GameHudOverlay {
     }
   };
 
-  private handleTradeError = (payload: { message?: string }) => {
+  private handleTradeError = (payload: TradeErrorPayload) => {
     this.addSystemMessage(payload?.message ?? "Trade action failed.");
   };
 

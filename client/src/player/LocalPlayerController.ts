@@ -2,18 +2,13 @@ import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { TILE_SIZE } from "../config/map";
 import type { EquipmentState } from "../game/equipment";
-import type { Facing, Position } from "../types";
+import type { Facing, MoveAck, Position } from "@onyx/shared/protocol";
 import { WorldLabelOverlay } from "../ui/WorldLabelOverlay";
 import { EquipmentOverlayRenderer } from "./EquipmentOverlayRenderer";
 import { PLAYER_SPRITE_KEY } from "./playerAssets";
 
 interface PredictedMove extends Position {
   seq: number;
-}
-
-export interface MoveAck {
-  seq: number;
-  position: Position;
 }
 
 const NAME_LABEL_FONT_SIZE = 13;

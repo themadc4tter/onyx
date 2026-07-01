@@ -1,13 +1,10 @@
 import { exchangeInventoryItems, getInventory, type InventoryItemQuantity } from "./inventory";
+import type { TradeOfferItem, TradeStatePayload } from "@onyx/shared/protocol";
 
 export interface TradeParticipant {
   userId: string;
   socketId: string;
   username: string;
-}
-
-export interface TradeOfferItem extends InventoryItemQuantity {
-  slotIndex: number;
 }
 
 export interface TradeRequest {
@@ -25,15 +22,6 @@ export interface TradeSession {
   accepted: Record<string, boolean>;
   createdAt: number;
   updatedAt: number;
-}
-
-export interface TradeStatePayload {
-  id: string;
-  partnerUsername: string;
-  ownOffer: TradeOfferItem[];
-  otherOffer: TradeOfferItem[];
-  ownAccepted: boolean;
-  otherAccepted: boolean;
 }
 
 export interface TradeActionResult {

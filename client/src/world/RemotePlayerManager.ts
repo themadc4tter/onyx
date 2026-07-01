@@ -1,7 +1,6 @@
 import Phaser from "phaser";
 import { TILE_SIZE } from "../config/map";
-import type { EquipmentState } from "../game/equipment";
-import type { Facing, Position, RemotePlayerData } from "../types";
+import type { EquipmentPayload, Facing, Position, RemotePlayerData } from "@onyx/shared/protocol";
 import { WorldLabelOverlay, type WorldLabelHandle } from "../ui/WorldLabelOverlay";
 import { EquipmentOverlayRenderer } from "../player/EquipmentOverlayRenderer";
 import { PLAYER_SPRITE_KEY } from "../player/playerAssets";
@@ -75,7 +74,7 @@ export class RemotePlayerManager {
     this.playNextMove(remotePlayer);
   }
 
-  updateEquipment(socketId: string, equipment: EquipmentState) {
+  updateEquipment(socketId: string, equipment: EquipmentPayload) {
     this.remotePlayers.get(socketId)?.equipmentOverlays.setEquipment(equipment);
   }
 

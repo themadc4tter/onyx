@@ -1,9 +1,20 @@
 import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { DEFAULT_ZONE_ID, getZoneMapConfig, TILESETS, ZONE_MAPS } from "../config/map";
-import { createEmptyEquipment, type EquipmentState } from "../game/equipment";
-import type { InventoryState } from "../game/inventory";
-import type { Facing, Position, RemotePlayerData } from "../types";
+import { createEmptyEquipment } from "../game/equipment";
+import type {
+  EquipmentPayload,
+  HerbSpawnState,
+  InventoryPayload,
+  MoveAck,
+  PlayerEquipmentChangedPayload,
+  PlayerLeftPayload,
+  PlayerMovedPayload,
+  PlayerProfile,
+  Position,
+  RemotePlayerData,
+  ZoneChangedPayload,
+} from "@onyx/shared/protocol";
 import { supabase } from "../lib/supabase";
 import { NpcRenderer } from "../world/NpcRenderer";
 import { getNpcsForZone } from "../world/npcs";
@@ -15,15 +26,9 @@ import {
   HerbSpawnerManager,
   HERB_SPRITE_ASSET_KEY,
   HERB_SPRITE_URL,
-  type HerbSpawnState,
 } from "../world/HerbSpawnerManager";
-import { LocalPlayerController, type MoveAck } from "../player/LocalPlayerController";
+import { LocalPlayerController } from "../player/LocalPlayerController";
 import { PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL } from "../player/playerAssets";
-
-interface Profile {
-  id: string;
-  username: string;
-}
 
 const CAMERA_ZOOM = 2;
 const MUSIC_VOLUME = 0.35;
@@ -35,14 +40,14 @@ function readMusicEnabledSetting() {
 
 export class GameScene extends Phaser.Scene {
   private socket!: Socket;
-  private profile!: Profile;
+  private profile!: PlayerProfile;
   private initPlayers: RemotePlayerData[] = [];
   private socialPlayers: RemotePlayerData[] = [];
   private zoneId: string = DEFAULT_ZONE_ID;
   private startPos: Position | null = null;
   private herbSpawnStates: HerbSpawnState[] = [];
-  private inventory: InventoryState | undefined;
-  private equipment: EquipmentState | undefined;
+  private inventory: InventoryPayload | undefined;
+  private equipment: EquipmentPayload | undefined;
   private mapKey = getZoneMapConfig(DEFAULT_ZONE_ID).mapKey;
 
   private map!: Phaser.Tilemaps.Tilemap;
@@ -64,13 +69,13 @@ export class GameScene extends Phaser.Scene {
 
   init(data: {
     socket: Socket;
-    profile: Profile;
+    profile: PlayerProfile;
     initPlayers: RemotePlayerData[];
     zoneId?: string;
     startPos?: Position;
     herbSpawns?: HerbSpawnState[];
-    inventory?: InventoryState;
-    equipment?: EquipmentState;
+    inventory?: InventoryPayload;
+    equipment?: EquipmentPayload;
   }) {
     this.socket = data.socket;
     this.profile = data.profile;
@@ -264,7 +269,7 @@ export class GameScene extends Phaser.Scene {
       });
     });
 
-    this.socket.on("player:moved", (data: { socketId: string; tileX: number; tileY: number; facing: Facing }) => {
+    this.socket.on("player:moved", (data: PlayerMovedPayload) => {
       this.remotePlayers.move(data.socketId, data.tileX, data.tileY, data.facing);
       this.socialPlayers = this.socialPlayers.map(player =>
         player.socketId === data.socketId
@@ -284,29 +289,22 @@ export class GameScene extends Phaser.Scene {
       });
     });
 
-    this.socket.on("player:equipmentChanged", (data: { socketId: string; equipment: EquipmentState }) => {
+    this.socket.on("player:equipmentChanged", (data: PlayerEquipmentChangedPayload) => {
       this.remotePlayers.updateEquipment(data.socketId, data.equipment);
     });
 
-    this.socket.on("equipment:changed", (equipment: EquipmentState) => {
+    this.socket.on("equipment:changed", (equipment: EquipmentPayload) => {
       this.equipment = equipment;
       this.player.setEquipment(equipment);
     });
 
-    this.socket.on("player:left", (data: { socketId: string }) => {
+    this.socket.on("player:left", (data: PlayerLeftPayload) => {
       this.remotePlayers.remove(data.socketId);
       this.socialPlayers = this.socialPlayers.filter(player => player.socketId !== data.socketId);
       this.hudOverlay?.removeSocialPlayer(data.socketId);
     });
 
-    this.socket.on("zone:changed", (payload: {
-      zoneId: string;
-      position: Position;
-      initPlayers: RemotePlayerData[];
-      herbSpawns?: HerbSpawnState[];
-      inventory?: InventoryState;
-      equipment?: EquipmentState;
-    }) => {
+    this.socket.on("zone:changed", (payload: ZoneChangedPayload) => {
       this.socket.removeAllListeners();
       this.scene.restart({
         socket: this.socket,

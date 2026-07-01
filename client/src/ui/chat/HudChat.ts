@@ -1,7 +1,7 @@
 import type { Socket } from "socket.io-client";
 import { parseChatInput } from "./chatCommands";
 import { getChatHistory, hasChatHistory, MAX_CHAT_MESSAGES, pushChatMessage } from "./chatHistory";
-import type { ChatChannel, ChatMessage } from "./chatTypes";
+import type { ChatChannel, ChatErrorPayload, ChatMessage } from "@onyx/shared/protocol";
 
 export class HudChat {
   readonly element: HTMLElement;
@@ -126,7 +126,7 @@ export class HudChat {
     this.addMessage(message);
   };
 
-  private handleChatError = (payload: { message?: string }) => {
+  private handleChatError = (payload: ChatErrorPayload) => {
     this.addSystemMessage(payload.message ?? "Message could not be sent.");
   };
 

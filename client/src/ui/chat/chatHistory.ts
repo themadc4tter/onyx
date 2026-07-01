@@ -1,4 +1,4 @@
-import type { ChatMessage } from "./chatTypes";
+import type { ChatMessage } from "@onyx/shared/protocol";
 
 export const MAX_CHAT_MESSAGES = 80;
 
@@ -18,4 +18,3 @@ export function pushChatMessage(message: ChatMessage) {
     chatHistory.shift();
   }
 }
-
