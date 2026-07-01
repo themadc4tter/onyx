@@ -29,6 +29,8 @@ import {
   HERB_SPRITE_URL,
 } from "../world/HerbSpawnerManager";
 import { MobSpawnerManager, MOB_SPRITE_ASSETS } from "../world/MobSpawnerManager";
+import { TargetingManager } from "../world/TargetingManager";
+import { AutoAttackController } from "../world/AutoAttackController";
 import { LocalPlayerController } from "../player/LocalPlayerController";
 import { PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL } from "../player/playerAssets";
 
@@ -64,6 +66,8 @@ export class GameScene extends Phaser.Scene {
   private worldMapBuilder!: WorldMapBuilder;
   private herbSpawners!: HerbSpawnerManager;
   private mobSpawners!: MobSpawnerManager;
+  private targeting!: TargetingManager;
+  private autoAttack!: AutoAttackController;
   private currentMusic: Phaser.Sound.BaseSound | null = null;
   private musicEnabled = readMusicEnabledSetting();
 
@@ -165,17 +169,25 @@ export class GameScene extends Phaser.Scene {
         },
       })),
       getLocalTilePosition: () => this.player.getTilePosition(),
-      onClearTarget: () => this.mobSpawners?.clearTarget(),
+      onClearTarget: () => this.targeting?.clearTarget(),
     });
     this.herbSpawners = new HerbSpawnerManager(this, this.socket, this.map, this.player, message => {
       this.hudOverlay.addSystemMessage(message);
     }, this.herbSpawnStates);
+    this.targeting = new TargetingManager(this, {
+      onTargetChanged: target => this.hudOverlay.setTargetProfile(target),
+    });
     this.mobSpawners = new MobSpawnerManager(this, this.socket, this.labelOverlay, {
       initialStates: this.mobSpawnStates,
-      onTargetChanged: target => this.hudOverlay.setTargetProfile(target),
+      onMobClicked: mob => this.targeting.selectTarget(mob),
+      onMobChanged: mob => this.targeting.refreshTarget(mob),
+    });
+    this.autoAttack = new AutoAttackController(this, this.socket, {
+      getTarget: () => this.targeting.getTarget(),
       getLocalTilePosition: () => this.player.getTilePosition(),
       getLocalWorldPosition: () => ({ x: this.player.container.x, y: this.player.container.y }),
       isLocalPlayerMoving: () => this.player.isMoving(),
+      onActiveChanged: active => this.targeting.setAutoAttackActive(active),
     });
   }
 
@@ -183,7 +195,8 @@ export class GameScene extends Phaser.Scene {
     const textInputBlocked = this.hudOverlay?.isTextInputFocused() ?? false;
     this.player.update(textInputBlocked);
     this.herbSpawners?.update(textInputBlocked);
-    this.mobSpawners?.update(textInputBlocked);
+    this.autoAttack?.update(textInputBlocked);
+    this.targeting?.update();
   }
 
   private showLoadingIndicator() {
