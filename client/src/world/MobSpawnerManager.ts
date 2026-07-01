@@ -4,6 +4,7 @@ import { getMobDefinition, MOB_DEFINITIONS } from "@onyx/shared/mobs";
 import type { MobSpawnState, MobStatePayload } from "@onyx/shared/protocol";
 import { TILE_SIZE } from "../config/map";
 import { WorldLabelOverlay, type WorldLabelHandle } from "../ui/WorldLabelOverlay";
+import { AutoAttackSlashEffect } from "./AutoAttackSlashEffect";
 
 interface RenderedMob extends MobSpawnState {
   container: Phaser.GameObjects.Container;
@@ -24,6 +25,7 @@ interface MobSpawnerManagerOptions {
   initialStates?: MobSpawnState[];
   onTargetChanged?: (target: MobTargetProfile | null) => void;
   getLocalTilePosition?: () => { tileX: number; tileY: number };
+  getLocalWorldPosition?: () => { x: number; y: number };
   isLocalPlayerMoving?: () => boolean;
 }
 
@@ -46,7 +48,9 @@ export class MobSpawnerManager {
   private selectedMobId: string | null = null;
   private onTargetChanged: (target: MobTargetProfile | null) => void;
   private getLocalTilePosition: () => { tileX: number; tileY: number } | null;
+  private getLocalWorldPosition: () => { x: number; y: number } | null;
   private isLocalPlayerMoving: () => boolean;
+  private slashEffect: AutoAttackSlashEffect;
   private autoAttackEnabled = false;
   private windupStartedAt: number | null = null;
 
@@ -58,7 +62,9 @@ export class MobSpawnerManager {
   ) {
     this.onTargetChanged = options.onTargetChanged ?? (() => {});
     this.getLocalTilePosition = options.getLocalTilePosition ?? (() => null);
+    this.getLocalWorldPosition = options.getLocalWorldPosition ?? (() => null);
     this.isLocalPlayerMoving = options.isLocalPlayerMoving ?? (() => false);
+    this.slashEffect = new AutoAttackSlashEffect(this.scene);
     this.testDamageKey = this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.T);
     this.createMobs(options.initialStates ?? []);
     this.bindServerEvents();
@@ -236,6 +242,14 @@ export class MobSpawnerManager {
 
   private performAutoAttack(target: RenderedMob) {
     if (!target.alive || !this.isTargetInAutoAttackRange(target)) return;
+
+    const origin = this.getLocalWorldPosition();
+    if (origin) {
+      this.slashEffect.play(
+        new Phaser.Math.Vector2(origin.x, origin.y),
+        new Phaser.Math.Vector2(target.container.x, target.container.y),
+      );
+    }
 
     this.socket.emit("mob:testDamage", { id: target.id });
   }

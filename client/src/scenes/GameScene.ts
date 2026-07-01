@@ -174,6 +174,7 @@ export class GameScene extends Phaser.Scene {
       initialStates: this.mobSpawnStates,
       onTargetChanged: target => this.hudOverlay.setTargetProfile(target),
       getLocalTilePosition: () => this.player.getTilePosition(),
+      getLocalWorldPosition: () => ({ x: this.player.container.x, y: this.player.container.y }),
       isLocalPlayerMoving: () => this.player.isMoving(),
     });
   }
