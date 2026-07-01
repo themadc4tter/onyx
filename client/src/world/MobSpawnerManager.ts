@@ -10,7 +10,7 @@ interface RenderedMob extends MobSpawnState {
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Image;
   hpFill: Phaser.GameObjects.Rectangle;
-  selection: Phaser.GameObjects.Rectangle;
+  selection: Phaser.GameObjects.Graphics;
   nameLabel: WorldLabelHandle;
 }
 
@@ -34,8 +34,15 @@ const HP_BAR_WIDTH = 18;
 const HP_BAR_HEIGHT = 3;
 const AUTO_ATTACK_WINDUP_MS = 1_000;
 const AUTO_ATTACK_RANGE_TILES = 1;
-const TARGET_SELECTION_COLOR = 0xffe07a;
-const AUTO_ATTACK_SELECTION_COLOR = 0xd33d3d;
+const TARGET_RETICLE_CORE_COLOR = 0xffe08a;
+const TARGET_RETICLE_GLOW_START = 0xffb84a;
+const TARGET_RETICLE_GLOW_END = 0xfff0bc;
+const AUTO_ATTACK_RETICLE_CORE_COLOR = 0xff8a2a;
+const AUTO_ATTACK_RETICLE_GLOW_START = 0xff6a1f;
+const AUTO_ATTACK_RETICLE_GLOW_END = 0xff2f2f;
+const TARGET_RETICLE_SIZE = TILE_SIZE + 5;
+const TARGET_RETICLE_CORNER_LENGTH = 8;
+const TARGET_RETICLE_PULSE_MS = 1_400;
 
 export const MOB_SPRITE_ASSETS = Object.values(MOB_DEFINITIONS).map(mob => ({
   key: mob.spriteKey,
@@ -76,6 +83,7 @@ export class MobSpawnerManager {
     }
 
     this.updateAutoAttack();
+    this.updateSelectedReticle();
   }
 
   clearTarget() {
@@ -97,10 +105,7 @@ export class MobSpawnerManager {
     const definition = getMobDefinition(state.mobId);
     if (!definition || this.mobs.has(state.id)) return null;
 
-    const selection = this.scene.add
-      .rectangle(0, 0, TILE_SIZE + 4, TILE_SIZE + 4)
-      .setStrokeStyle(1, TARGET_SELECTION_COLOR, 0.9)
-      .setVisible(false);
+    const selection = this.scene.add.graphics().setVisible(false);
     const sprite = this.scene.add.image(0, 0, definition.spriteKey);
     const hpBackground = this.scene.add
       .rectangle(-HP_BAR_WIDTH / 2, -TILE_SIZE / 2 - 5, HP_BAR_WIDTH, HP_BAR_HEIGHT, 0x391616)
@@ -268,9 +273,65 @@ export class MobSpawnerManager {
     const hpRatio = mob.maxHp > 0 ? Phaser.Math.Clamp(mob.hp / mob.maxHp, 0, 1) : 0;
     mob.hpFill.setDisplaySize(Math.max(0.1, HP_BAR_WIDTH * hpRatio), HP_BAR_HEIGHT);
     const isSelected = mob.alive && this.selectedMobId === mob.id;
-    const selectionColor = this.autoAttackEnabled && isSelected ? AUTO_ATTACK_SELECTION_COLOR : TARGET_SELECTION_COLOR;
-    mob.selection.setStrokeStyle(1, selectionColor, 0.9).setVisible(isSelected);
+    mob.selection.setVisible(isSelected);
+    if (isSelected) this.drawTargetReticle(mob.selection);
     mob.nameLabel.setVisible(mob.alive);
+  }
+
+  private updateSelectedReticle() {
+    const mob = this.getSelectedAliveMob();
+    if (!mob) return;
+
+    this.drawTargetReticle(mob.selection);
+  }
+
+  private drawTargetReticle(reticle: Phaser.GameObjects.Graphics) {
+    const pulse = (Math.sin((this.scene.time.now / TARGET_RETICLE_PULSE_MS) * Math.PI * 2) + 1) / 2;
+    const glowColor = this.autoAttackEnabled
+      ? this.interpolateColor(AUTO_ATTACK_RETICLE_GLOW_START, AUTO_ATTACK_RETICLE_GLOW_END, pulse)
+      : this.interpolateColor(TARGET_RETICLE_GLOW_START, TARGET_RETICLE_GLOW_END, pulse);
+    const coreColor = this.autoAttackEnabled ? AUTO_ATTACK_RETICLE_CORE_COLOR : TARGET_RETICLE_CORE_COLOR;
+    const glowAlpha = this.autoAttackEnabled
+      ? Phaser.Math.Linear(0.36, 0.72, pulse)
+      : Phaser.Math.Linear(0.24, 0.5, pulse);
+
+    reticle.clear();
+    this.strokeTargetReticle(reticle, 4, glowColor, glowAlpha);
+    this.strokeTargetReticle(reticle, 1, coreColor, 0.96);
+  }
+
+  private strokeTargetReticle(reticle: Phaser.GameObjects.Graphics, lineWidth: number, color: number, alpha: number) {
+    const halfSize = TARGET_RETICLE_SIZE / 2;
+    const cornerLength = TARGET_RETICLE_CORNER_LENGTH;
+    const left = -halfSize;
+    const right = halfSize;
+    const top = -halfSize;
+    const bottom = halfSize;
+
+    reticle.lineStyle(lineWidth, color, alpha);
+    reticle.beginPath();
+    reticle.moveTo(left, top + cornerLength);
+    reticle.lineTo(left, top);
+    reticle.lineTo(left + cornerLength, top);
+    reticle.moveTo(right - cornerLength, top);
+    reticle.lineTo(right, top);
+    reticle.lineTo(right, top + cornerLength);
+    reticle.moveTo(right, bottom - cornerLength);
+    reticle.lineTo(right, bottom);
+    reticle.lineTo(right - cornerLength, bottom);
+    reticle.moveTo(left + cornerLength, bottom);
+    reticle.lineTo(left, bottom);
+    reticle.lineTo(left, bottom - cornerLength);
+    reticle.strokePath();
+  }
+
+  private interpolateColor(from: number, to: number, progress: number) {
+    const inverseProgress = 1 - progress;
+    const red = Math.round(((from >> 16) & 0xff) * inverseProgress + ((to >> 16) & 0xff) * progress);
+    const green = Math.round(((from >> 8) & 0xff) * inverseProgress + ((to >> 8) & 0xff) * progress);
+    const blue = Math.round((from & 0xff) * inverseProgress + (to & 0xff) * progress);
+
+    return Phaser.Display.Color.GetColor(red, green, blue);
   }
 
   private refreshMobVisuals() {

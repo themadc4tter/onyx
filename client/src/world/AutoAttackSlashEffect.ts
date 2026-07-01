@@ -12,10 +12,11 @@ export class AutoAttackSlashEffect {
 
   play(origin: Phaser.Math.Vector2, target: Phaser.Math.Vector2) {
     const angleToTarget = Phaser.Math.Angle.Between(origin.x, origin.y, target.x, target.y);
+    const swingDirection = Math.random() < 0.5 ? -1 : 1;
     const container = this.scene.add
       .container(origin.x, origin.y)
       .setDepth(SLASH_DEPTH)
-      .setRotation(angleToTarget - SWING_ARC_RADIANS / 2)
+      .setRotation(angleToTarget - (SWING_ARC_RADIANS / 2) * swingDirection)
       .setAlpha(0.95);
 
     const glow = this.createCrescent(0xffffff, 0.26, SLASH_RADIUS + 2, SLASH_THICKNESS + 3);
@@ -26,7 +27,7 @@ export class AutoAttackSlashEffect {
 
     this.scene.tweens.add({
       targets: container,
-      rotation: angleToTarget + SWING_ARC_RADIANS / 2,
+      rotation: angleToTarget + (SWING_ARC_RADIANS / 2) * swingDirection,
       alpha: 0,
       scaleX: 1.08,
       scaleY: 1.08,
