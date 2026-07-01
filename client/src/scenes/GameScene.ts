@@ -177,7 +177,7 @@ export class GameScene extends Phaser.Scene {
     this.targeting = new TargetingManager(this, {
       onTargetChanged: target => this.hudOverlay.setTargetProfile(target),
     });
-    this.mobSpawners = new MobSpawnerManager(this, this.socket, this.labelOverlay, {
+    this.mobSpawners = new MobSpawnerManager(this, this.socket, {
       initialStates: this.mobSpawnStates,
       onMobClicked: mob => this.targeting.selectTarget(mob),
       onMobChanged: mob => this.targeting.refreshTarget(mob),

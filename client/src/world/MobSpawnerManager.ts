@@ -3,7 +3,6 @@ import type { Socket } from "socket.io-client";
 import { getMobDefinition, MOB_DEFINITIONS } from "@onyx/shared/mobs";
 import type { MobSpawnState, MobStatePayload } from "@onyx/shared/protocol";
 import { TILE_SIZE } from "../config/map";
-import { WorldLabelOverlay, type WorldLabelHandle } from "../ui/WorldLabelOverlay";
 import type { Targetable } from "./TargetingManager";
 
 interface RenderedMob extends MobSpawnState, Targetable {
@@ -11,8 +10,8 @@ interface RenderedMob extends MobSpawnState, Targetable {
   name: string;
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Image;
+  hpContainer: Phaser.GameObjects.Container;
   hpFill: Phaser.GameObjects.Rectangle;
-  nameLabel: WorldLabelHandle;
 }
 
 interface MobSpawnerManagerOptions {
@@ -22,6 +21,7 @@ interface MobSpawnerManagerOptions {
 }
 
 const MOB_DEPTH = 17;
+const MOB_STATUS_DEPTH = 23;
 const HP_BAR_WIDTH = 18;
 const HP_BAR_HEIGHT = 3;
 
@@ -38,7 +38,6 @@ export class MobSpawnerManager {
   constructor(
     private scene: Phaser.Scene,
     private socket: Socket,
-    private labelOverlay: WorldLabelOverlay,
     options: MobSpawnerManagerOptions = {},
   ) {
     this.onMobClicked = options.onMobClicked ?? (() => {});
@@ -64,24 +63,23 @@ export class MobSpawnerManager {
     const hpFill = this.scene.add
       .rectangle(-HP_BAR_WIDTH / 2, -TILE_SIZE / 2 - 5, HP_BAR_WIDTH, HP_BAR_HEIGHT, 0xc94f4f)
       .setOrigin(0, 0.5);
+    const hpContainer = this.scene.add
+      .container(
+        state.tileX * TILE_SIZE + TILE_SIZE / 2,
+        state.tileY * TILE_SIZE + TILE_SIZE / 2,
+        [hpBackground, hpFill],
+      )
+      .setDepth(MOB_STATUS_DEPTH)
+      .setVisible(state.alive);
 
     const container = this.scene.add
       .container(
         state.tileX * TILE_SIZE + TILE_SIZE / 2,
         state.tileY * TILE_SIZE + TILE_SIZE / 2,
-        [sprite, hpBackground, hpFill],
+        [sprite],
       )
       .setDepth(MOB_DEPTH)
       .setVisible(state.alive);
-    const nameLabel = this.labelOverlay.addLabel({
-      target: container,
-      text: definition.name,
-      offsetY: -TILE_SIZE / 2 - 7,
-      color: "#ffffff",
-      fontSize: 13,
-      className: "world-label-name",
-    });
-    nameLabel.setVisible(state.alive);
 
     const mob: RenderedMob = {
       ...state,
@@ -89,8 +87,8 @@ export class MobSpawnerManager {
       name: definition.name,
       container,
       sprite,
+      hpContainer,
       hpFill,
-      nameLabel,
     };
 
     sprite.setInteractive({ useHandCursor: true });
@@ -113,24 +111,29 @@ export class MobSpawnerManager {
 
     const wasAlive = mob.alive;
     Object.assign(mob, state);
+    this.syncMobPosition(mob);
     this.updateMobVisuals(mob);
     this.onMobChanged(mob);
 
     if (wasAlive && !state.alive) {
       this.scene.tweens.add({
-        targets: mob.container,
+        targets: [mob.container, mob.hpContainer],
         alpha: 0,
         duration: 200,
         ease: "Sine.easeOut",
-        onComplete: () => mob.container.setVisible(false),
+        onComplete: () => {
+          mob.container.setVisible(false);
+          mob.hpContainer.setVisible(false);
+        },
       });
       return;
     }
 
     if (!wasAlive && state.alive) {
       mob.container.setAlpha(0).setVisible(true);
+      mob.hpContainer.setAlpha(0).setVisible(true);
       this.scene.tweens.add({
-        targets: mob.container,
+        targets: [mob.container, mob.hpContainer],
         alpha: 1,
         duration: 250,
         ease: "Sine.easeOut",
@@ -141,13 +144,20 @@ export class MobSpawnerManager {
   private updateMobVisuals(mob: RenderedMob) {
     const hpRatio = mob.maxHp > 0 ? Phaser.Math.Clamp(mob.hp / mob.maxHp, 0, 1) : 0;
     mob.hpFill.setDisplaySize(Math.max(0.1, HP_BAR_WIDTH * hpRatio), HP_BAR_HEIGHT);
-    mob.nameLabel.setVisible(mob.alive);
+    mob.hpContainer.setVisible(mob.alive);
+  }
+
+  private syncMobPosition(mob: RenderedMob) {
+    const x = mob.tileX * TILE_SIZE + TILE_SIZE / 2;
+    const y = mob.tileY * TILE_SIZE + TILE_SIZE / 2;
+    mob.container.setPosition(x, y);
+    mob.hpContainer.setPosition(x, y);
   }
 
   private destroy = () => {
     this.socket.off("mob:state", this.handleMobState);
     for (const mob of this.mobs.values()) {
-      mob.nameLabel.destroy();
+      mob.hpContainer.destroy(true);
       mob.container.destroy(true);
     }
     this.mobs.clear();
