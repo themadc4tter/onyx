@@ -64,6 +64,21 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
       },
     },
   },
+  wooden_buckler: {
+    id: "wooden_buckler",
+    name: "Wooden Buckler",
+    description: "A weak shield.",
+    iconUrl: "assets/equipment/off_hand/shield1_1_1.png",
+    maxStack: 1,
+    rarity: "common",
+    type: "equipment",
+    equipment: {
+      slot: "off_hand",
+      stats: {
+        attack_damage: 3,
+      },
+    },
+  },
 };
 
 export function getItemDefinition(itemId: string) {
