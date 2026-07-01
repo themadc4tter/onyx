@@ -11,10 +11,21 @@ export interface EquipmentStats {
   gathering?: number;
 }
 
-export interface EquipmentDefinition {
-  slot: EquipmentSlot;
+type NonMainHandEquipmentSlot = Exclude<EquipmentSlot, "main_hand">;
+
+interface BaseEquipmentDefinition {
   stats: EquipmentStats;
 }
+
+export type EquipmentDefinition =
+  | (BaseEquipmentDefinition & {
+      slot: "main_hand";
+      twoHanded: boolean;
+    })
+  | (BaseEquipmentDefinition & {
+      slot: NonMainHandEquipmentSlot;
+      twoHanded?: never;
+    });
 
 export interface ItemDefinition {
   id: string;
@@ -44,6 +55,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
     type: "equipment",
     equipment: {
       slot: "main_hand",
+      twoHanded: true,
       stats: {
         attack_damage: 8,
       },
