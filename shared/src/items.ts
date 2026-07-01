@@ -19,18 +19,31 @@ interface BaseEquipmentDefinition {
   stats: EquipmentStats;
 }
 
+type MainHandEquipmentDefinition = BaseEquipmentDefinition & {
+  slot: "main_hand";
+  twoHanded: boolean;
+  weaponType: WeaponType;
+  attackSpeed: number;
+} & (
+  | {
+      weaponClass: "melee";
+      attackRange?: never;
+    }
+  | {
+      weaponClass: "ranged" | "magic";
+      attackRange: number;
+    }
+);
+
 export type EquipmentDefinition =
-  | (BaseEquipmentDefinition & {
-      slot: "main_hand";
-      twoHanded: boolean;
-      weaponClass: WeaponClass;
-      weaponType: WeaponType;
-    })
+  | MainHandEquipmentDefinition
   | (BaseEquipmentDefinition & {
       slot: NonMainHandEquipmentSlot;
       twoHanded?: never;
       weaponClass?: never;
       weaponType?: never;
+      attackSpeed?: never;
+      attackRange?: never;
     });
 
 export interface ItemDefinition {
@@ -67,6 +80,8 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
       twoHanded: true,
       weaponClass: "magic",
       weaponType: "staff",
+      attackSpeed: 2.8,
+      attackRange: 4,
       stats: {
         attack_damage: 8,
       },
@@ -85,6 +100,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
       twoHanded: false,
       weaponClass: "melee",
       weaponType: "sword",
+      attackSpeed: 1.5,
       stats: {
         attack_damage: 4,
       },
@@ -103,6 +119,8 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
       twoHanded: true,
       weaponClass: "ranged",
       weaponType: "bow",
+      attackSpeed: 2.5,
+      attackRange: 5,
       stats: {
         attack_damage: 5,
       },
