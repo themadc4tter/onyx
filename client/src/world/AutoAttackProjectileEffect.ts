@@ -3,8 +3,10 @@ import type { MobProjectileFiredPayload } from "@onyx/shared/protocol";
 import { TILE_SIZE } from "../config/map";
 
 const PROJECTILE_DEPTH = 24;
-const BOLT_CORE_COLOR = 0xf7e6a0;
-const BOLT_TAIL_COLOR = 0xd79a4a;
+const BOLT_DARK_COLOR = 0x16071f;
+const BOLT_SHAFT_COLOR = 0xd29a52;
+const BOLT_FEATHER_COLOR = 0xd8d5db;
+const BOLT_FEATHER_SHADOW_COLOR = 0x3c3244;
 const ORB_CORE_COLOR = 0xf6e27f;
 const ORB_GLOW_COLOR = 0xffa84a;
 
@@ -63,13 +65,32 @@ export class AutoAttackProjectileEffect {
   private createBolt() {
     const graphics = this.scene.add.graphics();
 
-    graphics.fillStyle(BOLT_TAIL_COLOR, 0.28);
-    graphics.fillRect(-9, -0.65, 10, 1.3);
-    graphics.fillStyle(BOLT_CORE_COLOR, 0.92);
-    graphics.fillRect(-6, -0.9, 10, 1.8);
-    graphics.fillTriangle(3, -2.7, 10, 0, 3, 2.7);
+    this.fillPixel(graphics, -7, -1, BOLT_FEATHER_SHADOW_COLOR, 0.86);
+    this.fillPixel(graphics, -7, 1, BOLT_FEATHER_SHADOW_COLOR, 0.86);
+    this.fillPixel(graphics, -6, -2, BOLT_FEATHER_COLOR, 0.92);
+    this.fillPixel(graphics, -6, 2, BOLT_FEATHER_COLOR, 0.92);
+    this.fillPixel(graphics, -6, 0, BOLT_DARK_COLOR, 0.9);
+
+    for (let x = -5; x <= 1; x += 1) {
+      this.fillPixel(graphics, x, 0, BOLT_SHAFT_COLOR, 0.96);
+      this.fillPixel(graphics, x, 1, BOLT_DARK_COLOR, 0.42);
+    }
+
+    this.fillPixel(graphics, 2, -1, BOLT_DARK_COLOR, 0.98);
+    this.fillPixel(graphics, 2, 0, BOLT_SHAFT_COLOR, 0.96);
+    this.fillPixel(graphics, 2, 1, BOLT_DARK_COLOR, 0.98);
+    this.fillPixel(graphics, 3, -1, BOLT_DARK_COLOR, 0.98);
+    this.fillPixel(graphics, 3, 0, BOLT_SHAFT_COLOR, 0.96);
+    this.fillPixel(graphics, 3, 1, BOLT_DARK_COLOR, 0.98);
+    this.fillPixel(graphics, 4, 0, BOLT_DARK_COLOR, 0.98);
 
     return graphics;
+  }
+
+  private fillPixel(graphics: Phaser.GameObjects.Graphics, x: number, y: number, color: number, alpha: number) {
+    const pixelSize = 1.35;
+    graphics.fillStyle(color, alpha);
+    graphics.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
   }
 
   private createOrb() {
