@@ -1,5 +1,5 @@
 import { addItemToInventory, getInventory, type InventoryState } from "./inventory";
-import { EQUIPMENT_SLOTS, getItemDefinition, type EquipmentSlot } from "./items";
+import { EQUIPMENT_SLOTS, getItemDefinition, type EquipmentSlot } from "@onyx/shared/items";
 import { supabase } from "../lib/supabase";
 
 export interface EquippedItem {

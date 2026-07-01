@@ -1,4 +1,4 @@
-import { getItemDefinition } from "./items";
+import { getItemDefinition } from "@onyx/shared/items";
 import { supabase } from "../lib/supabase";
 
 export interface InventorySlot {

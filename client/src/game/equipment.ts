@@ -1,4 +1,4 @@
-import { EQUIPMENT_SLOTS, type EquipmentSlot } from "./items";
+import { EQUIPMENT_SLOTS, type EquipmentSlot } from "@onyx/shared/items";
 
 export interface EquippedItem {
   slot: EquipmentSlot;

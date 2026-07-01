@@ -24,7 +24,7 @@ import {
   saveEquipment,
   unequipItem,
 } from "./game/equipment";
-import { getItemDefinition } from "./game/items";
+import { getItemDefinition } from "@onyx/shared/items";
 import {
   acceptTradeRequest,
   addTradeOfferItem,

@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import type { EquipmentState, EquipmentSlot } from "../game/equipment";
-import { getItemDefinition } from "../game/items";
+import { getItemDefinition } from "@onyx/shared/items";
 
 const OVERLAY_DEPTH_ORDER: EquipmentSlot[] = ["head", "chest", "legs", "feet", "off_hand", "main_hand"];
 

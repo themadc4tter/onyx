@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { createEmptyEquipment, EQUIPMENT_SLOTS, type EquipmentSlot, type EquipmentState } from "../game/equipment";
 import { createEmptyInventory, type InventoryState } from "../game/inventory";
-import { getItemDefinition } from "../game/items";
+import { getItemDefinition } from "@onyx/shared/items";
 import { HudChat } from "./chat/HudChat";
 
 type PanelId = "skills" | "inventory" | "equipment" | "social" | "settings";
