@@ -24,6 +24,7 @@ const MOB_DEPTH = 17;
 const MOB_STATUS_DEPTH = 23;
 const HP_BAR_WIDTH = 18;
 const HP_BAR_HEIGHT = 3;
+const MOB_MOVE_DURATION_MS = 120;
 
 export const MOB_SPRITE_ASSETS = Object.values(MOB_DEFINITIONS).map(mob => ({
   key: mob.spriteKey,
@@ -131,8 +132,10 @@ export class MobSpawnerManager {
     if (!mob) return;
 
     const wasAlive = mob.alive;
+    const previousTileX = mob.tileX;
+    const previousTileY = mob.tileY;
     Object.assign(mob, state);
-    this.syncMobPosition(mob);
+    this.moveMobToState(mob, previousTileX, previousTileY, wasAlive);
     this.updateMobVisuals(mob);
     this.onMobChanged(mob);
 
@@ -151,6 +154,7 @@ export class MobSpawnerManager {
     }
 
     if (!wasAlive && state.alive) {
+      this.syncMobPosition(mob);
       mob.container.setAlpha(0).setVisible(true);
       mob.hpContainer.setAlpha(0).setVisible(true);
       this.scene.tweens.add({
@@ -173,6 +177,27 @@ export class MobSpawnerManager {
     const y = mob.tileY * TILE_SIZE + TILE_SIZE / 2;
     mob.container.setPosition(x, y);
     mob.hpContainer.setPosition(x, y);
+  }
+
+  private moveMobToState(mob: RenderedMob, previousTileX: number, previousTileY: number, wasAlive: boolean) {
+    const moved = previousTileX !== mob.tileX || previousTileY !== mob.tileY;
+    if (!moved) return;
+
+    const isOneTileStep = Math.abs(mob.tileX - previousTileX) + Math.abs(mob.tileY - previousTileY) === 1;
+    if (!wasAlive || !mob.alive || !isOneTileStep) {
+      this.scene.tweens.killTweensOf([mob.container, mob.hpContainer]);
+      this.syncMobPosition(mob);
+      return;
+    }
+
+    this.scene.tweens.killTweensOf([mob.container, mob.hpContainer]);
+    this.scene.tweens.add({
+      targets: [mob.container, mob.hpContainer],
+      x: mob.tileX * TILE_SIZE + TILE_SIZE / 2,
+      y: mob.tileY * TILE_SIZE + TILE_SIZE / 2,
+      duration: MOB_MOVE_DURATION_MS,
+      ease: "Linear",
+    });
   }
 
   private destroy = () => {
