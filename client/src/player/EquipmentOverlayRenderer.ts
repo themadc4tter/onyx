@@ -13,6 +13,7 @@ export class EquipmentOverlayRenderer {
   private overlays: Phaser.GameObjects.Image[] = [];
   private pendingTextureKeys = new Set<string>();
   private renderVersion = 0;
+  private alpha = 1;
 
   constructor(
     private scene: Phaser.Scene,
@@ -72,9 +73,24 @@ export class EquipmentOverlayRenderer {
 
       const overlay = this.scene.add.image(0, 0, getEquipmentTextureKey(item.id));
       overlay.setName(`equipment-overlay-${item.id}`);
+      overlay.setAlpha(this.alpha);
       this.container.add(overlay);
       this.overlays.push(overlay);
     }
+  }
+
+  fadeOut(delayMs: number, durationMs: number) {
+    this.alpha = 0;
+    this.scene.tweens.killTweensOf(this.overlays);
+    if (this.overlays.length === 0) return;
+
+    this.scene.tweens.add({
+      targets: this.overlays,
+      alpha: 0,
+      delay: delayMs,
+      duration: durationMs,
+      ease: "Sine.easeInOut",
+    });
   }
 
   private clearOverlays() {

@@ -140,6 +140,7 @@ export class LocalPlayerController {
     this.hitFeedbackTimer = null;
     this.scene.tweens.killTweensOf(this.container);
     this.sprite.clearTint();
+    this.equipmentOverlays.fadeOut(DEATH_FADE_DELAY_MS, DEATH_FADE_DURATION_MS);
 
     this.scene.tweens.add({
       targets: this.container,

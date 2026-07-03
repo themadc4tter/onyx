@@ -42,8 +42,8 @@ const MUSIC_VOLUME = 0.35;
 const MUSIC_SETTING_STORAGE_KEY = "onyx.musicEnabled";
 const DEATH_OVERLAY_DELAY_MS = 800;
 const DEATH_OVERLAY_FADE_MS = 1_000;
-const DEATH_OVERLAY_DEPTH = 1_000;
 const DEATH_OVERLAY_ALPHA = 0.56;
+const DEATH_OVERLAY_Z_INDEX = "9";
 
 function readMusicEnabledSetting() {
   return localStorage.getItem(MUSIC_SETTING_STORAGE_KEY) !== "false";
@@ -79,7 +79,7 @@ export class GameScene extends Phaser.Scene {
   private targeting!: TargetingManager;
   private autoAttack!: AutoAttackController;
   private currentMusic: Phaser.Sound.BaseSound | null = null;
-  private deathOverlay: Phaser.GameObjects.Rectangle | null = null;
+  private deathOverlay: HTMLDivElement | null = null;
   private musicEnabled = readMusicEnabledSetting();
 
   constructor() {
@@ -212,6 +212,9 @@ export class GameScene extends Phaser.Scene {
       isLocalPlayerMoving: () => this.player.isMoving(),
       onActiveChanged: active => this.targeting.setAutoAttackActive(active),
     });
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.removeDeathOverlay, this);
+    this.events.once(Phaser.Scenes.Events.DESTROY, this.removeDeathOverlay, this);
   }
 
   update() {
@@ -451,20 +454,55 @@ export class GameScene extends Phaser.Scene {
 
   private playDeathSequence() {
     this.player.playDeathFade();
+    this.createDeathOverlay();
+  }
+
+  private createDeathOverlay() {
     if (this.deathOverlay) return;
 
-    const { width, height } = this.scale;
-    this.deathOverlay = this.add
-      .rectangle(width / 2, height / 2, width, height, 0x6d6d6d, 0)
-      .setScrollFactor(0)
-      .setDepth(DEATH_OVERLAY_DEPTH);
+    const root = document.getElementById("game-root");
+    if (!root) return;
 
-    this.tweens.add({
-      targets: this.deathOverlay,
-      alpha: DEATH_OVERLAY_ALPHA,
-      delay: DEATH_OVERLAY_DELAY_MS,
-      duration: DEATH_OVERLAY_FADE_MS,
-      ease: "Sine.easeInOut",
+    const overlay = document.createElement("div");
+    Object.assign(overlay.style, {
+      position: "absolute",
+      background: "#6d6d6d",
+      opacity: "0",
+      pointerEvents: "none",
+      transition: `opacity ${DEATH_OVERLAY_FADE_MS}ms ease-in-out ${DEATH_OVERLAY_DELAY_MS}ms`,
+      zIndex: DEATH_OVERLAY_Z_INDEX,
     });
+    root.appendChild(overlay);
+    this.deathOverlay = overlay;
+    this.updateDeathOverlayBounds();
+
+    window.addEventListener("resize", this.updateDeathOverlayBounds);
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.updateDeathOverlayBounds);
+    requestAnimationFrame(() => {
+      if (this.deathOverlay) this.deathOverlay.style.opacity = String(DEATH_OVERLAY_ALPHA);
+    });
+  }
+
+  private updateDeathOverlayBounds = () => {
+    if (!this.deathOverlay) return;
+
+    const root = document.getElementById("game-root");
+    if (!root) return;
+
+    const canvasRect = this.game.canvas.getBoundingClientRect();
+    const rootRect = root.getBoundingClientRect();
+    Object.assign(this.deathOverlay.style, {
+      left: `${Math.round(canvasRect.left - rootRect.left)}px`,
+      top: `${Math.round(canvasRect.top - rootRect.top)}px`,
+      width: `${Math.round(canvasRect.width)}px`,
+      height: `${Math.round(canvasRect.height)}px`,
+    });
+  };
+
+  private removeDeathOverlay = () => {
+    window.removeEventListener("resize", this.updateDeathOverlayBounds);
+    this.scale.off(Phaser.Scale.Events.RESIZE, this.updateDeathOverlayBounds);
+    this.deathOverlay?.remove();
+    this.deathOverlay = null;
   }
 }
