@@ -601,6 +601,44 @@
                  "width":0,
                  "x":392,
                  "y":248
+                }, 
+                {
+                 "height":0,
+                 "id":9,
+                 "name":"orc_spawner_2",
+                 "opacity":1,
+                 "point":true,
+                 "properties":[
+                        {
+                         "name":"mobId",
+                         "type":"string",
+                         "value":"orc_scout"
+                        }],
+                 "rotation":0,
+                 "type":"mob_spawner",
+                 "visible":true,
+                 "width":0,
+                 "x":712,
+                 "y":424
+                }, 
+                {
+                 "height":0,
+                 "id":10,
+                 "name":"orc_spawner_3",
+                 "opacity":1,
+                 "point":true,
+                 "properties":[
+                        {
+                         "name":"mobId",
+                         "type":"string",
+                         "value":"orc_scout"
+                        }],
+                 "rotation":0,
+                 "type":"mob_spawner",
+                 "visible":true,
+                 "width":0,
+                 "x":680,
+                 "y":440
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -668,7 +706,7 @@
          "y":0
         }],
  "nextlayerid":12,
- "nextobjectid":9,
+ "nextobjectid":11,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.2",

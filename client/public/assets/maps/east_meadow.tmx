@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="64" height="48" tilewidth="16" tileheight="16" infinite="0" nextlayerid="12" nextobjectid="9">
+<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="64" height="48" tilewidth="16" tileheight="16" infinite="0" nextlayerid="12" nextobjectid="11">
  <editorsettings>
   <export target="east_meadow.tmj" format="json"/>
  </editorsettings>
@@ -484,6 +484,18 @@
    <point/>
   </object>
   <object id="8" name="orc_spawner_1" type="mob_spawner" x="392" y="248">
+   <point/>
+  </object>
+  <object id="9" name="orc_spawner_2" type="mob_spawner" x="712" y="424">
+   <properties>
+    <property name="mobId" value="orc_scout"/>
+   </properties>
+   <point/>
+  </object>
+  <object id="10" name="orc_spawner_3" type="mob_spawner" x="680" y="440">
+   <properties>
+    <property name="mobId" value="orc_scout"/>
+   </properties>
    <point/>
   </object>
  </objectgroup>
