@@ -345,6 +345,15 @@ const mobController = new MobController({
   emitMobState: (zoneId, mob) => {
     io.to(zoneId).emit("mob:state", mob);
   },
+  getPlayersInZone: zoneId => (
+    [...connectedPlayers.values()]
+      .filter(player => player.zoneId === zoneId)
+      .map(player => ({
+        socketId: player.socketId,
+        tileX: player.position.tileX,
+        tileY: player.position.tileY,
+      }))
+  ),
   isPlayerOccupyingTile: (zoneId, tileX, tileY) => (
     [...connectedPlayers.values()].some(player => (
       player.zoneId === zoneId &&
@@ -722,13 +731,13 @@ io.on("connection", async (socket) => {
 
     if (result.mode === "melee") {
       io.to(zoneId).emit("mob:meleeImpact", result.impact);
-      mobController.damageMob(zoneId, mobInstanceId, result.damage);
+      mobController.damageMob(zoneId, mobInstanceId, result.damage, player.socketId);
       return;
     }
 
     io.to(zoneId).emit("mob:projectileFired", result.projectile);
     setTimeout(() => {
-      mobController.damageMob(zoneId, mobInstanceId, result.damage);
+      mobController.damageMob(zoneId, mobInstanceId, result.damage, player.socketId);
     }, result.projectile.durationMs);
   });
 

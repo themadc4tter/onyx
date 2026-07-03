@@ -11,16 +11,26 @@ interface MobInstanceState extends MobSpawnState {
   behavior: MobBehaviorDefinition;
   combat: MobCombatDefinition;
   nextWanderAt: number;
+  nextChaseMoveAt: number;
+  targetSocketId: string | null;
+}
+
+interface MobControllerPlayer {
+  socketId: string;
+  tileX: number;
+  tileY: number;
 }
 
 interface MobControllerOptions {
   emitMobState: (zoneId: string, mob: MobSpawnState) => void;
+  getPlayersInZone?: (zoneId: string) => MobControllerPlayer[];
   isPlayerOccupyingTile?: (zoneId: string, tileX: number, tileY: number) => boolean;
 }
 
 const MOB_TICK_MS = 250;
 const MOB_WANDER_MOVE_MS = 1_200;
 const MOB_WANDER_JITTER_MS = 1_800;
+const MOB_CHASE_MOVE_MS = 600;
 const CARDINAL_DIRECTIONS = [
   { x: 0, y: -1 },
   { x: 1, y: 0 },
@@ -89,6 +99,8 @@ export class MobController {
           ...spawn.combat,
         },
         nextWanderAt: this.getNextWanderAt(Date.now()),
+        nextChaseMoveAt: 0,
+        targetSocketId: null,
         hp: mob.maxHp,
         maxHp: mob.maxHp,
         alive: true,
@@ -111,11 +123,15 @@ export class MobController {
     return this.findPathForMob(zoneId, mob, target);
   }
 
-  damageMob(zoneId: string, mobInstanceId: string, damage: number) {
+  damageMob(zoneId: string, mobInstanceId: string, damage: number, attackerSocketId?: string) {
     const mob = this.getMobInstance(zoneId, mobInstanceId);
     if (!mob || !mob.alive) return;
 
+    this.aggroMob(mob, zoneId, attackerSocketId);
     const defeated = applyMobDamage(mob, damage);
+    if (defeated) {
+      mob.targetSocketId = null;
+    }
     this.emitMobState(zoneId, mob);
     if (!defeated) return;
     if (!mob.behavior.respawns) return;
@@ -129,6 +145,8 @@ export class MobController {
       currentMob.hp = currentMob.maxHp;
       currentMob.alive = true;
       currentMob.nextWanderAt = this.getNextWanderAt(Date.now());
+      currentMob.nextChaseMoveAt = 0;
+      currentMob.targetSocketId = null;
       this.emitMobState(zoneId, currentMob);
     }, mob.behavior.respawnMs);
   }
@@ -183,7 +201,15 @@ export class MobController {
   }
 
   private tickMob(zoneId: string, mob: MobInstanceState, nowMs: number) {
-    if (!mob.alive || mob.behavior.wanderRadius <= 0 || nowMs < mob.nextWanderAt) return;
+    if (!mob.alive) return;
+
+    const target = this.getCurrentTarget(zoneId, mob) ?? this.acquireAggroTarget(zoneId, mob);
+    if (target) {
+      this.tickChase(zoneId, mob, target, nowMs);
+      return;
+    }
+
+    if (mob.behavior.wanderRadius <= 0 || nowMs < mob.nextWanderAt) return;
 
     mob.nextWanderAt = this.getNextWanderAt(nowMs);
     const nextTile = this.getWanderStep(zoneId, mob);
@@ -191,6 +217,23 @@ export class MobController {
 
     mob.tileX = nextTile.tileX;
     mob.tileY = nextTile.tileY;
+    this.emitMobState(zoneId, mob);
+  }
+
+  private tickChase(zoneId: string, mob: MobInstanceState, target: MobControllerPlayer, nowMs: number) {
+    if (nowMs < mob.nextChaseMoveAt) return;
+
+    mob.nextChaseMoveAt = nowMs + MOB_CHASE_MOVE_MS;
+    const path = this.findPathForMob(zoneId, mob, {
+      tileX: target.tileX,
+      tileY: target.tileY,
+    });
+    const nextTile = path.path[0];
+    if (!nextTile) return;
+
+    mob.tileX = nextTile.tileX;
+    mob.tileY = nextTile.tileY;
+    mob.nextWanderAt = this.getNextWanderAt(nowMs);
     this.emitMobState(zoneId, mob);
   }
 
@@ -215,6 +258,48 @@ export class MobController {
 
   private getNextWanderAt(nowMs: number) {
     return nowMs + MOB_WANDER_MOVE_MS + Math.floor(Math.random() * MOB_WANDER_JITTER_MS);
+  }
+
+  private acquireAggroTarget(zoneId: string, mob: MobInstanceState) {
+    if (mob.behavior.aggression !== "aggressive" || mob.behavior.aggroRadius <= 0) return null;
+
+    const players = this.options.getPlayersInZone?.(zoneId) ?? [];
+    const closestPlayer = players.reduce<MobControllerPlayer | null>((closest, player) => {
+      const distance = getTileDistance(mob.tileX, mob.tileY, player.tileX, player.tileY);
+      if (distance > mob.behavior.aggroRadius) return closest;
+      if (!closest) return player;
+
+      const closestDistance = getTileDistance(mob.tileX, mob.tileY, closest.tileX, closest.tileY);
+      return distance < closestDistance ? player : closest;
+    }, null);
+
+    if (!closestPlayer) return null;
+
+    mob.targetSocketId = closestPlayer.socketId;
+    mob.nextChaseMoveAt = 0;
+    return closestPlayer;
+  }
+
+  private getCurrentTarget(zoneId: string, mob: MobInstanceState) {
+    if (!mob.targetSocketId) return null;
+
+    const target = (this.options.getPlayersInZone?.(zoneId) ?? [])
+      .find(player => player.socketId === mob.targetSocketId) ?? null;
+    if (target) return target;
+
+    mob.targetSocketId = null;
+    return null;
+  }
+
+  private aggroMob(mob: MobInstanceState, zoneId: string, attackerSocketId: string | undefined) {
+    if (!attackerSocketId || mob.targetSocketId) return;
+
+    const attacker = (this.options.getPlayersInZone?.(zoneId) ?? [])
+      .find(player => player.socketId === attackerSocketId);
+    if (!attacker) return;
+
+    mob.targetSocketId = attacker.socketId;
+    mob.nextChaseMoveAt = 0;
   }
 
   private emitMobState(zoneId: string, mob: MobInstanceState) {
