@@ -58,7 +58,14 @@ const HUD_LAYER_ID = "game-hud-layer";
 const HUD_INSET_PX = 12;
 const SOCIAL_RANGE_TILES = 5;
 const SOCIAL_REFRESH_MS = 2_000;
-const DEFAULT_PLAYER_COMBAT: PlayerCombatState = { hp: 5, maxHp: 5, alive: true, combatEndsAt: 0 };
+const DEFAULT_PLAYER_COMBAT: PlayerCombatState = {
+  hp: 5,
+  maxHp: 5,
+  alive: true,
+  combatEndsAt: 0,
+  healthRegenStartedAt: 0,
+  nextHealthRegenAt: 0,
+};
 
 const SKILLS: SkillMock[] = [
   { name: "Melee", level: 12, currentXp: 124, totalXp: 200, nextUnlock: "Guarding Stance" },
@@ -246,6 +253,11 @@ const CSS = `
     white-space: nowrap;
   }
 
+  .hud-combat-bars {
+    display: grid;
+    gap: 2px;
+  }
+
   .hud-combat-bar {
     position: relative;
     height: 26px;
@@ -259,6 +271,20 @@ const CSS = `
     height: 100%;
     background: #b94646;
     transition: width 0.15s ease-out;
+  }
+
+  .hud-health-regen-bar {
+    height: 3px;
+    background: rgba(0, 0, 0, 0.48);
+    overflow: hidden;
+  }
+
+  .hud-health-regen-fill {
+    display: block;
+    height: 100%;
+    background: #7fc9a0;
+    transition-property: width;
+    transition-timing-function: linear;
   }
 
   .hud-combat-value {
@@ -1029,6 +1055,7 @@ export class GameHudOverlay {
   private targetProfile: TargetProfile | null = null;
   private combat: PlayerCombatState;
   private combatTagTimer: ReturnType<typeof setTimeout> | null = null;
+  private healthRegenAnimationFrame: number | null = null;
   private playerName: string;
 
   constructor(
@@ -1095,6 +1122,7 @@ export class GameHudOverlay {
     window.removeEventListener("resize", this.updateCanvasBounds);
     this.stopSocialRefresh();
     if (this.combatTagTimer) clearTimeout(this.combatTagTimer);
+    if (this.healthRegenAnimationFrame) cancelAnimationFrame(this.healthRegenAnimationFrame);
     this.socket.off("inventory:changed", this.handleInventoryChanged);
     this.socket.off("equipment:changed", this.handleEquipmentChanged);
     this.socket.off("player:combat", this.handleCombatChanged);
@@ -1138,6 +1166,38 @@ export class GameHudOverlay {
     return Date.now() < this.combat.combatEndsAt;
   }
 
+  private shouldShowHealthRegenBar() {
+    return (
+      this.combat.alive &&
+      this.combat.hp > 0 &&
+      this.combat.hp < this.combat.maxHp &&
+      !this.isInCombat() &&
+      this.combat.healthRegenStartedAt > 0 &&
+      this.combat.nextHealthRegenAt > Date.now()
+    );
+  }
+
+  private getHealthRegenProgress() {
+    const totalMs = this.combat.nextHealthRegenAt - this.combat.healthRegenStartedAt;
+    if (totalMs <= 0) return 0;
+
+    return Phaser.Math.Clamp((Date.now() - this.combat.healthRegenStartedAt) / totalMs, 0, 1);
+  }
+
+  private animateHealthRegenFill(fill: HTMLSpanElement) {
+    const progress = this.getHealthRegenProgress();
+    const remainingMs = Math.max(0, this.combat.nextHealthRegenAt - Date.now());
+
+    fill.style.width = `${Math.round(progress * 100)}%`;
+    fill.style.transitionDuration = "0ms";
+
+    this.healthRegenAnimationFrame = requestAnimationFrame(() => {
+      this.healthRegenAnimationFrame = null;
+      fill.style.transitionDuration = `${remainingMs}ms`;
+      fill.style.width = "100%";
+    });
+  }
+
   // The server only pushes combat state on qualifying events (damage dealt/taken,
   // mob aggro), not on a recurring tick. To hide the "In Combat" tag exactly when
   // the timer runs out — rather than leaving it stuck on until the next event —
@@ -1159,6 +1219,11 @@ export class GameHudOverlay {
   }
 
   private renderCombatFrame() {
+    if (this.healthRegenAnimationFrame) {
+      cancelAnimationFrame(this.healthRegenAnimationFrame);
+      this.healthRegenAnimationFrame = null;
+    }
+
     this.combatRoot.replaceChildren();
 
     const hpRatio = this.combat.maxHp > 0
@@ -1197,7 +1262,25 @@ export class GameHudOverlay {
     value.textContent = `${this.combat.hp}/${this.combat.maxHp}`;
 
     bar.append(fill, value);
-    frame.append(header, bar);
+
+    const bars = document.createElement("div");
+    bars.className = "hud-combat-bars";
+    bars.append(bar);
+
+    if (this.shouldShowHealthRegenBar()) {
+      const regenBar = document.createElement("div");
+      regenBar.className = "hud-health-regen-bar";
+      regenBar.setAttribute("aria-label", "Next health regeneration");
+
+      const regenFill = document.createElement("span");
+      regenFill.className = "hud-health-regen-fill";
+
+      regenBar.append(regenFill);
+      bars.append(regenBar);
+      this.animateHealthRegenFill(regenFill);
+    }
+
+    frame.append(header, bars);
     this.combatRoot.appendChild(frame);
   }
 

@@ -50,6 +50,10 @@ export interface PlayerCombatState {
   alive: boolean;
   /** Epoch ms when the player's combat tag expires. 0 (or any past timestamp) means not in combat. */
   combatEndsAt: number;
+  /** Epoch ms when the current out-of-combat health regeneration window started. 0 means not regenerating. */
+  healthRegenStartedAt: number;
+  /** Epoch ms when the next out-of-combat health regeneration tick lands. 0 means not regenerating. */
+  nextHealthRegenAt: number;
 }
 
 export interface PlayerMovedPayload extends Position {

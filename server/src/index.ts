@@ -84,6 +84,10 @@ interface ConnectedPlayer {
   lastChatAt: number;
   /** Epoch ms when the player's "in combat" tag expires. 0 means never entered combat / cleared. */
   combatEndsAt: number;
+  /** Epoch ms when the current out-of-combat health regeneration window started. */
+  healthRegenStartedAt: number;
+  /** Epoch ms when the next out-of-combat health regeneration tick lands. */
+  nextHealthRegenAt: number;
 }
 
 const connectedPlayers = new Map<string, ConnectedPlayer>();
@@ -98,11 +102,13 @@ const DEFAULT_PLAYER_MAX_HP = 5;
 const PLAYER_RESPAWN_DELAY_MS = 4_000;
 // Refreshed on: dealing damage, taking damage, or a mob locking aggro onto the player.
 const COMBAT_TIMEOUT_MS = 6_000;
+const HEALTH_REGEN_INTERVAL_MS = 30_000;
 const herbSpawnStates = new Map<string, Map<string, HerbSpawnState>>();
 
 // Debounced position saves: map of socketId → pending timeout
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const respawnTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const healthRegenTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 async function savePosition(userId: string, zoneId: string, pos: Position) {
   await supabase.from("player_state").upsert({
@@ -182,7 +188,70 @@ function getPlayerCombatStatePayload(player: ConnectedPlayer): PlayerCombatState
     maxHp: player.maxHp,
     alive: player.alive,
     combatEndsAt: player.combatEndsAt,
+    healthRegenStartedAt: player.healthRegenStartedAt,
+    nextHealthRegenAt: player.nextHealthRegenAt,
   };
+}
+
+function clearHealthRegenTimer(socketId: string) {
+  const existing = healthRegenTimers.get(socketId);
+  if (!existing) return;
+
+  clearTimeout(existing);
+  healthRegenTimers.delete(socketId);
+}
+
+function resetHealthRegen(player: ConnectedPlayer) {
+  clearHealthRegenTimer(player.socketId);
+  player.healthRegenStartedAt = 0;
+  player.nextHealthRegenAt = 0;
+}
+
+function scheduleHealthRegen(io: Server, player: ConnectedPlayer, nowMs: number = Date.now()) {
+  clearHealthRegenTimer(player.socketId);
+
+  if (!player.alive || player.hp <= 0 || player.hp >= player.maxHp) {
+    player.healthRegenStartedAt = 0;
+    player.nextHealthRegenAt = 0;
+    return;
+  }
+
+  const startsAt = Math.max(nowMs, player.combatEndsAt);
+  player.healthRegenStartedAt = startsAt;
+  player.nextHealthRegenAt = startsAt + HEALTH_REGEN_INTERVAL_MS;
+
+  const timer = setTimeout(() => {
+    healthRegenTimers.delete(player.socketId);
+    applyHealthRegenTick(io, player.socketId);
+  }, Math.max(0, player.nextHealthRegenAt - nowMs));
+
+  timer.unref?.();
+  healthRegenTimers.set(player.socketId, timer);
+}
+
+function applyHealthRegenTick(io: Server, socketId: string) {
+  const player = connectedPlayers.get(socketId);
+  const socket = io.sockets.sockets.get(socketId);
+  if (!player || !socket) return;
+
+  const nowMs = Date.now();
+  if (!player.alive || player.hp <= 0) {
+    resetHealthRegen(player);
+    return;
+  }
+
+  if (nowMs < player.combatEndsAt) {
+    scheduleHealthRegen(io, player, nowMs);
+    socket.emit("player:combat", getPlayerCombatStatePayload(player));
+    return;
+  }
+
+  if (player.hp < player.maxHp) {
+    player.hp = Math.min(player.maxHp, player.hp + 1);
+  }
+
+  scheduleHealthRegen(io, player, nowMs);
+  socket.emit("player:combat", getPlayerCombatStatePayload(player));
 }
 
 // Refreshes the player's combat timer. Does not emit — callers push the
@@ -190,6 +259,7 @@ function getPlayerCombatStatePayload(player: ConnectedPlayer): PlayerCombatState
 // what event socket(s) need to hear about it.
 function enterCombat(player: ConnectedPlayer, nowMs: number = Date.now()) {
   player.combatEndsAt = nowMs + COMBAT_TIMEOUT_MS;
+  resetHealthRegen(player);
 }
 
 function getPlayerSnapshot(player: ConnectedPlayer) {
@@ -380,6 +450,7 @@ async function handlePlayerDeath(io: Server, socket: Socket) {
   // Dying clears the combat tag immediately rather than letting it linger through
   // the death overlay/respawn delay — regen (the flag's first consumer) is moot at 0 HP.
   player.combatEndsAt = 0;
+  resetHealthRegen(player);
   cancelTrade(io, player.userId, "death");
   mobController.clearTargetsForPlayer(player.socketId);
 
@@ -420,6 +491,7 @@ async function respawnPlayer(io: Server, socket: Socket) {
   player.lastMoveAt = 0;
   player.lastProcessedMoveSeq = 0;
   player.combatEndsAt = 0;
+  resetHealthRegen(player);
   socket.data.position = newPos;
   socket.data.zoneId = newZoneId;
 
@@ -457,8 +529,10 @@ async function damagePlayer(io: Server, socket: Socket, damage: number) {
   const player = connectedPlayers.get(socket.id);
   if (!player || !player.alive || damage <= 0) return;
 
+  const nowMs = Date.now();
   player.hp = Math.max(0, player.hp - damage);
-  enterCombat(player);
+  enterCombat(player, nowMs);
+  scheduleHealthRegen(io, player, nowMs);
   socket.emit("player:damaged", {
     damage,
     combat: getPlayerCombatStatePayload(player),
@@ -526,7 +600,9 @@ const mobController = new MobController({
     const socket = io.sockets.sockets.get(socketId);
     if (!player || !socket) return;
 
-    enterCombat(player);
+    const nowMs = Date.now();
+    enterCombat(player, nowMs);
+    scheduleHealthRegen(io, player, nowMs);
     socket.emit("player:combat", getPlayerCombatStatePayload(player));
   },
 });
@@ -599,6 +675,8 @@ io.on("connection", async (socket) => {
     lastProcessedMoveSeq: 0,
     lastChatAt: 0,
     combatEndsAt: 0,
+    healthRegenStartedAt: 0,
+    nextHealthRegenAt: 0,
   });
 
   await socket.join(zoneId);
@@ -931,7 +1009,9 @@ io.on("connection", async (socket) => {
     // Combat starts the instant the attack fires (there's no miss chance to model yet,
     // so "fires" == "lands"), not when a ranged/magic projectile actually reaches its
     // target — matches the WoW convention of tagging on cast, not on travel time.
-    enterCombat(player);
+    const nowMs = Date.now();
+    enterCombat(player, nowMs);
+    scheduleHealthRegen(io, player, nowMs);
     socket.emit("player:combat", getPlayerCombatStatePayload(player));
 
     if (result.mode === "melee") {
@@ -1047,6 +1127,7 @@ io.on("connection", async (socket) => {
         clearTimeout(respawnTimer);
         respawnTimers.delete(socket.id);
       }
+      clearHealthRegenTimer(socket.id);
 
       if (player.alive) {
         flushSave(socket.id, player.userId, player.zoneId, player.position);
