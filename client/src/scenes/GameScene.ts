@@ -40,6 +40,8 @@ import { PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL } from "../player/playerAssets";
 const CAMERA_ZOOM = 2;
 const MUSIC_VOLUME = 0.35;
 const MUSIC_SETTING_STORAGE_KEY = "onyx.musicEnabled";
+const DEATH_OVERLAY_DELAY_MS = 800;
+const DEATH_OVERLAY_FADE_MS = 1_000;
 
 function readMusicEnabledSetting() {
   return localStorage.getItem(MUSIC_SETTING_STORAGE_KEY) !== "false";
@@ -75,6 +77,7 @@ export class GameScene extends Phaser.Scene {
   private targeting!: TargetingManager;
   private autoAttack!: AutoAttackController;
   private currentMusic: Phaser.Sound.BaseSound | null = null;
+  private deathOverlay: Phaser.GameObjects.Rectangle | null = null;
   private musicEnabled = readMusicEnabledSetting();
 
   constructor() {
@@ -399,6 +402,7 @@ export class GameScene extends Phaser.Scene {
       this.pendingDeathNotice = true;
       this.targeting?.clearTarget();
       this.autoAttack?.stop();
+      this.playDeathSequence();
     });
 
     this.socket.on("player:left", (data: PlayerLeftPayload) => {
@@ -440,6 +444,25 @@ export class GameScene extends Phaser.Scene {
 
       await supabase.auth.signOut();
       setTimeout(() => window.location.reload(), 3000);
+    });
+  }
+
+  private playDeathSequence() {
+    this.player.playDeathFade();
+    if (this.deathOverlay) return;
+
+    const { width, height } = this.scale;
+    this.deathOverlay = this.add
+      .rectangle(width / 2, height / 2, width, height, 0x6d6d6d, 0)
+      .setScrollFactor(0)
+      .setDepth(28);
+
+    this.tweens.add({
+      targets: this.deathOverlay,
+      alpha: 0.52,
+      delay: DEATH_OVERLAY_DELAY_MS,
+      duration: DEATH_OVERLAY_FADE_MS,
+      ease: "Sine.easeInOut",
     });
   }
 }

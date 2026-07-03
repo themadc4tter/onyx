@@ -14,6 +14,8 @@ interface PredictedMove extends Position {
 const NAME_LABEL_FONT_SIZE = 13;
 const LOCAL_MOVE_DURATION_MS = 120;
 const MAX_QUEUED_DIRECTIONS = 3;
+const DEATH_FADE_DELAY_MS = 800;
+const DEATH_FADE_DURATION_MS = 900;
 
 const DIRECTION_VECTORS: Record<Facing, { dx: number; dy: number }> = {
   up: { dx: 0, dy: -1 },
@@ -33,6 +35,8 @@ export class LocalPlayerController {
   private queuedDirections: Facing[] = [];
   private nextMoveSeq = 1;
   private pendingMoves: PredictedMove[] = [];
+  private inputLocked = false;
+  private hitFeedbackTimer: Phaser.Time.TimerEvent | null = null;
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd: Record<Facing, Phaser.Input.Keyboard.Key>;
   private equipmentOverlays: EquipmentOverlayRenderer;
@@ -75,6 +79,7 @@ export class LocalPlayerController {
   }
 
   update(inputBlocked: boolean) {
+    if (this.inputLocked) return;
     if (inputBlocked) return;
 
     const pressedDirection = this.readPressedDirection();
@@ -91,6 +96,8 @@ export class LocalPlayerController {
   }
 
   handleMoveAck(ack: MoveAck | Position) {
+    if (this.inputLocked) return;
+
     const normalizedAck = this.normalizeMoveAck(ack);
     if (!normalizedAck) return;
 
@@ -113,11 +120,34 @@ export class LocalPlayerController {
   }
 
   playHitFeedback(damage: number) {
+    if (this.inputLocked) return;
+
+    this.hitFeedbackTimer?.remove(false);
     this.sprite.setTintFill(0xff6b3d);
-    this.scene.time.delayedCall(110, () => {
+    this.hitFeedbackTimer = this.scene.time.delayedCall(110, () => {
       this.sprite.clearTint();
+      this.hitFeedbackTimer = null;
     });
     this.showFloatingDamage(damage);
+  }
+
+  playDeathFade() {
+    this.inputLocked = true;
+    this.moving = false;
+    this.queuedDirections = [];
+    this.pendingMoves = [];
+    this.hitFeedbackTimer?.remove(false);
+    this.hitFeedbackTimer = null;
+    this.scene.tweens.killTweensOf(this.container);
+    this.sprite.setTintFill(0xb8b8b8);
+
+    this.scene.tweens.add({
+      targets: this.container,
+      alpha: 0,
+      delay: DEATH_FADE_DELAY_MS,
+      duration: DEATH_FADE_DURATION_MS,
+      ease: "Sine.easeInOut",
+    });
   }
 
   private readPressedDirection(): Facing | null {

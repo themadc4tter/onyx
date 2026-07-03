@@ -93,10 +93,12 @@ const MAX_CHAT_LENGTH = 240;
 const HERB_RESPAWN_MS = 10_000;
 const TRADE_RANGE_TILES = 5;
 const DEFAULT_PLAYER_MAX_HP = 20;
+const PLAYER_RESPAWN_DELAY_MS = 4_000;
 const herbSpawnStates = new Map<string, Map<string, HerbSpawnState>>();
 
 // Debounced position saves: map of socketId → pending timeout
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const respawnTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 async function savePosition(userId: string, zoneId: string, pos: Position) {
   await supabase.from("player_state").upsert({
@@ -212,6 +214,7 @@ function getTradeErrorMessage(error?: string) {
     request_pending: "A trade request is already pending.",
     self_trade: "You cannot trade with yourself.",
     target_unavailable: "That player is not available to trade.",
+    dead: "You cannot trade while dead.",
     trade_failed: "Trade failed.",
     inventory_full: "One of you does not have enough inventory space.",
   };
@@ -264,11 +267,26 @@ function getTradeParticipant(player: ConnectedPlayer): TradeParticipant {
 }
 
 function arePlayersCloseEnoughToTrade(a: ConnectedPlayer, b: ConnectedPlayer) {
+  if (!a.alive || !b.alive) return false;
   if (a.zoneId !== b.zoneId) return false;
 
   const dx = Math.abs(a.position.tileX - b.position.tileX);
   const dy = Math.abs(a.position.tileY - b.position.tileY);
   return Math.max(dx, dy) <= TRADE_RANGE_TILES;
+}
+
+function ensurePlayerCanTrade(socket: Socket, player: ConnectedPlayer | undefined): player is ConnectedPlayer {
+  if (!player) return false;
+  if (player.alive) return true;
+
+  emitTradeError(socket, "dead");
+  return false;
+}
+
+function areTradeParticipantsAlive(session: TradeSession) {
+  const first = getPlayerByUserId(session.a.userId);
+  const second = getPlayerByUserId(session.b.userId);
+  return Boolean(first?.alive && second?.alive);
 }
 
 function emitTradeError(socket: Socket, error?: string) {
@@ -344,7 +362,33 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
 
 async function handlePlayerDeath(io: Server, socket: Socket) {
   const player = connectedPlayers.get(socket.id);
-  if (!player) return;
+  if (!player || !player.alive || respawnTimers.has(socket.id)) return;
+
+  player.alive = false;
+  cancelTrade(io, player.userId, "death");
+  mobController.clearTargetsForPlayer(player.socketId);
+
+  const combat = getPlayerCombatStatePayload(player);
+  socket.emit("player:combat", combat);
+  socket.emit("player:died", {
+    zoneId: player.zoneId,
+    position: player.position,
+    combat,
+  });
+
+  const respawnTimer = setTimeout(() => {
+    respawnTimers.delete(socket.id);
+    respawnPlayer(io, socket).catch(error => {
+      console.error(`[death]      failed to respawn player "${socket.id}"`, error);
+    });
+  }, PLAYER_RESPAWN_DELAY_MS);
+  respawnTimer.unref?.();
+  respawnTimers.set(socket.id, respawnTimer);
+}
+
+async function respawnPlayer(io: Server, socket: Socket) {
+  const player = connectedPlayers.get(socket.id);
+  if (!player || player.alive) return;
 
   const oldZoneId = player.zoneId;
   const newZoneId = DEFAULT_ZONE_ID;
@@ -353,10 +397,6 @@ async function handlePlayerDeath(io: Server, socket: Socket) {
 
   const newPos: Position = { tileX: spawn.x, tileY: spawn.y, facing: "down" };
   const newZonePlayers = getPlayerSnapshotsInZone(newZoneId, socket.id);
-
-  player.alive = false;
-  cancelTrade(io, player.userId, "death");
-  mobController.clearTargetsForPlayer(player.socketId);
 
   player.position = newPos;
   player.zoneId = newZoneId;
@@ -383,11 +423,6 @@ async function handlePlayerDeath(io: Server, socket: Socket) {
 
   const combat = getPlayerCombatStatePayload(player);
   socket.emit("player:combat", combat);
-  socket.emit("player:died", {
-    zoneId: newZoneId,
-    position: newPos,
-    combat,
-  });
   socket.emit("zone:changed", {
     zoneId: newZoneId,
     position: newPos,
@@ -653,7 +688,9 @@ io.on("connection", async (socket) => {
   socket.on("trade:request", (payload: TradeRequestPayload) => {
     const player = connectedPlayers.get(socket.id);
     const target = payload?.targetSocketId ? connectedPlayers.get(payload.targetSocketId) : null;
-    if (!player || !target) {
+    if (!ensurePlayerCanTrade(socket, player)) return;
+
+    if (!target || !target.alive) {
       emitTradeError(socket, "target_unavailable");
       return;
     }
@@ -681,7 +718,7 @@ io.on("connection", async (socket) => {
 
   socket.on("trade:decline", (payload: TradeRequestResponsePayload) => {
     const player = connectedPlayers.get(socket.id);
-    if (!player || !payload?.requestId) return;
+    if (!ensurePlayerCanTrade(socket, player) || !payload?.requestId) return;
 
     const result = declineTradeRequest(player.userId, payload.requestId);
     if (!result.ok || !result.request) {
@@ -696,11 +733,17 @@ io.on("connection", async (socket) => {
 
   socket.on("trade:accept", (payload: TradeRequestResponsePayload) => {
     const player = connectedPlayers.get(socket.id);
-    if (!player || !payload?.requestId) return;
+    if (!ensurePlayerCanTrade(socket, player) || !payload?.requestId) return;
 
     const result = acceptTradeRequest(player.userId, payload.requestId);
     if (!result.ok || !result.session) {
       emitTradeError(socket, result.error);
+      return;
+    }
+
+    if (!areTradeParticipantsAlive(result.session)) {
+      cancelTrade(io, player.userId, "death");
+      emitTradeError(socket, "target_unavailable");
       return;
     }
 
@@ -718,7 +761,14 @@ io.on("connection", async (socket) => {
 
   socket.on("trade:addItem", (payload: TradeOfferPayload) => {
     const player = connectedPlayers.get(socket.id);
-    if (!player) return;
+    if (!ensurePlayerCanTrade(socket, player)) return;
+
+    const session = getTradeSessionForUser(player.userId);
+    if (session && !areTradeParticipantsAlive(session)) {
+      cancelTrade(io, player.userId, "death");
+      emitTradeError(socket, "target_unavailable");
+      return;
+    }
 
     const result = addTradeOfferItem(
       player.userId,
@@ -735,7 +785,14 @@ io.on("connection", async (socket) => {
 
   socket.on("trade:removeItem", (payload: TradeRemoveOfferPayload) => {
     const player = connectedPlayers.get(socket.id);
-    if (!player) return;
+    if (!ensurePlayerCanTrade(socket, player)) return;
+
+    const session = getTradeSessionForUser(player.userId);
+    if (session && !areTradeParticipantsAlive(session)) {
+      cancelTrade(io, player.userId, "death");
+      emitTradeError(socket, "target_unavailable");
+      return;
+    }
 
     const result = removeTradeOfferItem(player.userId, Number(payload?.slotIndex));
     if (!result.ok || !result.session) {
@@ -748,18 +805,24 @@ io.on("connection", async (socket) => {
 
   socket.on("trade:cancel", () => {
     const player = connectedPlayers.get(socket.id);
-    if (!player) return;
+    if (!ensurePlayerCanTrade(socket, player)) return;
 
     cancelTrade(io, player.userId, "cancelled");
   });
 
   socket.on("trade:setAccepted", async (payload: TradeSetAcceptedPayload) => {
     const player = connectedPlayers.get(socket.id);
-    if (!player) return;
+    if (!ensurePlayerCanTrade(socket, player)) return;
 
     const session = getTradeSessionForUser(player.userId);
     if (!session) {
       emitTradeError(socket, "not_trading");
+      return;
+    }
+
+    if (!areTradeParticipantsAlive(session)) {
+      cancelTrade(io, player.userId, "death");
+      emitTradeError(socket, "target_unavailable");
       return;
     }
 
@@ -947,7 +1010,21 @@ io.on("connection", async (socket) => {
     const player = connectedPlayers.get(socket.id);
     if (player) {
       cancelTrade(io, player.userId, "disconnect");
-      flushSave(socket.id, player.userId, player.zoneId, player.position);
+      const respawnTimer = respawnTimers.get(socket.id);
+      if (respawnTimer) {
+        clearTimeout(respawnTimer);
+        respawnTimers.delete(socket.id);
+      }
+
+      if (player.alive) {
+        flushSave(socket.id, player.userId, player.zoneId, player.position);
+      } else {
+        const spawnZoneId = DEFAULT_ZONE_ID;
+        const spawn = ZONES[spawnZoneId]?.spawn;
+        if (spawn) {
+          flushSave(socket.id, player.userId, spawnZoneId, { tileX: spawn.x, tileY: spawn.y, facing: "down" });
+        }
+      }
       await flushDirtyInventory(player.userId).catch(error => {
         console.error(`[inventory] failed to flush inventory for ${player.userId} on disconnect`, error);
       });
