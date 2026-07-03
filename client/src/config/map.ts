@@ -37,6 +37,12 @@ export const ZONE_MAPS: Record<string, ZoneMapConfig> = {
     musicKey: "inn-music",
     musicUrl: "assets/audio/inn.ogg",
   },
+  bank: {
+    mapKey: "bank-map",
+    mapUrl: "assets/maps/bank.tmj",
+    musicKey: "inn-music",
+    musicUrl: "assets/audio/inn.ogg",
+  },
 };
 
 export const TILESETS: TilesetConfig[] = [

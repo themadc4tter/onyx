@@ -15,6 +15,7 @@ const MAP_DEFINITIONS = {
   settlement: "settlement.tmj",
   east_meadow: "east_meadow.tmj",
   inn: "inn.tmj",
+  bank: "bank.tmj",
 } as const;
 
 const MAP_PATHS = findMapPaths();
