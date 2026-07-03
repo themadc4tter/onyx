@@ -1,7 +1,10 @@
 import Phaser from "phaser";
 
+type WorldLabelTarget = Phaser.GameObjects.Components.Transform &
+  Partial<Pick<Phaser.GameObjects.Container, "getWorldPoint">>;
+
 interface WorldLabelOptions {
-  target: Phaser.GameObjects.Components.Transform & Partial<Pick<Phaser.GameObjects.Container, "getWorldPoint">>;
+  target: WorldLabelTarget;
   text: string;
   offsetY: number;
   color: string;
@@ -9,11 +12,23 @@ interface WorldLabelOptions {
   className?: string;
 }
 
+interface FloatingWorldLabelOptions extends WorldLabelOptions {
+  floatDistance: number;
+  durationMs: number;
+}
+
+interface FloatState {
+  startTime: number;
+  durationMs: number;
+  distance: number;
+}
+
 interface WorldLabel {
   element: HTMLDivElement;
-  target: Phaser.GameObjects.Components.Transform & Partial<Pick<Phaser.GameObjects.Container, "getWorldPoint">>;
+  target: WorldLabelTarget;
   offsetY: number;
   visible: boolean;
+  float?: FloatState;
 }
 
 export interface WorldLabelHandle {
@@ -72,8 +87,37 @@ export class WorldLabelOverlay {
     };
   }
 
+  addFloatingLabel(options: FloatingWorldLabelOptions) {
+    const element = document.createElement("div");
+    element.className = ["world-label", options.className].filter(Boolean).join(" ");
+    element.style.transition = "none";
+    element.textContent = options.text;
+    element.style.color = options.color;
+    element.style.fontSize = `${options.fontSize}px`;
+
+    this.layer.appendChild(element);
+
+    const label: WorldLabel = {
+      element,
+      target: options.target,
+      offsetY: options.offsetY,
+      visible: true,
+      float: {
+        startTime: this.scene.time.now,
+        durationMs: options.durationMs,
+        distance: options.floatDistance,
+      },
+    };
+    this.labels.add(label);
+    this.positionLabel(label);
+  }
+
   update() {
     for (const label of this.labels) {
+      if (label.float && this.scene.time.now - label.float.startTime >= label.float.durationMs) {
+        this.removeLabel(label);
+        continue;
+      }
       this.positionLabel(label);
     }
   }
@@ -112,9 +156,22 @@ export class WorldLabelOverlay {
     const canvasRect = canvas.getBoundingClientRect();
     const rootRect = this.root.getBoundingClientRect();
 
+    let offsetY = label.offsetY;
+    let floatOpacity = 1;
+    if (label.float) {
+      const progress = Phaser.Math.Clamp(
+        (this.scene.time.now - label.float.startTime) / label.float.durationMs,
+        0,
+        1,
+      );
+      const eased = 1 - Math.pow(1 - progress, 3);
+      offsetY -= label.float.distance * eased;
+      floatOpacity = 1 - progress;
+    }
+
     const worldPoint = label.target.getWorldPoint?.() ?? label.target;
     const screenX = camera.x + (worldPoint.x - camera.worldView.x) * camera.zoom;
-    const screenY = camera.y + (worldPoint.y + label.offsetY - camera.worldView.y) * camera.zoom;
+    const screenY = camera.y + (worldPoint.y + offsetY - camera.worldView.y) * camera.zoom;
     const scaleX = canvasRect.width / this.scene.scale.width;
     const scaleY = canvasRect.height / this.scene.scale.height;
     const cssX = canvasRect.left - rootRect.left + screenX * scaleX;
@@ -126,7 +183,7 @@ export class WorldLabelOverlay {
       screenY > this.scene.scale.height + 40
     );
 
-    label.element.style.opacity = offscreen || !label.visible ? "0" : "1";
+    label.element.style.opacity = offscreen || !label.visible ? "0" : String(floatOpacity);
     label.element.style.transform = `translate3d(${Math.round(cssX)}px, ${Math.round(cssY)}px, 0) translate(-50%, -100%)`;
   }
 }

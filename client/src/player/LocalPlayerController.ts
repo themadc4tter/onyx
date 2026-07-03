@@ -12,6 +12,9 @@ interface PredictedMove extends Position {
 }
 
 const NAME_LABEL_FONT_SIZE = 13;
+const DAMAGE_LABEL_FONT_SIZE = 11;
+const DAMAGE_LABEL_FLOAT_DISTANCE = 14;
+const DAMAGE_LABEL_DURATION_MS = 620;
 const LOCAL_MOVE_DURATION_MS = 120;
 const MAX_QUEUED_DIRECTIONS = 3;
 const DEATH_FADE_DELAY_MS = 800;
@@ -46,7 +49,7 @@ export class LocalPlayerController {
     private socket: Socket,
     private map: Phaser.Tilemaps.Tilemap,
     private collisionLayer: Phaser.Tilemaps.TilemapLayer | null,
-    labelOverlay: WorldLabelOverlay,
+    private labelOverlay: WorldLabelOverlay,
     username: string,
     startPosition: Position,
     private isDynamicTileBlocked: (tileX: number, tileY: number) => boolean = () => false,
@@ -299,25 +302,15 @@ export class LocalPlayerController {
   }
 
   private showFloatingDamage(damage: number) {
-    const label = this.scene.add
-      .text(this.container.x, this.container.y - TILE_SIZE, `-${Math.max(1, Math.floor(damage))}`, {
-        color: "#ff735c",
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: "11px",
-        fontStyle: "bold",
-        stroke: "#2a0704",
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5)
-      .setDepth(32);
-
-    this.scene.tweens.add({
-      targets: label,
-      y: label.y - 14,
-      alpha: 0,
-      duration: 620,
-      ease: "Cubic.easeOut",
-      onComplete: () => label.destroy(),
+    this.labelOverlay.addFloatingLabel({
+      target: this.container,
+      text: `-${Math.max(1, Math.floor(damage))}`,
+      offsetY: -TILE_SIZE,
+      color: "#ff735c",
+      fontSize: DAMAGE_LABEL_FONT_SIZE,
+      className: "world-label-damage",
+      floatDistance: DAMAGE_LABEL_FLOAT_DISTANCE,
+      durationMs: DAMAGE_LABEL_DURATION_MS,
     });
   }
 }

@@ -32,6 +32,7 @@ Canvas-rendered text is still acceptable for temporary loading screens, debug-on
 
 ### Current Implementation
 
-- `client/src/ui/WorldLabelOverlay.ts` owns DOM label creation, positioning, updates, and cleanup.
+- `client/src/ui/WorldLabelOverlay.ts` owns DOM label creation, positioning, updates, and cleanup, including transient auto-destroying "floating" labels (e.g. rising/fading text) via `addFloatingLabel`.
 - Player overhead names are rendered through `WorldLabelOverlay` in `client/src/scenes/GameScene.ts`.
 - NPC names and titles are rendered through `WorldLabelOverlay` in `client/src/world/NpcRenderer.ts`.
+- Floating damage numbers are rendered through `WorldLabelOverlay.addFloatingLabel` in `client/src/player/LocalPlayerController.ts`.
