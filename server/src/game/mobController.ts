@@ -1,5 +1,5 @@
 import { getMobDefinition, type MobBehaviorDefinition, type MobCombatDefinition } from "@onyx/shared/mobs";
-import type { MobSpawnState } from "@onyx/shared/protocol";
+import type { MobSpawnState, PlayerMeleeImpactPayload } from "@onyx/shared/protocol";
 import { isTileWalkable, ZONES } from "../config/map";
 import { applyMobDamage } from "./combat";
 import { findMobPath, type MobPathResult, type TilePosition } from "./mobPathfinding";
@@ -13,6 +13,7 @@ interface MobInstanceState extends MobSpawnState {
   combat: MobCombatDefinition;
   nextWanderAt: number;
   nextChaseMoveAt: number;
+  nextAttackAt: number;
   targetSocketId: string | null;
 }
 
@@ -24,6 +25,8 @@ interface MobControllerPlayer {
 
 interface MobControllerOptions {
   emitMobState: (zoneId: string, mob: MobSpawnState) => void;
+  emitPlayerMeleeImpact?: (zoneId: string, impact: PlayerMeleeImpactPayload) => void;
+  damagePlayer?: (socketId: string, damage: number) => void | Promise<void>;
   getPlayersInZone?: (zoneId: string) => MobControllerPlayer[];
   isPlayerOccupyingTile?: (zoneId: string, tileX: number, tileY: number) => boolean;
 }
@@ -104,6 +107,7 @@ export class MobController {
         },
         nextWanderAt: this.getNextWanderAt(Date.now()),
         nextChaseMoveAt: 0,
+        nextAttackAt: 0,
         targetSocketId: null,
         hp: mob.maxHp,
         maxHp: mob.maxHp,
@@ -129,6 +133,7 @@ export class MobController {
         if (mob.aiState === "chasing") {
           mob.aiState = "idle";
           mob.nextChaseMoveAt = 0;
+          mob.nextAttackAt = 0;
         }
         this.emitMobState(zoneId, mob);
       }
@@ -170,6 +175,7 @@ export class MobController {
       currentMob.alive = true;
       currentMob.nextWanderAt = this.getNextWanderAt(Date.now());
       currentMob.nextChaseMoveAt = 0;
+      currentMob.nextAttackAt = 0;
       currentMob.targetSocketId = null;
       currentMob.aiState = "idle";
       this.emitMobState(zoneId, currentMob);
@@ -276,12 +282,17 @@ export class MobController {
   }
 
   private tickChase(zoneId: string, mob: MobInstanceState, target: MobControllerPlayer, nowMs: number) {
-    if (nowMs < mob.nextChaseMoveAt) return;
-
     if (this.shouldEvade(mob)) {
       this.startEvade(zoneId, mob, nowMs);
       return;
     }
+
+    if (this.isTargetInAttackRange(mob, target)) {
+      this.tickAttack(zoneId, mob, target, nowMs);
+      return;
+    }
+
+    if (nowMs < mob.nextChaseMoveAt) return;
 
     mob.nextChaseMoveAt = nowMs + MOB_CHASE_MOVE_MS;
     const path = this.findPathForMob(zoneId, mob, {
@@ -349,6 +360,7 @@ export class MobController {
     mob.aiState = "evading";
     mob.targetSocketId = null;
     mob.nextChaseMoveAt = nowMs;
+    mob.nextAttackAt = 0;
     if (mob.behavior.evadeRestoresHp) {
       mob.hp = mob.maxHp;
     }
@@ -359,6 +371,7 @@ export class MobController {
     mob.aiState = "idle";
     mob.targetSocketId = null;
     mob.nextChaseMoveAt = 0;
+    mob.nextAttackAt = 0;
     mob.nextWanderAt = this.getNextWanderAt(nowMs);
     mob.hp = mob.maxHp;
     this.emitMobState(zoneId, mob);
@@ -382,6 +395,7 @@ export class MobController {
     mob.targetSocketId = closestPlayer.socketId;
     mob.aiState = "chasing";
     mob.nextChaseMoveAt = 0;
+    mob.nextAttackAt = 0;
     return closestPlayer;
   }
 
@@ -394,6 +408,7 @@ export class MobController {
 
     mob.targetSocketId = null;
     mob.aiState = "idle";
+    mob.nextAttackAt = 0;
     return null;
   }
 
@@ -407,6 +422,34 @@ export class MobController {
     mob.targetSocketId = attacker.socketId;
     mob.aiState = "chasing";
     mob.nextChaseMoveAt = 0;
+    mob.nextAttackAt = 0;
+  }
+
+  private tickAttack(zoneId: string, mob: MobInstanceState, target: MobControllerPlayer, nowMs: number) {
+    mob.nextChaseMoveAt = 0;
+    if (nowMs < mob.nextAttackAt) return;
+
+    mob.nextAttackAt = nowMs + mob.combat.attackSpeedMs;
+    this.options.emitPlayerMeleeImpact?.(zoneId, {
+      attackerId: mob.id,
+      targetSocketId: target.socketId,
+      originTileX: mob.tileX,
+      originTileY: mob.tileY,
+      targetTileX: target.tileX,
+      targetTileY: target.tileY,
+    });
+    Promise.resolve(this.options.damagePlayer?.(target.socketId, mob.combat.damage)).catch(error => {
+      console.error(`[mob]        failed to damage player "${target.socketId}"`, error);
+    });
+  }
+
+  private isTargetInAttackRange(mob: MobInstanceState, target: MobControllerPlayer) {
+    return (
+      Math.max(
+        Math.abs(mob.tileX - target.tileX),
+        Math.abs(mob.tileY - target.tileY),
+      ) <= mob.combat.attackRange
+    );
   }
 
   private emitMobState(zoneId: string, mob: MobInstanceState) {

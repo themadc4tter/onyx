@@ -415,6 +415,13 @@ async function damagePlayer(io: Server, socket: Socket, damage: number) {
   await handlePlayerDeath(io, socket);
 }
 
+async function damagePlayerBySocketId(io: Server, socketId: string, damage: number) {
+  const socket = io.sockets.sockets.get(socketId);
+  if (!socket) return;
+
+  await damagePlayer(io, socket, damage);
+}
+
 const app = express();
 app.use(cors({ origin: CLIENT_URL }));
 app.get("/health", (_req, res) => {
@@ -436,6 +443,10 @@ const mobController = new MobController({
   emitMobState: (zoneId, mob) => {
     io.to(zoneId).emit("mob:state", mob);
   },
+  emitPlayerMeleeImpact: (zoneId, impact) => {
+    io.to(zoneId).emit("player:meleeImpact", impact);
+  },
+  damagePlayer: (socketId, damage) => damagePlayerBySocketId(io, socketId, damage),
   getPlayersInZone: zoneId => (
     [...connectedPlayers.values()]
       .filter(player => player.zoneId === zoneId && player.alive)

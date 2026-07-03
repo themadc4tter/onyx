@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { getItemDefinition } from "@onyx/shared/items";
-import type { MobMeleeImpactPayload, MobProjectileFiredPayload } from "@onyx/shared/protocol";
+import type { MobMeleeImpactPayload, MobProjectileFiredPayload, PlayerMeleeImpactPayload } from "@onyx/shared/protocol";
 import type { EquipmentState } from "../game/equipment";
 import { TILE_SIZE } from "../config/map";
 import { CombatWarningText } from "./CombatWarningText";
@@ -38,6 +38,7 @@ type AutoAttackMode =
 
 const UNARMED_WINDUP_MS = 1_000;
 const MELEE_RANGE_TILES = 1;
+const HOSTILE_SLASH_COLOR = 0xff6b3d;
 
 export class AutoAttackController {
   private autoAttackKey: Phaser.Input.Keyboard.Key;
@@ -60,6 +61,7 @@ export class AutoAttackController {
     this.onActiveChanged = options.onActiveChanged ?? (() => {});
     this.socket.on("mob:meleeImpact", this.handleMeleeImpact);
     this.socket.on("mob:projectileFired", this.handleProjectileFired);
+    this.socket.on("player:meleeImpact", this.handlePlayerMeleeImpact);
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     this.scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
   }
@@ -223,6 +225,14 @@ export class AutoAttackController {
     this.projectileEffect.play(payload, () => this.options.getMobWorldPosition(payload.targetId));
   };
 
+  private handlePlayerMeleeImpact = (payload: PlayerMeleeImpactPayload) => {
+    this.slashEffect.play(
+      this.tileCenterToVector(payload.originTileX, payload.originTileY),
+      this.tileCenterToVector(payload.targetTileX, payload.targetTileY),
+      { color: HOSTILE_SLASH_COLOR },
+    );
+  };
+
   private getMobPositionVector(mobId: string, fallbackTileX: number, fallbackTileY: number) {
     const position = this.options.getMobWorldPosition(mobId);
     if (position) return new Phaser.Math.Vector2(position.x, position.y);
@@ -237,6 +247,7 @@ export class AutoAttackController {
   private destroy = () => {
     this.socket.off("mob:meleeImpact", this.handleMeleeImpact);
     this.socket.off("mob:projectileFired", this.handleProjectileFired);
+    this.socket.off("player:meleeImpact", this.handlePlayerMeleeImpact);
     this.warningText.hide();
     this.disable();
   };

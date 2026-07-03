@@ -7,10 +7,15 @@ const SLASH_RADIUS = TILE_SIZE * 0.78;
 const SLASH_THICKNESS = TILE_SIZE * 0.28;
 const SWING_ARC_RADIANS = Phaser.Math.DegToRad(42);
 
+interface AutoAttackSlashOptions {
+  color?: number;
+}
+
 export class AutoAttackSlashEffect {
   constructor(private scene: Phaser.Scene) {}
 
-  play(origin: Phaser.Math.Vector2, target: Phaser.Math.Vector2) {
+  play(origin: Phaser.Math.Vector2, target: Phaser.Math.Vector2, options: AutoAttackSlashOptions = {}) {
+    const color = options.color ?? 0xffffff;
     const angleToTarget = Phaser.Math.Angle.Between(origin.x, origin.y, target.x, target.y);
     const swingDirection = Math.random() < 0.5 ? -1 : 1;
     const swing = { progress: 0 };
@@ -20,9 +25,9 @@ export class AutoAttackSlashEffect {
       .setAlpha(0.95);
     this.setSwingRotation(container, angleToTarget, swingDirection, swing.progress);
 
-    const glow = this.createCrescent(0xffffff, 0.26, SLASH_RADIUS + 2, SLASH_THICKNESS + 3);
-    const slash = this.createCrescent(0xffffff, 0.86, SLASH_RADIUS, SLASH_THICKNESS);
-    const leadingEdge = this.createCrescent(0xffffff, 0.55, SLASH_RADIUS + 1, 2);
+    const glow = this.createCrescent(color, 0.26, SLASH_RADIUS + 2, SLASH_THICKNESS + 3);
+    const slash = this.createCrescent(color, 0.86, SLASH_RADIUS, SLASH_THICKNESS);
+    const leadingEdge = this.createCrescent(color, 0.55, SLASH_RADIUS + 1, 2);
 
     container.add([glow, slash, leadingEdge]);
 
