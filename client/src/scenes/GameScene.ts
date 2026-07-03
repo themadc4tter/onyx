@@ -177,6 +177,7 @@ export class GameScene extends Phaser.Scene {
     this.hudOverlay = new GameHudOverlay(this, this.socket, this.inventory, this.equipment, {
       musicEnabled: this.musicEnabled,
       onMusicEnabledChange: this.setMusicEnabled,
+      playerName: this.profile.username,
       combat: this.combat,
       socialPlayers: this.socialPlayers.map(player => ({
         socketId: player.socketId,

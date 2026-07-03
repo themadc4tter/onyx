@@ -29,6 +29,7 @@ interface SkillMock {
 interface GameHudOverlayOptions {
   musicEnabled: boolean;
   onMusicEnabledChange: (enabled: boolean) => void;
+  playerName: string;
   combat?: PlayerCombatState;
   onClearTarget?: () => void;
   socialPlayers?: SocialPlayer[];
@@ -122,10 +123,18 @@ const CSS = `
     font-weight: 700;
   }
 
-  .hud-target-frame {
+  .hud-unit-frames {
     position: absolute;
     left: calc(var(--hud-canvas-left) + var(--hud-inset));
     top: calc(var(--hud-canvas-top) + var(--hud-inset));
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+    max-width: calc(var(--hud-canvas-width) - 24px);
+  }
+
+  .hud-target-frame {
     width: min(260px, calc(var(--hud-canvas-width) - 24px));
     min-height: 58px;
     padding: 9px 10px;
@@ -180,36 +189,47 @@ const CSS = `
   }
 
   .hud-combat-frame {
-    position: absolute;
-    left: calc(var(--hud-canvas-left) + var(--hud-inset));
-    bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 156px);
-    width: min(220px, calc(var(--hud-canvas-width) - 24px));
+    width: min(240px, calc(var(--hud-canvas-width) - 24px));
     padding: 8px 10px;
     display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 6px 10px;
-    align-items: center;
-    background: rgba(20, 22, 21, 0.84);
-    border: 1px solid rgba(221, 198, 144, 0.32);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.34);
+    gap: 6px;
+    background: rgba(20, 22, 21, 0.92);
+    border: 1px solid rgba(229, 195, 107, 0.58);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.42);
+    pointer-events: auto;
   }
 
-  .hud-combat-label {
+  .hud-combat-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .hud-combat-name {
+    min-width: 0;
     color: #ffe7a8;
-    font-size: 12px;
+    font-size: 15px;
     font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .hud-combat-value {
-    color: rgba(242, 234, 216, 0.82);
-    font-size: 12px;
+  .hud-combat-tag {
+    color: #ff8f6b;
+    font-size: 11px;
     font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
   }
 
   .hud-combat-bar {
-    grid-column: 1 / -1;
-    height: 8px;
-    border: 1px solid rgba(242, 234, 216, 0.12);
+    position: relative;
+    height: 26px;
+    border: 1px solid rgba(242, 234, 216, 0.16);
     background: rgba(0, 0, 0, 0.48);
     overflow: hidden;
   }
@@ -218,6 +238,19 @@ const CSS = `
     display: block;
     height: 100%;
     background: #b94646;
+    transition: width 0.15s ease-out;
+  }
+
+  .hud-combat-value {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #f2ead8;
+    font-size: 13px;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   }
 
   .hud-chat-controls {
@@ -909,10 +942,6 @@ const CSS = `
       font-size: 12px;
     }
 
-    .hud-combat-frame {
-      bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 136px);
-    }
-
     .hud-window {
       left: calc(var(--hud-canvas-left) + var(--hud-inset));
       right: calc(100% - var(--hud-canvas-left) - var(--hud-canvas-width) + var(--hud-inset));
@@ -958,6 +987,7 @@ const CSS = `
 export class GameHudOverlay {
   private root: HTMLElement;
   private layer: HTMLDivElement;
+  private unitFramesRoot: HTMLDivElement;
   private targetRoot: HTMLDivElement;
   private combatRoot: HTMLDivElement;
   private windowRoot: HTMLDivElement;
@@ -978,6 +1008,7 @@ export class GameHudOverlay {
   private tradeState: TradeStatePayload | null = null;
   private targetProfile: TargetProfile | null = null;
   private combat: PlayerCombatState;
+  private playerName: string;
 
   constructor(
     private scene: Phaser.Scene,
@@ -992,6 +1023,7 @@ export class GameHudOverlay {
     this.inventory = initialInventory ?? createEmptyInventory();
     this.equipment = initialEquipment ?? createEmptyEquipment();
     this.combat = options?.combat ?? DEFAULT_PLAYER_COMBAT;
+    this.playerName = options?.playerName ?? "You";
     this.musicEnabled = options?.musicEnabled ?? true;
     this.socialPlayers = options?.socialPlayers ?? [];
     this.root = root;
@@ -1000,10 +1032,13 @@ export class GameHudOverlay {
     document.head.appendChild(this.styleEl);
 
     this.layer = this.ensureLayer(root);
-    this.targetRoot = document.createElement("div");
-    this.layer.appendChild(this.targetRoot);
+    this.unitFramesRoot = document.createElement("div");
+    this.unitFramesRoot.className = "hud-unit-frames";
+    this.layer.appendChild(this.unitFramesRoot);
     this.combatRoot = document.createElement("div");
-    this.layer.appendChild(this.combatRoot);
+    this.unitFramesRoot.appendChild(this.combatRoot);
+    this.targetRoot = document.createElement("div");
+    this.unitFramesRoot.appendChild(this.targetRoot);
     this.windowRoot = document.createElement("div");
     this.windowRoot.className = "hud-window-root";
     this.layer.appendChild(this.windowRoot);
@@ -1085,14 +1120,33 @@ export class GameHudOverlay {
     const frame = document.createElement("section");
     frame.className = "hud-combat-frame";
     frame.setAttribute("aria-label", "Health");
-    frame.innerHTML = `
-      <span class="hud-combat-label">Health</span>
-      <span class="hud-combat-value">${this.combat.hp}/${this.combat.maxHp}</span>
-      <span class="hud-combat-bar">
-        <span class="hud-combat-fill" style="width: ${Math.round(hpRatio * 100)}%"></span>
-      </span>
-    `;
 
+    const header = document.createElement("div");
+    header.className = "hud-combat-header";
+
+    const name = document.createElement("span");
+    name.className = "hud-combat-name";
+    name.textContent = this.playerName;
+
+    const tag = document.createElement("span");
+    tag.className = "hud-combat-tag";
+    tag.textContent = "In Combat";
+
+    header.append(name, tag);
+
+    const bar = document.createElement("div");
+    bar.className = "hud-combat-bar";
+
+    const fill = document.createElement("span");
+    fill.className = "hud-combat-fill";
+    fill.style.width = `${Math.round(hpRatio * 100)}%`;
+
+    const value = document.createElement("span");
+    value.className = "hud-combat-value";
+    value.textContent = `${this.combat.hp}/${this.combat.maxHp}`;
+
+    bar.append(fill, value);
+    frame.append(header, bar);
     this.combatRoot.appendChild(frame);
   }
 
