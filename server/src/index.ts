@@ -92,7 +92,7 @@ const CHAT_RATE_LIMIT_MS = 800;
 const MAX_CHAT_LENGTH = 240;
 const HERB_RESPAWN_MS = 10_000;
 const TRADE_RANGE_TILES = 5;
-const DEFAULT_PLAYER_MAX_HP = 20;
+const DEFAULT_PLAYER_MAX_HP = 5;
 const PLAYER_RESPAWN_DELAY_MS = 4_000;
 const herbSpawnStates = new Map<string, Map<string, HerbSpawnState>>();
 

@@ -42,6 +42,8 @@ const MUSIC_VOLUME = 0.35;
 const MUSIC_SETTING_STORAGE_KEY = "onyx.musicEnabled";
 const DEATH_OVERLAY_DELAY_MS = 800;
 const DEATH_OVERLAY_FADE_MS = 1_000;
+const DEATH_OVERLAY_DEPTH = 1_000;
+const DEATH_OVERLAY_ALPHA = 0.56;
 
 function readMusicEnabledSetting() {
   return localStorage.getItem(MUSIC_SETTING_STORAGE_KEY) !== "false";
@@ -455,11 +457,11 @@ export class GameScene extends Phaser.Scene {
     this.deathOverlay = this.add
       .rectangle(width / 2, height / 2, width, height, 0x6d6d6d, 0)
       .setScrollFactor(0)
-      .setDepth(28);
+      .setDepth(DEATH_OVERLAY_DEPTH);
 
     this.tweens.add({
       targets: this.deathOverlay,
-      alpha: 0.52,
+      alpha: DEATH_OVERLAY_ALPHA,
       delay: DEATH_OVERLAY_DELAY_MS,
       duration: DEATH_OVERLAY_FADE_MS,
       ease: "Sine.easeInOut",

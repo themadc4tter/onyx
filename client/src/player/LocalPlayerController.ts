@@ -139,7 +139,7 @@ export class LocalPlayerController {
     this.hitFeedbackTimer?.remove(false);
     this.hitFeedbackTimer = null;
     this.scene.tweens.killTweensOf(this.container);
-    this.sprite.setTintFill(0xb8b8b8);
+    this.sprite.clearTint();
 
     this.scene.tweens.add({
       targets: this.container,

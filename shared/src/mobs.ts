@@ -40,7 +40,7 @@ export const MOB_DEFINITIONS: Record<string, MobDefinition> = {
     behavior: {
       aggression: "aggressive",
       wanderRadius: 5,
-      aggroRadius: 7,
+      aggroRadius: 5,
       leashRadius: 20,
       chaseMode: "leashed",
       respawns: true,

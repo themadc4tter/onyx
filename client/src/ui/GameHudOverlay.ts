@@ -57,7 +57,7 @@ const HUD_LAYER_ID = "game-hud-layer";
 const HUD_INSET_PX = 12;
 const SOCIAL_RANGE_TILES = 5;
 const SOCIAL_REFRESH_MS = 2_000;
-const DEFAULT_PLAYER_COMBAT: PlayerCombatState = { hp: 20, maxHp: 20, alive: true };
+const DEFAULT_PLAYER_COMBAT: PlayerCombatState = { hp: 5, maxHp: 5, alive: true };
 
 const SKILLS: SkillMock[] = [
   { name: "Melee", level: 12, currentXp: 124, totalXp: 200, nextUnlock: "Guarding Stance" },
