@@ -50,7 +50,7 @@ export class GameScene extends Phaser.Scene {
   private zoneId: string = DEFAULT_ZONE_ID;
   private startPos: Position | null = null;
   private herbSpawnStates: HerbSpawnState[] = [];
-  private mobSpawnStates: MobSpawnState[] = [];
+  private mobStates: MobSpawnState[] = [];
   private inventory: InventoryPayload | undefined;
   private equipment: EquipmentPayload | undefined;
   private mapKey = getZoneMapConfig(DEFAULT_ZONE_ID).mapKey;
@@ -94,7 +94,7 @@ export class GameScene extends Phaser.Scene {
     this.mapKey = getZoneMapConfig(this.zoneId).mapKey;
     this.startPos = data.startPos ?? null;
     this.herbSpawnStates = data.herbSpawns ?? [];
-    this.mobSpawnStates = data.mobSpawns ?? [];
+    this.mobStates = data.mobSpawns ?? [];
     this.inventory = data.inventory;
     this.equipment = data.equipment;
   }
@@ -179,7 +179,7 @@ export class GameScene extends Phaser.Scene {
       onTargetChanged: target => this.hudOverlay.setTargetProfile(target),
     });
     this.mobSpawners = new MobSpawnerManager(this, this.socket, {
-      initialStates: this.mobSpawnStates,
+      initialStates: this.mobStates,
       onMobClicked: mob => this.targeting.selectTarget(mob),
       onMobChanged: mob => this.targeting.refreshTarget(mob),
     });

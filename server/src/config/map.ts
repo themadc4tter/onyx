@@ -75,7 +75,7 @@ export interface HerbSpawn {
   itemId: string;
 }
 
-export interface MobSpawn {
+export interface MobSpawnerConfig {
   id: string;
   tileX: number;
   tileY: number;
@@ -84,6 +84,8 @@ export interface MobSpawn {
   combat?: Partial<MobCombatDefinition>;
 }
 
+export type MobSpawn = MobSpawnerConfig;
+
 export interface ZoneConfig {
   collisionData: number[];
   cols: number;
@@ -91,7 +93,7 @@ export interface ZoneConfig {
   spawn: { x: number; y: number };
   exits: ZoneExit[];
   herbSpawns: HerbSpawn[];
-  mobSpawns: MobSpawn[];
+  mobSpawns: MobSpawnerConfig[];
 }
 
 interface LoadedZone extends Omit<ZoneConfig, "exits"> {

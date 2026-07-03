@@ -313,7 +313,7 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
     position: newPos,
     initPlayers: newZonePlayers,
     herbSpawns: getHerbSpawnStates(newZoneId),
-    mobSpawns: mobController.getMobSpawnStates(newZoneId),
+    mobSpawns: mobController.getMobStates(newZoneId),
     inventory: getInventoryPayload(player.userId),
     equipment: getEquipmentPayload(player.userId),
   });
@@ -424,7 +424,7 @@ io.on("connection", async (socket) => {
     position: startPos,
     zoneId,
     herbSpawns: getHerbSpawnStates(zoneId),
-    mobSpawns: mobController.getMobSpawnStates(zoneId),
+    mobSpawns: mobController.getMobStates(zoneId),
     inventory: getInventoryPayload(userId),
     equipment: getEquipmentPayload(userId),
   });
@@ -702,11 +702,11 @@ io.on("connection", async (socket) => {
 
   socket.on("mob:autoAttack", (payload: MobAutoAttackPayload) => {
     const player = connectedPlayers.get(socket.id);
-    const mobSpawnId = payload?.id;
-    if (!player || !mobSpawnId) return;
+    const mobInstanceId = payload?.id;
+    if (!player || !mobInstanceId) return;
 
     const zoneId = player.zoneId;
-    const mob = mobController.getMobSpawnState(zoneId, mobSpawnId);
+    const mob = mobController.getMobState(zoneId, mobInstanceId);
     if (!mob || !mob.alive) return;
 
     const result = resolveAutoAttack({ player, mob });
@@ -714,13 +714,13 @@ io.on("connection", async (socket) => {
 
     if (result.mode === "melee") {
       io.to(zoneId).emit("mob:meleeImpact", result.impact);
-      mobController.damageMob(zoneId, mobSpawnId, result.damage);
+      mobController.damageMob(zoneId, mobInstanceId, result.damage);
       return;
     }
 
     io.to(zoneId).emit("mob:projectileFired", result.projectile);
     setTimeout(() => {
-      mobController.damageMob(zoneId, mobSpawnId, result.damage);
+      mobController.damageMob(zoneId, mobInstanceId, result.damage);
     }, result.projectile.durationMs);
   });
 

@@ -72,6 +72,7 @@ export interface HerbSpawnState {
 
 export interface MobSpawnState {
   id: string;
+  spawnId: string;
   tileX: number;
   tileY: number;
   mobId: string;

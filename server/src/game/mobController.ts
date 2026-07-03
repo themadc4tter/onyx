@@ -3,9 +3,10 @@ import type { MobSpawnState } from "@onyx/shared/protocol";
 import { ZONES } from "../config/map";
 import { applyMobDamage } from "./combat";
 
-interface MobRuntimeState extends MobSpawnState {
+interface MobInstanceState extends MobSpawnState {
   spawnTileX: number;
   spawnTileY: number;
+  instanceIndex: number;
   behavior: MobBehaviorDefinition;
   combat: MobCombatDefinition;
 }
@@ -15,22 +16,24 @@ interface MobControllerOptions {
 }
 
 export class MobController {
-  private mobSpawnStates = new Map<string, Map<string, MobRuntimeState>>();
+  private mobInstancesByZone = new Map<string, Map<string, MobInstanceState>>();
 
   constructor(private options: MobControllerOptions) {}
 
-  getMobSpawnStates(zoneId: string): MobSpawnState[] {
+  getMobStates(zoneId: string): MobSpawnState[] {
     const zone = ZONES[zoneId];
     if (!zone) return [];
 
-    let zoneStates = this.mobSpawnStates.get(zoneId);
-    if (!zoneStates) {
-      zoneStates = new Map();
-      this.mobSpawnStates.set(zoneId, zoneStates);
+    let zoneInstances = this.mobInstancesByZone.get(zoneId);
+    if (!zoneInstances) {
+      zoneInstances = new Map();
+      this.mobInstancesByZone.set(zoneId, zoneInstances);
     }
 
     for (const spawn of zone.mobSpawns) {
-      if (zoneStates.has(spawn.id)) continue;
+      const instanceIndex = 1;
+      const instanceId = getMobInstanceId(spawn.id, instanceIndex);
+      if (zoneInstances.has(instanceId)) continue;
 
       const mob = getMobDefinition(spawn.mobId);
       if (!mob) {
@@ -38,10 +41,15 @@ export class MobController {
         continue;
       }
 
-      zoneStates.set(spawn.id, {
-        ...spawn,
+      zoneInstances.set(instanceId, {
+        id: instanceId,
+        spawnId: spawn.id,
+        mobId: spawn.mobId,
+        tileX: spawn.tileX,
+        tileY: spawn.tileY,
         spawnTileX: spawn.tileX,
         spawnTileY: spawn.tileY,
+        instanceIndex,
         behavior: {
           ...mob.behavior,
           ...spawn.behavior,
@@ -56,17 +64,17 @@ export class MobController {
       });
     }
 
-    return [...zoneStates.values()].map(mob => this.toPayload(mob));
+    return [...zoneInstances.values()].map(mob => this.toPayload(mob));
   }
 
-  getMobSpawnState(zoneId: string, mobSpawnId: string): MobSpawnState | null {
-    this.getMobSpawnStates(zoneId);
-    const mob = this.mobSpawnStates.get(zoneId)?.get(mobSpawnId);
+  getMobState(zoneId: string, mobInstanceId: string): MobSpawnState | null {
+    this.getMobStates(zoneId);
+    const mob = this.mobInstancesByZone.get(zoneId)?.get(mobInstanceId);
     return mob ? this.toPayload(mob) : null;
   }
 
-  damageMob(zoneId: string, mobSpawnId: string, damage: number) {
-    const mob = this.getMobRuntimeState(zoneId, mobSpawnId);
+  damageMob(zoneId: string, mobInstanceId: string, damage: number) {
+    const mob = this.getMobInstance(zoneId, mobInstanceId);
     if (!mob || !mob.alive) return;
 
     const defeated = applyMobDamage(mob, damage);
@@ -75,7 +83,7 @@ export class MobController {
     if (!mob.behavior.respawns) return;
 
     setTimeout(() => {
-      const currentMob = this.getMobRuntimeState(zoneId, mobSpawnId);
+      const currentMob = this.getMobInstance(zoneId, mobInstanceId);
       if (!currentMob) return;
 
       currentMob.tileX = currentMob.spawnTileX;
@@ -87,7 +95,7 @@ export class MobController {
   }
 
   isMobBlockingTile(zoneId: string, tileX: number, tileY: number) {
-    return this.getMobSpawnStates(zoneId).some(mob => {
+    return this.getMobStates(zoneId).some(mob => {
       const definition = getMobDefinition(mob.mobId);
       return (
         mob.alive &&
@@ -98,18 +106,19 @@ export class MobController {
     });
   }
 
-  private getMobRuntimeState(zoneId: string, mobSpawnId: string) {
-    this.getMobSpawnStates(zoneId);
-    return this.mobSpawnStates.get(zoneId)?.get(mobSpawnId) ?? null;
+  private getMobInstance(zoneId: string, mobInstanceId: string) {
+    this.getMobStates(zoneId);
+    return this.mobInstancesByZone.get(zoneId)?.get(mobInstanceId) ?? null;
   }
 
-  private emitMobState(zoneId: string, mob: MobRuntimeState) {
+  private emitMobState(zoneId: string, mob: MobInstanceState) {
     this.options.emitMobState(zoneId, this.toPayload(mob));
   }
 
-  private toPayload(mob: MobRuntimeState): MobSpawnState {
+  private toPayload(mob: MobInstanceState): MobSpawnState {
     return {
       id: mob.id,
+      spawnId: mob.spawnId,
       tileX: mob.tileX,
       tileY: mob.tileY,
       mobId: mob.mobId,
@@ -118,4 +127,8 @@ export class MobController {
       alive: mob.alive,
     };
   }
+}
+
+function getMobInstanceId(spawnId: string, instanceIndex: number) {
+  return `${spawnId}:${instanceIndex}`;
 }
