@@ -345,7 +345,15 @@ const mobController = new MobController({
   emitMobState: (zoneId, mob) => {
     io.to(zoneId).emit("mob:state", mob);
   },
+  isPlayerOccupyingTile: (zoneId, tileX, tileY) => (
+    [...connectedPlayers.values()].some(player => (
+      player.zoneId === zoneId &&
+      player.position.tileX === tileX &&
+      player.position.tileY === tileY
+    ))
+  ),
 });
+mobController.start();
 
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token as string | undefined;
@@ -838,6 +846,7 @@ async function shutdown(signal: NodeJS.Signals) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log(`[server] received ${signal}, flushing dirty inventories...`);
+  mobController.stop();
 
   const forceExitTimer = setTimeout(() => {
     console.error("[server] shutdown timed out");

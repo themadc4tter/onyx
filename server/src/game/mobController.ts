@@ -1,6 +1,6 @@
 import { getMobDefinition, type MobBehaviorDefinition, type MobCombatDefinition } from "@onyx/shared/mobs";
 import type { MobSpawnState } from "@onyx/shared/protocol";
-import { ZONES } from "../config/map";
+import { isTileWalkable, ZONES } from "../config/map";
 import { applyMobDamage } from "./combat";
 
 interface MobInstanceState extends MobSpawnState {
@@ -9,16 +9,45 @@ interface MobInstanceState extends MobSpawnState {
   instanceIndex: number;
   behavior: MobBehaviorDefinition;
   combat: MobCombatDefinition;
+  nextWanderAt: number;
 }
 
 interface MobControllerOptions {
   emitMobState: (zoneId: string, mob: MobSpawnState) => void;
+  isPlayerOccupyingTile?: (zoneId: string, tileX: number, tileY: number) => boolean;
 }
+
+const MOB_TICK_MS = 250;
+const MOB_WANDER_MOVE_MS = 1_200;
+const MOB_WANDER_JITTER_MS = 1_800;
+const CARDINAL_DIRECTIONS = [
+  { x: 0, y: -1 },
+  { x: 1, y: 0 },
+  { x: 0, y: 1 },
+  { x: -1, y: 0 },
+];
 
 export class MobController {
   private mobInstancesByZone = new Map<string, Map<string, MobInstanceState>>();
+  private tickTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private options: MobControllerOptions) {}
+
+  start() {
+    if (this.tickTimer) return;
+
+    this.tickTimer = setInterval(() => {
+      this.tick(Date.now());
+    }, MOB_TICK_MS);
+    this.tickTimer.unref?.();
+  }
+
+  stop() {
+    if (!this.tickTimer) return;
+
+    clearInterval(this.tickTimer);
+    this.tickTimer = null;
+  }
 
   getMobStates(zoneId: string): MobSpawnState[] {
     const zone = ZONES[zoneId];
@@ -58,6 +87,7 @@ export class MobController {
           ...mob.combat,
           ...spawn.combat,
         },
+        nextWanderAt: this.getNextWanderAt(Date.now()),
         hp: mob.maxHp,
         maxHp: mob.maxHp,
         alive: true,
@@ -90,14 +120,16 @@ export class MobController {
       currentMob.tileY = currentMob.spawnTileY;
       currentMob.hp = currentMob.maxHp;
       currentMob.alive = true;
+      currentMob.nextWanderAt = this.getNextWanderAt(Date.now());
       this.emitMobState(zoneId, currentMob);
     }, mob.behavior.respawnMs);
   }
 
-  isMobBlockingTile(zoneId: string, tileX: number, tileY: number) {
+  isMobBlockingTile(zoneId: string, tileX: number, tileY: number, ignoredMobId?: string) {
     return this.getMobStates(zoneId).some(mob => {
       const definition = getMobDefinition(mob.mobId);
       return (
+        mob.id !== ignoredMobId &&
         mob.alive &&
         !definition?.playersCanRunThrough &&
         mob.tileX === tileX &&
@@ -109,6 +141,49 @@ export class MobController {
   private getMobInstance(zoneId: string, mobInstanceId: string) {
     this.getMobStates(zoneId);
     return this.mobInstancesByZone.get(zoneId)?.get(mobInstanceId) ?? null;
+  }
+
+  private tick(nowMs: number) {
+    for (const [zoneId, mobs] of this.mobInstancesByZone) {
+      for (const mob of mobs.values()) {
+        this.tickMob(zoneId, mob, nowMs);
+      }
+    }
+  }
+
+  private tickMob(zoneId: string, mob: MobInstanceState, nowMs: number) {
+    if (!mob.alive || mob.behavior.wanderRadius <= 0 || nowMs < mob.nextWanderAt) return;
+
+    mob.nextWanderAt = this.getNextWanderAt(nowMs);
+    const nextTile = this.getWanderStep(zoneId, mob);
+    if (!nextTile) return;
+
+    mob.tileX = nextTile.tileX;
+    mob.tileY = nextTile.tileY;
+    this.emitMobState(zoneId, mob);
+  }
+
+  private getWanderStep(zoneId: string, mob: MobInstanceState) {
+    const candidates = shuffle(CARDINAL_DIRECTIONS)
+      .map(direction => ({
+        tileX: mob.tileX + direction.x,
+        tileY: mob.tileY + direction.y,
+      }))
+      .filter(tile => this.canMobMoveTo(zoneId, mob, tile.tileX, tile.tileY));
+
+    return candidates[0] ?? null;
+  }
+
+  private canMobMoveTo(zoneId: string, mob: MobInstanceState, tileX: number, tileY: number) {
+    if (!isTileWalkable(zoneId, tileX, tileY)) return false;
+    if (getTileDistance(tileX, tileY, mob.spawnTileX, mob.spawnTileY) > mob.behavior.wanderRadius) return false;
+    if (this.options.isPlayerOccupyingTile?.(zoneId, tileX, tileY)) return false;
+
+    return !this.isMobBlockingTile(zoneId, tileX, tileY, mob.id);
+  }
+
+  private getNextWanderAt(nowMs: number) {
+    return nowMs + MOB_WANDER_MOVE_MS + Math.floor(Math.random() * MOB_WANDER_JITTER_MS);
   }
 
   private emitMobState(zoneId: string, mob: MobInstanceState) {
@@ -131,4 +206,19 @@ export class MobController {
 
 function getMobInstanceId(spawnId: string, instanceIndex: number) {
   return `${spawnId}:${instanceIndex}`;
+}
+
+function getTileDistance(fromX: number, fromY: number, toX: number, toY: number) {
+  return Math.hypot(fromX - toX, fromY - toY);
+}
+
+function shuffle<T>(items: T[]) {
+  const shuffled = [...items];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
 }
