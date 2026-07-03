@@ -8,6 +8,7 @@ interface MobInstanceState extends MobSpawnState {
   spawnTileX: number;
   spawnTileY: number;
   instanceIndex: number;
+  aiState: MobAiState;
   behavior: MobBehaviorDefinition;
   combat: MobCombatDefinition;
   nextWanderAt: number;
@@ -26,6 +27,8 @@ interface MobControllerOptions {
   getPlayersInZone?: (zoneId: string) => MobControllerPlayer[];
   isPlayerOccupyingTile?: (zoneId: string, tileX: number, tileY: number) => boolean;
 }
+
+type MobAiState = "idle" | "chasing" | "evading";
 
 const MOB_TICK_MS = 250;
 const MOB_WANDER_MOVE_MS = 1_200;
@@ -90,6 +93,7 @@ export class MobController {
         spawnTileX: spawn.tileX,
         spawnTileY: spawn.tileY,
         instanceIndex,
+        aiState: "idle",
         behavior: {
           ...mob.behavior,
           ...spawn.behavior,
@@ -126,11 +130,16 @@ export class MobController {
   damageMob(zoneId: string, mobInstanceId: string, damage: number, attackerSocketId?: string) {
     const mob = this.getMobInstance(zoneId, mobInstanceId);
     if (!mob || !mob.alive) return;
+    if (mob.aiState === "evading") {
+      this.emitMobState(zoneId, mob);
+      return;
+    }
 
     this.aggroMob(mob, zoneId, attackerSocketId);
     const defeated = applyMobDamage(mob, damage);
     if (defeated) {
       mob.targetSocketId = null;
+      mob.aiState = "idle";
     }
     this.emitMobState(zoneId, mob);
     if (!defeated) return;
@@ -147,6 +156,7 @@ export class MobController {
       currentMob.nextWanderAt = this.getNextWanderAt(Date.now());
       currentMob.nextChaseMoveAt = 0;
       currentMob.targetSocketId = null;
+      currentMob.aiState = "idle";
       this.emitMobState(zoneId, currentMob);
     }, mob.behavior.respawnMs);
   }
@@ -192,6 +202,31 @@ export class MobController {
     });
   }
 
+  private findReturnPathForMob(zoneId: string, mob: MobInstanceState) {
+    const zone = ZONES[zoneId];
+    if (!zone) return { kind: "stuck", path: [] } satisfies MobPathResult;
+
+    return findMobPath({
+      start: {
+        tileX: mob.tileX,
+        tileY: mob.tileY,
+      },
+      target: {
+        tileX: mob.spawnTileX,
+        tileY: mob.spawnTileY,
+      },
+      attackRange: 0,
+      bounds: {
+        cols: zone.cols,
+        rows: zone.rows,
+      },
+      isBlocked: (tileX, tileY) => (
+        !isTileWalkable(zoneId, tileX, tileY) ||
+        this.isMobBlockingTile(zoneId, tileX, tileY, mob.id)
+      ),
+    });
+  }
+
   private tick(nowMs: number) {
     for (const [zoneId, mobs] of this.mobInstancesByZone) {
       for (const mob of mobs.values()) {
@@ -202,6 +237,11 @@ export class MobController {
 
   private tickMob(zoneId: string, mob: MobInstanceState, nowMs: number) {
     if (!mob.alive) return;
+
+    if (mob.aiState === "evading") {
+      this.tickEvade(zoneId, mob, nowMs);
+      return;
+    }
 
     const target = this.getCurrentTarget(zoneId, mob) ?? this.acquireAggroTarget(zoneId, mob);
     if (target) {
@@ -223,6 +263,11 @@ export class MobController {
   private tickChase(zoneId: string, mob: MobInstanceState, target: MobControllerPlayer, nowMs: number) {
     if (nowMs < mob.nextChaseMoveAt) return;
 
+    if (this.shouldEvade(mob)) {
+      this.startEvade(zoneId, mob, nowMs);
+      return;
+    }
+
     mob.nextChaseMoveAt = nowMs + MOB_CHASE_MOVE_MS;
     const path = this.findPathForMob(zoneId, mob, {
       tileX: target.tileX,
@@ -234,6 +279,23 @@ export class MobController {
     mob.tileX = nextTile.tileX;
     mob.tileY = nextTile.tileY;
     mob.nextWanderAt = this.getNextWanderAt(nowMs);
+    this.emitMobState(zoneId, mob);
+  }
+
+  private tickEvade(zoneId: string, mob: MobInstanceState, nowMs: number) {
+    if (mob.tileX === mob.spawnTileX && mob.tileY === mob.spawnTileY) {
+      this.finishEvade(zoneId, mob, nowMs);
+      return;
+    }
+
+    if (nowMs < mob.nextChaseMoveAt) return;
+
+    mob.nextChaseMoveAt = nowMs + MOB_CHASE_MOVE_MS;
+    const nextTile = this.findReturnPathForMob(zoneId, mob).path[0];
+    if (!nextTile) return;
+
+    mob.tileX = nextTile.tileX;
+    mob.tileY = nextTile.tileY;
     this.emitMobState(zoneId, mob);
   }
 
@@ -260,6 +322,33 @@ export class MobController {
     return nowMs + MOB_WANDER_MOVE_MS + Math.floor(Math.random() * MOB_WANDER_JITTER_MS);
   }
 
+  private shouldEvade(mob: MobInstanceState) {
+    return (
+      mob.behavior.chaseMode === "leashed" &&
+      mob.behavior.leashRadius > 0 &&
+      getTileDistance(mob.tileX, mob.tileY, mob.spawnTileX, mob.spawnTileY) > mob.behavior.leashRadius
+    );
+  }
+
+  private startEvade(zoneId: string, mob: MobInstanceState, nowMs: number) {
+    mob.aiState = "evading";
+    mob.targetSocketId = null;
+    mob.nextChaseMoveAt = nowMs;
+    if (mob.behavior.evadeRestoresHp) {
+      mob.hp = mob.maxHp;
+    }
+    this.emitMobState(zoneId, mob);
+  }
+
+  private finishEvade(zoneId: string, mob: MobInstanceState, nowMs: number) {
+    mob.aiState = "idle";
+    mob.targetSocketId = null;
+    mob.nextChaseMoveAt = 0;
+    mob.nextWanderAt = this.getNextWanderAt(nowMs);
+    mob.hp = mob.maxHp;
+    this.emitMobState(zoneId, mob);
+  }
+
   private acquireAggroTarget(zoneId: string, mob: MobInstanceState) {
     if (mob.behavior.aggression !== "aggressive" || mob.behavior.aggroRadius <= 0) return null;
 
@@ -276,6 +365,7 @@ export class MobController {
     if (!closestPlayer) return null;
 
     mob.targetSocketId = closestPlayer.socketId;
+    mob.aiState = "chasing";
     mob.nextChaseMoveAt = 0;
     return closestPlayer;
   }
@@ -288,6 +378,7 @@ export class MobController {
     if (target) return target;
 
     mob.targetSocketId = null;
+    mob.aiState = "idle";
     return null;
   }
 
@@ -299,6 +390,7 @@ export class MobController {
     if (!attacker) return;
 
     mob.targetSocketId = attacker.socketId;
+    mob.aiState = "chasing";
     mob.nextChaseMoveAt = 0;
   }
 
