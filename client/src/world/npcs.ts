@@ -65,6 +65,17 @@ export const NPCS: NpcDefinition[] = [
     facing: "down",
     dialogueId: "gerald_intro",
   },
+  {
+    id: "bank-banker-yosef-horowitz",
+    name: "Yosef Horowitz",
+    title: "Banker",
+    zoneId: "bank",
+    markerName: "npc_1",
+    spriteKey: "npc010",
+    spriteUrl: "assets/characters/npc010.png",
+    facing: "down",
+    dialogueId: "yosef_horowitz_intro",
+  },
 ];
 
 export function getNpcsForZone(zoneId: string) {

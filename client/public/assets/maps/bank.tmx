@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="17" height="12" tilewidth="16" tileheight="16" infinite="0" nextlayerid="12" nextobjectid="6">
+<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="17" height="12" tilewidth="16" tileheight="16" infinite="0" nextlayerid="12" nextobjectid="7">
  <editorsettings>
   <export target="bank.tmj" format="json"/>
  </editorsettings>
@@ -153,6 +153,9 @@
   <object id="3" name="exit_settlement" type="exit" x="112" y="176" width="48" height="16"/>
   <object id="4" x="32" y="224"/>
   <object id="5" name="entry_settlement" type="entry" x="136" y="168">
+   <point/>
+  </object>
+  <object id="6" name="npc_1" type="npc_spawn" x="136" y="88">
    <point/>
   </object>
  </objectgroup>

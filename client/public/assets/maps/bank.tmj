@@ -250,6 +250,19 @@
                  "width":0,
                  "x":136,
                  "y":168
+                }, 
+                {
+                 "height":0,
+                 "id":6,
+                 "name":"npc_1",
+                 "opacity":1,
+                 "point":true,
+                 "rotation":0,
+                 "type":"npc_spawn",
+                 "visible":true,
+                 "width":0,
+                 "x":136,
+                 "y":88
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -281,7 +294,7 @@
          "y":0
         }],
  "nextlayerid":12,
- "nextobjectid":6,
+ "nextobjectid":7,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.2",
