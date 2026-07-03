@@ -24,7 +24,7 @@ const MOB_DEPTH = 17;
 const MOB_STATUS_DEPTH = 23;
 const HP_BAR_WIDTH = 18;
 const HP_BAR_HEIGHT = 3;
-const MOB_MOVE_DURATION_MS = 120;
+const MOB_MOVE_DURATION_MS = 350;
 
 export const MOB_SPRITE_ASSETS = Object.values(MOB_DEFINITIONS).map(mob => ({
   key: mob.spriteKey,

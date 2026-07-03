@@ -42,7 +42,7 @@ type MobAiState = "idle" | "chasing" | "evading";
 
 const MOB_TICK_MS = 250;
 const MOB_WANDER_MOVE_MS = 1_200;
-const MOB_WANDER_JITTER_MS = 1_800;
+const MOB_WANDER_JITTER_MS = 3_600;
 const MOB_CHASE_MOVE_MS = 600;
 const MOB_SPAWN_AGGRO_DELAY_MS = 600;
 const CARDINAL_DIRECTIONS = [
