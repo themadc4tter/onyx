@@ -2,6 +2,7 @@ import { getMobDefinition, type MobBehaviorDefinition, type MobCombatDefinition 
 import type { MobSpawnState } from "@onyx/shared/protocol";
 import { isTileWalkable, ZONES } from "../config/map";
 import { applyMobDamage } from "./combat";
+import { findMobPath, type MobPathResult, type TilePosition } from "./mobPathfinding";
 
 interface MobInstanceState extends MobSpawnState {
   spawnTileX: number;
@@ -103,6 +104,13 @@ export class MobController {
     return mob ? this.toPayload(mob) : null;
   }
 
+  findPathToTarget(zoneId: string, mobInstanceId: string, target: TilePosition): MobPathResult {
+    const mob = this.getMobInstance(zoneId, mobInstanceId);
+    if (!mob || !mob.alive) return { kind: "stuck", path: [] };
+
+    return this.findPathForMob(zoneId, mob, target);
+  }
+
   damageMob(zoneId: string, mobInstanceId: string, damage: number) {
     const mob = this.getMobInstance(zoneId, mobInstanceId);
     if (!mob || !mob.alive) return;
@@ -141,6 +149,29 @@ export class MobController {
   private getMobInstance(zoneId: string, mobInstanceId: string) {
     this.getMobStates(zoneId);
     return this.mobInstancesByZone.get(zoneId)?.get(mobInstanceId) ?? null;
+  }
+
+  private findPathForMob(zoneId: string, mob: MobInstanceState, target: TilePosition) {
+    const zone = ZONES[zoneId];
+    if (!zone) return { kind: "stuck", path: [] } satisfies MobPathResult;
+
+    return findMobPath({
+      start: {
+        tileX: mob.tileX,
+        tileY: mob.tileY,
+      },
+      target,
+      attackRange: mob.combat.attackRange,
+      bounds: {
+        cols: zone.cols,
+        rows: zone.rows,
+      },
+      isBlocked: (tileX, tileY) => (
+        !isTileWalkable(zoneId, tileX, tileY) ||
+        this.isMobBlockingTile(zoneId, tileX, tileY, mob.id) ||
+        Boolean(this.options.isPlayerOccupyingTile?.(zoneId, tileX, tileY))
+      ),
+    });
   }
 
   private tick(nowMs: number) {
