@@ -135,37 +135,43 @@ const CSS = `
   }
 
   .hud-target-frame {
-    width: min(260px, calc(var(--hud-canvas-width) - 24px));
-    min-height: 58px;
-    padding: 9px 10px;
+    width: min(240px, calc(var(--hud-canvas-width) - 24px));
+    padding: 8px 10px;
     display: grid;
-    grid-template-columns: 1fr 28px;
-    gap: 8px;
+    gap: 6px;
     background: rgba(20, 22, 21, 0.92);
     border: 1px solid rgba(229, 195, 107, 0.58);
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.42);
     pointer-events: auto;
   }
 
+  .hud-target-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+
   .hud-target-name {
     min-width: 0;
     color: #ffe7a8;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
-    line-height: 1.1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .hud-target-close {
-    width: 28px;
-    height: 28px;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
     border: 1px solid rgba(242, 234, 216, 0.18);
     background: rgba(0, 0, 0, 0.22);
     color: #f2ead8;
     cursor: pointer;
-    font-size: 18px;
+    font-size: 16px;
     line-height: 1;
   }
 
@@ -174,18 +180,31 @@ const CSS = `
     color: #ffe7a8;
   }
 
-  .hud-target-health {
-    grid-column: 1 / -1;
-    height: 10px;
+  .hud-target-bar {
+    position: relative;
+    height: 26px;
     border: 1px solid rgba(242, 234, 216, 0.16);
     background: rgba(0, 0, 0, 0.48);
     overflow: hidden;
   }
 
-  .hud-target-health-fill {
+  .hud-target-fill {
     display: block;
     height: 100%;
     background: #b94646;
+    transition: width 0.15s ease-out;
+  }
+
+  .hud-target-value {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #f2ead8;
+    font-size: 13px;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   }
 
   .hud-combat-frame {
@@ -1167,7 +1186,10 @@ export class GameHudOverlay {
     frame.className = "hud-target-frame";
     frame.setAttribute("aria-label", "Target");
 
-    const name = document.createElement("div");
+    const header = document.createElement("div");
+    header.className = "hud-target-header";
+
+    const name = document.createElement("span");
     name.className = "hud-target-name";
     name.textContent = this.targetProfile.name;
 
@@ -1178,15 +1200,21 @@ export class GameHudOverlay {
     close.innerHTML = "&times;";
     close.addEventListener("click", () => this.requestClearTarget());
 
-    const health = document.createElement("div");
-    health.className = "hud-target-health";
+    header.append(name, close);
 
-    const healthFill = document.createElement("span");
-    healthFill.className = "hud-target-health-fill";
-    healthFill.style.width = `${Math.round(hpRatio * 100)}%`;
-    health.appendChild(healthFill);
+    const bar = document.createElement("div");
+    bar.className = "hud-target-bar";
 
-    frame.append(name, close, health);
+    const fill = document.createElement("span");
+    fill.className = "hud-target-fill";
+    fill.style.width = `${Math.round(hpRatio * 100)}%`;
+
+    const value = document.createElement("span");
+    value.className = "hud-target-value";
+    value.textContent = `${this.targetProfile.hp}/${this.targetProfile.maxHp}`;
+
+    bar.append(fill, value);
+    frame.append(header, bar);
     this.targetRoot.appendChild(frame);
   }
 
