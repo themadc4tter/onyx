@@ -120,6 +120,21 @@ export class MobController {
     return mob ? this.toPayload(mob) : null;
   }
 
+  clearTargetsForPlayer(socketId: string) {
+    for (const [zoneId, mobs] of this.mobInstancesByZone) {
+      for (const mob of mobs.values()) {
+        if (mob.targetSocketId !== socketId) continue;
+
+        mob.targetSocketId = null;
+        if (mob.aiState === "chasing") {
+          mob.aiState = "idle";
+          mob.nextChaseMoveAt = 0;
+        }
+        this.emitMobState(zoneId, mob);
+      }
+    }
+  }
+
   findPathToTarget(zoneId: string, mobInstanceId: string, target: TilePosition): MobPathResult {
     const mob = this.getMobInstance(zoneId, mobInstanceId);
     if (!mob || !mob.alive) return { kind: "stuck", path: [] };

@@ -8,6 +8,7 @@ import type {
   InventoryPayload,
   MobSpawnState,
   MoveAck,
+  PlayerCombatState,
   PlayerEquipmentChangedPayload,
   PlayerLeftPayload,
   PlayerMovedPayload,
@@ -53,6 +54,7 @@ export class GameScene extends Phaser.Scene {
   private mobStates: MobSpawnState[] = [];
   private inventory: InventoryPayload | undefined;
   private equipment: EquipmentPayload | undefined;
+  private combat: PlayerCombatState | undefined;
   private mapKey = getZoneMapConfig(DEFAULT_ZONE_ID).mapKey;
 
   private map!: Phaser.Tilemaps.Tilemap;
@@ -85,6 +87,7 @@ export class GameScene extends Phaser.Scene {
     mobSpawns?: MobSpawnState[];
     inventory?: InventoryPayload;
     equipment?: EquipmentPayload;
+    combat?: PlayerCombatState;
   }) {
     this.socket = data.socket;
     this.profile = data.profile;
@@ -97,6 +100,7 @@ export class GameScene extends Phaser.Scene {
     this.mobStates = data.mobSpawns ?? [];
     this.inventory = data.inventory;
     this.equipment = data.equipment;
+    this.combat = data.combat;
   }
 
   preload() {
@@ -161,6 +165,7 @@ export class GameScene extends Phaser.Scene {
     this.hudOverlay = new GameHudOverlay(this, this.socket, this.inventory, this.equipment, {
       musicEnabled: this.musicEnabled,
       onMusicEnabledChange: this.setMusicEnabled,
+      combat: this.combat,
       socialPlayers: this.socialPlayers.map(player => ({
         socketId: player.socketId,
         username: player.username,
@@ -392,6 +397,7 @@ export class GameScene extends Phaser.Scene {
         mobSpawns: payload.mobSpawns ?? [],
         inventory: payload.inventory,
         equipment: payload.equipment,
+        combat: payload.combat,
       });
     });
 

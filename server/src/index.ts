@@ -4,7 +4,7 @@ import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import cors from "cors";
 import { supabase } from "./lib/supabase";
-import { isTileWalkable, normalizeZoneId, ZONES, type ZoneExit } from "./config/map";
+import { DEFAULT_ZONE_ID, isTileWalkable, normalizeZoneId, ZONES, type ZoneExit } from "./config/map";
 import {
   addItemToInventory,
   deleteInventoryItem,
@@ -58,6 +58,7 @@ import type {
   MoveAck,
   MovePayload,
   NormalizedChatPayload,
+  PlayerCombatState,
   Position,
   TradeOfferPayload,
   TradeRemoveOfferPayload,
@@ -75,6 +76,9 @@ interface ConnectedPlayer {
   username: string;
   position: Position;
   zoneId: string;
+  hp: number;
+  maxHp: number;
+  alive: boolean;
   lastMoveAt: number;
   lastProcessedMoveSeq: number;
   lastChatAt: number;
@@ -88,6 +92,7 @@ const CHAT_RATE_LIMIT_MS = 800;
 const MAX_CHAT_LENGTH = 240;
 const HERB_RESPAWN_MS = 10_000;
 const TRADE_RANGE_TILES = 5;
+const DEFAULT_PLAYER_MAX_HP = 20;
 const herbSpawnStates = new Map<string, Map<string, HerbSpawnState>>();
 
 // Debounced position saves: map of socketId → pending timeout
@@ -162,6 +167,14 @@ function getEquipmentPayload(userId: string): EquipmentPayload {
     slots: Object.fromEntries(
       Object.entries(equipment.slots).map(([slot, item]) => [slot, item ? { ...item } : null]),
     ) as EquipmentPayload["slots"],
+  };
+}
+
+function getPlayerCombatStatePayload(player: ConnectedPlayer): PlayerCombatState {
+  return {
+    hp: player.hp,
+    maxHp: player.maxHp,
+    alive: player.alive,
   };
 }
 
@@ -285,14 +298,18 @@ function validateTradeParticipantsInRange(session: TradeSession) {
   return Boolean(first && second && arePlayersCloseEnoughToTrade(first, second));
 }
 
+function getPlayerSnapshotsInZone(zoneId: string, exceptSocketId?: string) {
+  return [...connectedPlayers.values()]
+    .filter(player => player.zoneId === zoneId && player.socketId !== exceptSocketId && player.alive)
+    .map(getPlayerSnapshot);
+}
+
 async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) {
   const oldZoneId = socket.data.zoneId as string;
   const newZoneId = exit.toZoneId;
   const newPos: Position = { tileX: exit.toTileX, tileY: exit.toTileY, facing: "down" };
 
-  const newZonePlayers = [...connectedPlayers.values()]
-    .filter(p => p.zoneId === newZoneId)
-    .map(getPlayerSnapshot);
+  const newZonePlayers = getPlayerSnapshotsInZone(newZoneId, socket.id);
 
   const player = connectedPlayers.get(socket.id)!;
   cancelTrade(io, player.userId, "movement");
@@ -312,6 +329,7 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
     zoneId: newZoneId,
     position: newPos,
     initPlayers: newZonePlayers,
+    combat: getPlayerCombatStatePayload(player),
     herbSpawns: getHerbSpawnStates(newZoneId),
     mobSpawns: mobController.getMobStates(newZoneId),
     inventory: getInventoryPayload(player.userId),
@@ -323,6 +341,79 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
 }
 
 // ─── Express + Socket.io ────────────────────────────────────────────────────
+
+async function handlePlayerDeath(io: Server, socket: Socket) {
+  const player = connectedPlayers.get(socket.id);
+  if (!player) return;
+
+  const oldZoneId = player.zoneId;
+  const newZoneId = DEFAULT_ZONE_ID;
+  const spawn = ZONES[newZoneId]?.spawn;
+  if (!spawn) return;
+
+  const newPos: Position = { tileX: spawn.x, tileY: spawn.y, facing: "down" };
+  const newZonePlayers = getPlayerSnapshotsInZone(newZoneId, socket.id);
+
+  player.alive = false;
+  cancelTrade(io, player.userId, "death");
+  mobController.clearTargetsForPlayer(player.socketId);
+
+  player.position = newPos;
+  player.zoneId = newZoneId;
+  player.hp = player.maxHp;
+  player.alive = true;
+  player.lastMoveAt = 0;
+  player.lastProcessedMoveSeq = 0;
+  socket.data.position = newPos;
+  socket.data.zoneId = newZoneId;
+
+  if (oldZoneId !== newZoneId) {
+    socket.leave(oldZoneId);
+    await socket.join(newZoneId);
+    io.to(oldZoneId).emit("player:left", { socketId: socket.id });
+    socket.to(newZoneId).emit("player:joined", getPlayerSnapshot(player));
+  } else {
+    socket.to(newZoneId).emit("player:moved", {
+      socketId: socket.id,
+      tileX: newPos.tileX,
+      tileY: newPos.tileY,
+      facing: newPos.facing,
+    });
+  }
+
+  const combat = getPlayerCombatStatePayload(player);
+  socket.emit("player:combat", combat);
+  socket.emit("player:died", {
+    zoneId: newZoneId,
+    position: newPos,
+    combat,
+  });
+  socket.emit("zone:changed", {
+    zoneId: newZoneId,
+    position: newPos,
+    initPlayers: newZonePlayers,
+    combat,
+    herbSpawns: getHerbSpawnStates(newZoneId),
+    mobSpawns: mobController.getMobStates(newZoneId),
+    inventory: getInventoryPayload(player.userId),
+    equipment: getEquipmentPayload(player.userId),
+  });
+
+  flushSave(socket.id, player.userId, newZoneId, newPos);
+}
+
+async function damagePlayer(io: Server, socket: Socket, damage: number) {
+  const player = connectedPlayers.get(socket.id);
+  if (!player || !player.alive || damage <= 0) return;
+
+  player.hp = Math.max(0, player.hp - damage);
+  if (player.hp > 0) {
+    socket.emit("player:combat", getPlayerCombatStatePayload(player));
+    return;
+  }
+
+  await handlePlayerDeath(io, socket);
+}
 
 const app = express();
 app.use(cors({ origin: CLIENT_URL }));
@@ -347,7 +438,7 @@ const mobController = new MobController({
   },
   getPlayersInZone: zoneId => (
     [...connectedPlayers.values()]
-      .filter(player => player.zoneId === zoneId)
+      .filter(player => player.zoneId === zoneId && player.alive)
       .map(player => ({
         socketId: player.socketId,
         tileX: player.position.tileX,
@@ -357,6 +448,7 @@ const mobController = new MobController({
   isPlayerOccupyingTile: (zoneId, tileX, tileY) => (
     [...connectedPlayers.values()].some(player => (
       player.zoneId === zoneId &&
+      player.alive &&
       player.position.tileX === tileX &&
       player.position.tileY === tileY
     ))
@@ -415,9 +507,7 @@ io.on("connection", async (socket) => {
   socket.data.zoneId   = zoneId;
 
   // Snapshot players in the same zone before adding self
-  const others = [...connectedPlayers.values()]
-    .filter(p => p.zoneId === zoneId)
-    .map(getPlayerSnapshot);
+  const others = getPlayerSnapshotsInZone(zoneId, socket.id);
   socket.emit("players:init", others);
 
   connectedPlayers.set(socket.id, {
@@ -426,6 +516,9 @@ io.on("connection", async (socket) => {
     username,
     position: startPos,
     zoneId,
+    hp: DEFAULT_PLAYER_MAX_HP,
+    maxHp: DEFAULT_PLAYER_MAX_HP,
+    alive: true,
     lastMoveAt: 0,
     lastProcessedMoveSeq: 0,
     lastChatAt: 0,
@@ -440,6 +533,7 @@ io.on("connection", async (socket) => {
     profile,
     position: startPos,
     zoneId,
+    combat: getPlayerCombatStatePayload(connectedPlayers.get(socket.id)!),
     herbSpawns: getHerbSpawnStates(zoneId),
     mobSpawns: mobController.getMobStates(zoneId),
     inventory: getInventoryPayload(userId),
@@ -455,7 +549,7 @@ io.on("connection", async (socket) => {
 
     const now = Date.now();
     const player = connectedPlayers.get(socket.id);
-    if (!player) {
+    if (!player || !player.alive) {
       emitMoveAck(socket, seq, current);
       return;
     }

@@ -58,6 +58,7 @@ export class BootScene extends Phaser.Scene {
           initPlayers: remoteBuffer,
           zoneId: data.zoneId,
           startPos: data.position,
+          combat: data.combat,
           herbSpawns: data.herbSpawns ?? [],
           mobSpawns: data.mobSpawns ?? [],
           inventory: data.inventory,

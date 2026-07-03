@@ -8,6 +8,8 @@ import type {
   TradeDeclinedPayload,
   TradeErrorPayload,
   TradeOfferItem,
+  PlayerCombatState,
+  PlayerCombatStatePayload,
   TradeRequestReceivedPayload,
   TradeRequestSentPayload,
   TradeStatePayload,
@@ -27,6 +29,7 @@ interface SkillMock {
 interface GameHudOverlayOptions {
   musicEnabled: boolean;
   onMusicEnabledChange: (enabled: boolean) => void;
+  combat?: PlayerCombatState;
   onClearTarget?: () => void;
   socialPlayers?: SocialPlayer[];
   getLocalTilePosition?: () => TilePosition;
@@ -54,6 +57,7 @@ const HUD_LAYER_ID = "game-hud-layer";
 const HUD_INSET_PX = 12;
 const SOCIAL_RANGE_TILES = 5;
 const SOCIAL_REFRESH_MS = 2_000;
+const DEFAULT_PLAYER_COMBAT: PlayerCombatState = { hp: 20, maxHp: 20, alive: true };
 
 const SKILLS: SkillMock[] = [
   { name: "Melee", level: 12, currentXp: 124, totalXp: 200, nextUnlock: "Guarding Stance" },
@@ -170,6 +174,47 @@ const CSS = `
   }
 
   .hud-target-health-fill {
+    display: block;
+    height: 100%;
+    background: #b94646;
+  }
+
+  .hud-combat-frame {
+    position: absolute;
+    left: calc(var(--hud-canvas-left) + var(--hud-inset));
+    bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 156px);
+    width: min(220px, calc(var(--hud-canvas-width) - 24px));
+    padding: 8px 10px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 10px;
+    align-items: center;
+    background: rgba(20, 22, 21, 0.84);
+    border: 1px solid rgba(221, 198, 144, 0.32);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.34);
+  }
+
+  .hud-combat-label {
+    color: #ffe7a8;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .hud-combat-value {
+    color: rgba(242, 234, 216, 0.82);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .hud-combat-bar {
+    grid-column: 1 / -1;
+    height: 8px;
+    border: 1px solid rgba(242, 234, 216, 0.12);
+    background: rgba(0, 0, 0, 0.48);
+    overflow: hidden;
+  }
+
+  .hud-combat-fill {
     display: block;
     height: 100%;
     background: #b94646;
@@ -864,6 +909,10 @@ const CSS = `
       font-size: 12px;
     }
 
+    .hud-combat-frame {
+      bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 136px);
+    }
+
     .hud-window {
       left: calc(var(--hud-canvas-left) + var(--hud-inset));
       right: calc(100% - var(--hud-canvas-left) - var(--hud-canvas-width) + var(--hud-inset));
@@ -910,6 +959,7 @@ export class GameHudOverlay {
   private root: HTMLElement;
   private layer: HTMLDivElement;
   private targetRoot: HTMLDivElement;
+  private combatRoot: HTMLDivElement;
   private windowRoot: HTMLDivElement;
   private tradeRoot: HTMLDivElement;
   private styleEl: HTMLStyleElement;
@@ -927,6 +977,7 @@ export class GameHudOverlay {
   private socialRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private tradeState: TradeStatePayload | null = null;
   private targetProfile: TargetProfile | null = null;
+  private combat: PlayerCombatState;
 
   constructor(
     private scene: Phaser.Scene,
@@ -940,6 +991,7 @@ export class GameHudOverlay {
 
     this.inventory = initialInventory ?? createEmptyInventory();
     this.equipment = initialEquipment ?? createEmptyEquipment();
+    this.combat = options?.combat ?? DEFAULT_PLAYER_COMBAT;
     this.musicEnabled = options?.musicEnabled ?? true;
     this.socialPlayers = options?.socialPlayers ?? [];
     this.root = root;
@@ -950,6 +1002,8 @@ export class GameHudOverlay {
     this.layer = this.ensureLayer(root);
     this.targetRoot = document.createElement("div");
     this.layer.appendChild(this.targetRoot);
+    this.combatRoot = document.createElement("div");
+    this.layer.appendChild(this.combatRoot);
     this.windowRoot = document.createElement("div");
     this.windowRoot.className = "hud-window-root";
     this.layer.appendChild(this.windowRoot);
@@ -965,6 +1019,7 @@ export class GameHudOverlay {
     window.addEventListener("resize", this.updateCanvasBounds);
     this.socket.on("inventory:changed", this.handleInventoryChanged);
     this.socket.on("equipment:changed", this.handleEquipmentChanged);
+    this.socket.on("player:combat", this.handleCombatChanged);
     this.socket.on("trade:request", this.handleTradeRequest);
     this.socket.on("trade:requestSent", this.handleTradeRequestSent);
     this.socket.on("trade:declined", this.handleTradeDeclined);
@@ -984,6 +1039,7 @@ export class GameHudOverlay {
     this.stopSocialRefresh();
     this.socket.off("inventory:changed", this.handleInventoryChanged);
     this.socket.off("equipment:changed", this.handleEquipmentChanged);
+    this.socket.off("player:combat", this.handleCombatChanged);
     this.socket.off("trade:request", this.handleTradeRequest);
     this.socket.off("trade:requestSent", this.handleTradeRequestSent);
     this.socket.off("trade:declined", this.handleTradeDeclined);
@@ -1010,7 +1066,34 @@ export class GameHudOverlay {
 
   private render() {
     this.layer.appendChild(this.chat.element);
+    this.renderCombatFrame();
     this.layer.appendChild(this.createDock());
+  }
+
+  setCombatState(combat: PlayerCombatState) {
+    this.combat = combat;
+    this.renderCombatFrame();
+  }
+
+  private renderCombatFrame() {
+    this.combatRoot.replaceChildren();
+
+    const hpRatio = this.combat.maxHp > 0
+      ? Phaser.Math.Clamp(this.combat.hp / this.combat.maxHp, 0, 1)
+      : 0;
+
+    const frame = document.createElement("section");
+    frame.className = "hud-combat-frame";
+    frame.setAttribute("aria-label", "Health");
+    frame.innerHTML = `
+      <span class="hud-combat-label">Health</span>
+      <span class="hud-combat-value">${this.combat.hp}/${this.combat.maxHp}</span>
+      <span class="hud-combat-bar">
+        <span class="hud-combat-fill" style="width: ${Math.round(hpRatio * 100)}%"></span>
+      </span>
+    `;
+
+    this.combatRoot.appendChild(frame);
   }
 
   setTargetProfile(target: TargetProfile | null) {
@@ -1391,6 +1474,10 @@ export class GameHudOverlay {
     if (this.activePanel === "equipment") {
       this.renderActivePanel();
     }
+  };
+
+  private handleCombatChanged = (combat: PlayerCombatStatePayload) => {
+    this.setCombatState(combat);
   };
 
   private createEquipmentPanel() {
@@ -1967,6 +2054,7 @@ export class GameHudOverlay {
       disconnect: "Trade cancelled because a player disconnected.",
       movement: "Trade cancelled because a player moved.",
       range: "Trade cancelled because you are too far apart.",
+      death: "Trade cancelled because a player died.",
     };
 
     return messages[reason ?? ""] ?? "Trade cancelled.";

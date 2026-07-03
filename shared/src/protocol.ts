@@ -44,6 +44,12 @@ export interface RemotePlayerData {
   equipment?: EquipmentPayload;
 }
 
+export interface PlayerCombatState {
+  hp: number;
+  maxHp: number;
+  alive: boolean;
+}
+
 export interface PlayerMovedPayload extends Position {
   socketId: string;
 }
@@ -51,6 +57,14 @@ export interface PlayerMovedPayload extends Position {
 export interface PlayerEquipmentChangedPayload {
   socketId: string;
   equipment: EquipmentPayload;
+}
+
+export interface PlayerCombatStatePayload extends PlayerCombatState {}
+
+export interface PlayerDiedPayload {
+  zoneId: string;
+  position: Position;
+  combat: PlayerCombatState;
 }
 
 export interface PlayerLeftPayload {
@@ -85,6 +99,7 @@ export interface ProfilePayload {
   profile: PlayerProfile;
   zoneId: string;
   position: Position;
+  combat?: PlayerCombatState;
   herbSpawns?: HerbSpawnState[];
   mobSpawns?: MobSpawnState[];
   inventory?: InventoryPayload;
@@ -95,6 +110,7 @@ export interface ZoneChangedPayload {
   zoneId: string;
   position: Position;
   initPlayers: RemotePlayerData[];
+  combat?: PlayerCombatState;
   herbSpawns?: HerbSpawnState[];
   mobSpawns?: MobSpawnState[];
   inventory?: InventoryPayload;

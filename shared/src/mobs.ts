@@ -39,9 +39,9 @@ export const MOB_DEFINITIONS: Record<string, MobDefinition> = {
     playersCanRunThrough: false,
     behavior: {
       aggression: "aggressive",
-      wanderRadius: 4,
-      aggroRadius: 5,
-      leashRadius: 8,
+      wanderRadius: 5,
+      aggroRadius: 7,
+      leashRadius: 20,
       chaseMode: "leashed",
       respawns: true,
       respawnMs: 10_000,
