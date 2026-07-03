@@ -48,6 +48,8 @@ export interface PlayerCombatState {
   hp: number;
   maxHp: number;
   alive: boolean;
+  /** Epoch ms when the player's combat tag expires. 0 (or any past timestamp) means not in combat. */
+  combatEndsAt: number;
 }
 
 export interface PlayerMovedPayload extends Position {

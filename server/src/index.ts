@@ -82,6 +82,8 @@ interface ConnectedPlayer {
   lastMoveAt: number;
   lastProcessedMoveSeq: number;
   lastChatAt: number;
+  /** Epoch ms when the player's "in combat" tag expires. 0 means never entered combat / cleared. */
+  combatEndsAt: number;
 }
 
 const connectedPlayers = new Map<string, ConnectedPlayer>();
@@ -94,6 +96,8 @@ const HERB_RESPAWN_MS = 10_000;
 const TRADE_RANGE_TILES = 5;
 const DEFAULT_PLAYER_MAX_HP = 5;
 const PLAYER_RESPAWN_DELAY_MS = 4_000;
+// Refreshed on: dealing damage, taking damage, or a mob locking aggro onto the player.
+const COMBAT_TIMEOUT_MS = 6_000;
 const herbSpawnStates = new Map<string, Map<string, HerbSpawnState>>();
 
 // Debounced position saves: map of socketId → pending timeout
@@ -177,7 +181,15 @@ function getPlayerCombatStatePayload(player: ConnectedPlayer): PlayerCombatState
     hp: player.hp,
     maxHp: player.maxHp,
     alive: player.alive,
+    combatEndsAt: player.combatEndsAt,
   };
+}
+
+// Refreshes the player's combat timer. Does not emit — callers push the
+// resulting state (usually via getPlayerCombatStatePayload) once they know
+// what event socket(s) need to hear about it.
+function enterCombat(player: ConnectedPlayer, nowMs: number = Date.now()) {
+  player.combatEndsAt = nowMs + COMBAT_TIMEOUT_MS;
 }
 
 function getPlayerSnapshot(player: ConnectedPlayer) {
@@ -365,6 +377,9 @@ async function handlePlayerDeath(io: Server, socket: Socket) {
   if (!player || !player.alive || respawnTimers.has(socket.id)) return;
 
   player.alive = false;
+  // Dying clears the combat tag immediately rather than letting it linger through
+  // the death overlay/respawn delay — regen (the flag's first consumer) is moot at 0 HP.
+  player.combatEndsAt = 0;
   cancelTrade(io, player.userId, "death");
   mobController.clearTargetsForPlayer(player.socketId);
 
@@ -404,6 +419,7 @@ async function respawnPlayer(io: Server, socket: Socket) {
   player.alive = true;
   player.lastMoveAt = 0;
   player.lastProcessedMoveSeq = 0;
+  player.combatEndsAt = 0;
   socket.data.position = newPos;
   socket.data.zoneId = newZoneId;
 
@@ -442,6 +458,7 @@ async function damagePlayer(io: Server, socket: Socket, damage: number) {
   if (!player || !player.alive || damage <= 0) return;
 
   player.hp = Math.max(0, player.hp - damage);
+  enterCombat(player);
   socket.emit("player:damaged", {
     damage,
     combat: getPlayerCombatStatePayload(player),
@@ -504,6 +521,14 @@ const mobController = new MobController({
       player.position.tileY === tileY
     ))
   ),
+  onPlayerAggro: (socketId) => {
+    const player = connectedPlayers.get(socketId);
+    const socket = io.sockets.sockets.get(socketId);
+    if (!player || !socket) return;
+
+    enterCombat(player);
+    socket.emit("player:combat", getPlayerCombatStatePayload(player));
+  },
 });
 mobController.start();
 
@@ -573,6 +598,7 @@ io.on("connection", async (socket) => {
     lastMoveAt: 0,
     lastProcessedMoveSeq: 0,
     lastChatAt: 0,
+    combatEndsAt: 0,
   });
 
   await socket.join(zoneId);
@@ -901,6 +927,12 @@ io.on("connection", async (socket) => {
 
     const result = resolveAutoAttack({ player, mob });
     if (!result.ok) return;
+
+    // Combat starts the instant the attack fires (there's no miss chance to model yet,
+    // so "fires" == "lands"), not when a ranged/magic projectile actually reaches its
+    // target — matches the WoW convention of tagging on cast, not on travel time.
+    enterCombat(player);
+    socket.emit("player:combat", getPlayerCombatStatePayload(player));
 
     if (result.mode === "melee") {
       io.to(zoneId).emit("mob:meleeImpact", result.impact);

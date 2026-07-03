@@ -30,6 +30,12 @@ interface MobControllerOptions {
   damagePlayer?: (socketId: string, damage: number) => void | Promise<void>;
   getPlayersInZone?: (zoneId: string) => MobControllerPlayer[];
   isPlayerOccupyingTile?: (zoneId: string, tileX: number, tileY: number) => boolean;
+  /**
+   * Called the instant an aggressive mob locks onto a player it wasn't already
+   * targeting (proximity aggro, not retaliation). This is the mob "deciding to
+   * attack" — combat should start here, before its first hit actually lands.
+   */
+  onPlayerAggro?: (socketId: string) => void;
 }
 
 type MobAiState = "idle" | "chasing" | "evading";
@@ -404,6 +410,7 @@ export class MobController {
     mob.aiState = "chasing";
     mob.nextChaseMoveAt = 0;
     mob.nextAttackAt = 0;
+    this.options.onPlayerAggro?.(closestPlayer.socketId);
     return closestPlayer;
   }
 

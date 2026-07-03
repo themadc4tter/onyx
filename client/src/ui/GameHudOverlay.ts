@@ -58,7 +58,7 @@ const HUD_LAYER_ID = "game-hud-layer";
 const HUD_INSET_PX = 12;
 const SOCIAL_RANGE_TILES = 5;
 const SOCIAL_REFRESH_MS = 2_000;
-const DEFAULT_PLAYER_COMBAT: PlayerCombatState = { hp: 5, maxHp: 5, alive: true };
+const DEFAULT_PLAYER_COMBAT: PlayerCombatState = { hp: 5, maxHp: 5, alive: true, combatEndsAt: 0 };
 
 const SKILLS: SkillMock[] = [
   { name: "Melee", level: 12, currentXp: 124, totalXp: 200, nextUnlock: "Guarding Stance" },
@@ -1027,6 +1027,7 @@ export class GameHudOverlay {
   private tradeState: TradeStatePayload | null = null;
   private targetProfile: TargetProfile | null = null;
   private combat: PlayerCombatState;
+  private combatTagTimer: ReturnType<typeof setTimeout> | null = null;
   private playerName: string;
 
   constructor(
@@ -1066,6 +1067,7 @@ export class GameHudOverlay {
     this.layer.appendChild(this.tradeRoot);
     this.chat = new HudChat(this.socket);
 
+    this.scheduleCombatTagExpiry();
     this.render();
     this.updateCanvasBounds();
 
@@ -1091,6 +1093,7 @@ export class GameHudOverlay {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("resize", this.updateCanvasBounds);
     this.stopSocialRefresh();
+    if (this.combatTagTimer) clearTimeout(this.combatTagTimer);
     this.socket.off("inventory:changed", this.handleInventoryChanged);
     this.socket.off("equipment:changed", this.handleEquipmentChanged);
     this.socket.off("player:combat", this.handleCombatChanged);
@@ -1126,7 +1129,32 @@ export class GameHudOverlay {
 
   setCombatState(combat: PlayerCombatState) {
     this.combat = combat;
+    this.scheduleCombatTagExpiry();
     this.renderCombatFrame();
+  }
+
+  private isInCombat() {
+    return Date.now() < this.combat.combatEndsAt;
+  }
+
+  // The server only pushes combat state on qualifying events (damage dealt/taken,
+  // mob aggro), not on a recurring tick. To hide the "In Combat" tag exactly when
+  // the timer runs out — rather than leaving it stuck on until the next event —
+  // schedule a local re-render for that moment using the absolute expiry timestamp
+  // the server already sent us.
+  private scheduleCombatTagExpiry() {
+    if (this.combatTagTimer) {
+      clearTimeout(this.combatTagTimer);
+      this.combatTagTimer = null;
+    }
+
+    const msRemaining = this.combat.combatEndsAt - Date.now();
+    if (msRemaining <= 0) return;
+
+    this.combatTagTimer = setTimeout(() => {
+      this.combatTagTimer = null;
+      this.renderCombatFrame();
+    }, msRemaining);
   }
 
   private renderCombatFrame() {
@@ -1147,11 +1175,14 @@ export class GameHudOverlay {
     name.className = "hud-combat-name";
     name.textContent = this.playerName;
 
-    const tag = document.createElement("span");
-    tag.className = "hud-combat-tag";
-    tag.textContent = "In Combat";
+    header.append(name);
 
-    header.append(name, tag);
+    if (this.isInCombat()) {
+      const tag = document.createElement("span");
+      tag.className = "hud-combat-tag";
+      tag.textContent = "In Combat";
+      header.append(tag);
+    }
 
     const bar = document.createElement("div");
     bar.className = "hud-combat-bar";
