@@ -1,3 +1,23 @@
+export type MobAggression = "passive" | "aggressive";
+export type MobChaseMode = "leashed" | "unlimited";
+
+export interface MobBehaviorDefinition {
+  aggression: MobAggression;
+  wanderRadius: number;
+  aggroRadius: number;
+  leashRadius: number;
+  chaseMode: MobChaseMode;
+  respawns: boolean;
+  respawnMs: number;
+  evadeRestoresHp: boolean;
+}
+
+export interface MobCombatDefinition {
+  attackRange: number;
+  attackSpeedMs: number;
+  damage: number;
+}
+
 export interface MobDefinition {
   id: string;
   name: string;
@@ -5,6 +25,8 @@ export interface MobDefinition {
   spriteUrl: string;
   maxHp: number;
   playersCanRunThrough: boolean;
+  behavior: MobBehaviorDefinition;
+  combat: MobCombatDefinition;
 }
 
 export const MOB_DEFINITIONS: Record<string, MobDefinition> = {
@@ -15,6 +37,21 @@ export const MOB_DEFINITIONS: Record<string, MobDefinition> = {
     spriteUrl: "assets/characters/male_orc.png",
     maxHp: 10,
     playersCanRunThrough: false,
+    behavior: {
+      aggression: "aggressive",
+      wanderRadius: 4,
+      aggroRadius: 5,
+      leashRadius: 8,
+      chaseMode: "leashed",
+      respawns: true,
+      respawnMs: 10_000,
+      evadeRestoresHp: true,
+    },
+    combat: {
+      attackRange: 1,
+      attackSpeedMs: 2_000,
+      damage: 1,
+    },
   },
 };
 

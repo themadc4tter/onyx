@@ -1,5 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
+import type {
+  MobAggression,
+  MobBehaviorDefinition,
+  MobChaseMode,
+  MobCombatDefinition,
+} from "@onyx/shared/mobs";
 
 export const DEFAULT_ZONE_ID = "settlement";
 
@@ -74,6 +80,8 @@ export interface MobSpawn {
   tileX: number;
   tileY: number;
   mobId: string;
+  behavior?: Partial<MobBehaviorDefinition>;
+  combat?: Partial<MobCombatDefinition>;
 }
 
 export interface ZoneConfig {
@@ -177,6 +185,70 @@ function getStringProperty(object: TiledObject, propertyNames: string[]) {
   return typeof property?.value === "string" && property.value.length > 0 ? property.value : null;
 }
 
+function getNumberProperty(object: TiledObject, propertyNames: string[]) {
+  const property = object.properties?.find(candidate => propertyNames.includes(candidate.name));
+  if (typeof property?.value === "number" && Number.isFinite(property.value)) {
+    return property.value;
+  }
+
+  if (typeof property?.value === "string") {
+    const parsed = Number(property.value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function getBooleanProperty(object: TiledObject, propertyNames: string[]) {
+  const property = object.properties?.find(candidate => propertyNames.includes(candidate.name));
+  return typeof property?.value === "boolean" ? property.value : null;
+}
+
+function getMobBehaviorOverrides(object: TiledObject): Partial<MobBehaviorDefinition> | undefined {
+  const behavior: Partial<MobBehaviorDefinition> = {};
+  const aggression = getStringProperty(object, ["aggression", "mobAggression", "mob_aggression"]);
+  const aggressive = getBooleanProperty(object, ["aggressive", "isAggressive", "is_aggressive"]);
+  const chaseMode = getStringProperty(object, ["chaseMode", "chase_mode"]);
+  const wanderRadius = getNumberProperty(object, ["wanderRadius", "wander_radius"]);
+  const aggroRadius = getNumberProperty(object, ["aggroRadius", "aggro_radius"]);
+  const leashRadius = getNumberProperty(object, ["leashRadius", "leash_radius"]);
+  const respawns = getBooleanProperty(object, ["respawns", "doesRespawn", "does_respawn"]);
+  const respawnMs = getNumberProperty(object, ["respawnMs", "respawn_ms"]);
+  const evadeRestoresHp = getBooleanProperty(object, ["evadeRestoresHp", "evade_restores_hp"]);
+
+  if (aggression === "passive" || aggression === "aggressive") {
+    behavior.aggression = aggression as MobAggression;
+  } else if (aggressive !== null) {
+    behavior.aggression = aggressive ? "aggressive" : "passive";
+  }
+
+  if (chaseMode === "leashed" || chaseMode === "unlimited") {
+    behavior.chaseMode = chaseMode as MobChaseMode;
+  }
+
+  if (wanderRadius !== null) behavior.wanderRadius = Math.max(0, wanderRadius);
+  if (aggroRadius !== null) behavior.aggroRadius = Math.max(0, aggroRadius);
+  if (leashRadius !== null) behavior.leashRadius = Math.max(0, leashRadius);
+  if (respawns !== null) behavior.respawns = respawns;
+  if (respawnMs !== null) behavior.respawnMs = Math.max(0, respawnMs);
+  if (evadeRestoresHp !== null) behavior.evadeRestoresHp = evadeRestoresHp;
+
+  return Object.keys(behavior).length > 0 ? behavior : undefined;
+}
+
+function getMobCombatOverrides(object: TiledObject): Partial<MobCombatDefinition> | undefined {
+  const combat: Partial<MobCombatDefinition> = {};
+  const attackRange = getNumberProperty(object, ["attackRange", "attack_range"]);
+  const attackSpeedMs = getNumberProperty(object, ["attackSpeedMs", "attack_speed_ms"]);
+  const damage = getNumberProperty(object, ["damage", "attackDamage", "attack_damage"]);
+
+  if (attackRange !== null) combat.attackRange = Math.max(0, attackRange);
+  if (attackSpeedMs !== null) combat.attackSpeedMs = Math.max(0, attackSpeedMs);
+  if (damage !== null) combat.damage = Math.max(0, damage);
+
+  return Object.keys(combat).length > 0 ? combat : undefined;
+}
+
 function loadZone(zoneId: ZoneId): LoadedZone {
   const mapPath = MAP_PATHS[zoneId];
   const tiledMap = JSON.parse(fs.readFileSync(mapPath, "utf8")) as TiledMap;
@@ -275,11 +347,16 @@ function buildZoneConfigs() {
           layers: [],
         });
 
+        const behavior = getMobBehaviorOverrides(object);
+        const combat = getMobCombatOverrides(object);
+
         return {
           id: object.name || `${zone.zoneId}_mob_${index + 1}`,
           tileX: position.x,
           tileY: position.y,
           mobId: getStringProperty(object, ["mobId", "mob_id", "mob"]) ?? DEFAULT_MOB_ID,
+          ...(behavior ? { behavior } : {}),
+          ...(combat ? { combat } : {}),
         };
       }),
     };
