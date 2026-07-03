@@ -220,10 +220,11 @@ const CSS = `
 
   .hud-combat-header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 8px;
     min-width: 0;
+    min-height: 20px;
   }
 
   .hud-combat-name {
