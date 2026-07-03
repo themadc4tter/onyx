@@ -67,6 +67,7 @@ export class GameScene extends Phaser.Scene {
 
   private map!: Phaser.Tilemaps.Tilemap;
   private collisionLayer: Phaser.Tilemaps.TilemapLayer | null = null;
+  private obstacleLayer: Phaser.Tilemaps.TilemapLayer | null = null;
 
   private labelOverlay!: WorldLabelOverlay;
   private hudOverlay!: GameHudOverlay;
@@ -150,6 +151,7 @@ export class GameScene extends Phaser.Scene {
     const builtMap = this.worldMapBuilder.build(this.mapKey);
     this.map = builtMap.map;
     this.collisionLayer = builtMap.collisionLayer;
+    this.obstacleLayer = builtMap.obstacleLayer;
 
     const spawn = this.worldMapBuilder.findSpawnTile(this.map);
     const startPosition = this.startPos ?? { ...spawn, facing: "down" as const };
@@ -160,6 +162,7 @@ export class GameScene extends Phaser.Scene {
       this.socket,
       this.map,
       this.collisionLayer,
+      this.obstacleLayer,
       this.labelOverlay,
       this.profile.username,
       startPosition,

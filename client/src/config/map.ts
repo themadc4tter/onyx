@@ -76,5 +76,6 @@ export const TILED_FOREGROUND_LAYERS = [
 ] as const;
 
 export const TILED_COLLISION_LAYER = "Collision";
+export const TILED_OBSTACLE_LAYER = "Obstacles";
 export const TILED_OBJECT_LAYER = "Objects";
 export const TILED_PLAYER_SPAWN = "player_spawn";

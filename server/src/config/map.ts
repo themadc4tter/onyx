@@ -88,6 +88,7 @@ export type MobSpawn = MobSpawnerConfig;
 
 export interface ZoneConfig {
   collisionData: number[];
+  obstacleData: number[];
   cols: number;
   rows: number;
   spawn: { x: number; y: number };
@@ -134,6 +135,12 @@ function getTileLayer(map: TiledMap, name: string) {
   }
 
   return layer;
+}
+
+function getOptionalTileLayer(map: TiledMap, name: string) {
+  return map.layers.find((candidate): candidate is TiledTileLayer => (
+    candidate.type === "tilelayer" && candidate.name === name
+  ));
 }
 
 function getObjectLayer(map: TiledMap, name: string) {
@@ -256,6 +263,7 @@ function loadZone(zoneId: ZoneId): LoadedZone {
   const tiledMap = JSON.parse(fs.readFileSync(mapPath, "utf8")) as TiledMap;
 
   const collisionLayer = getTileLayer(tiledMap, "Collision");
+  const obstacleLayer = getOptionalTileLayer(tiledMap, "Obstacles");
   const objectLayer = getObjectLayer(tiledMap, "Objects");
   const spawn = objectLayer.objects.find(object => object.name === "player_spawn" || object.type === "spawn")
     ?? objectLayer.objects.find(object => object.type === "entry" || object.name.startsWith("entry_"));
@@ -278,6 +286,7 @@ function loadZone(zoneId: ZoneId): LoadedZone {
   return {
     zoneId,
     collisionData: collisionLayer.data,
+    obstacleData: obstacleLayer?.data ?? new Array(tiledMap.width * tiledMap.height).fill(0),
     cols: tiledMap.width,
     rows: tiledMap.height,
     spawn: toTilePosition(spawn, tiledMap),
@@ -320,6 +329,7 @@ function buildZoneConfigs() {
 
     zones[zone.zoneId] = {
       collisionData: zone.collisionData,
+      obstacleData: zone.obstacleData,
       cols: zone.cols,
       rows: zone.rows,
       spawn: zone.spawn,
@@ -406,7 +416,7 @@ export function isTileWalkable(zoneId: string, tileX: number, tileY: number): bo
   if (!zone || !isTileInsideZone(zone, tileX, tileY)) return false;
 
   const index = tileY * zone.cols + tileX;
-  return zone.collisionData[index] === 0;
+  return zone.collisionData[index] === 0 && zone.obstacleData[index] === 0;
 }
 
 export function hasLineOfSight(

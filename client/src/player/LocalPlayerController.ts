@@ -49,6 +49,7 @@ export class LocalPlayerController {
     private socket: Socket,
     private map: Phaser.Tilemaps.Tilemap,
     private collisionLayer: Phaser.Tilemaps.TilemapLayer | null,
+    private obstacleLayer: Phaser.Tilemaps.TilemapLayer | null,
     private labelOverlay: WorldLabelOverlay,
     username: string,
     startPosition: Position,
@@ -194,6 +195,7 @@ export class LocalPlayerController {
       nextY < 0 ||
       nextY >= this.map.height ||
       this.collisionLayer?.hasTileAt(nextX, nextY) ||
+      this.obstacleLayer?.hasTileAt(nextX, nextY) ||
       this.isDynamicTileBlocked(nextX, nextY)
     ) {
       this.bump(dx, dy);

@@ -3,6 +3,7 @@ import {
   TILED_COLLISION_LAYER,
   TILED_FOREGROUND_LAYERS,
   TILED_OBJECT_LAYER,
+  TILED_OBSTACLE_LAYER,
   TILED_PLAYER_SPAWN,
   TILED_RENDER_LAYERS,
   TILESETS,
@@ -35,6 +36,7 @@ interface CachedTiledMap {
 export interface BuiltWorldMap {
   map: Phaser.Tilemaps.Tilemap;
   collisionLayer: Phaser.Tilemaps.TilemapLayer | null;
+  obstacleLayer: Phaser.Tilemaps.TilemapLayer | null;
 }
 
 const FOREGROUND_DEPTH = 21;
@@ -68,11 +70,14 @@ export class WorldMapBuilder {
     const collisionLayer = map.createLayer(TILED_COLLISION_LAYER, layerTilesets, 0, 0);
     collisionLayer?.setVisible(false);
 
+    const obstacleLayer = map.createLayer(TILED_OBSTACLE_LAYER, layerTilesets, 0, 0);
+    obstacleLayer?.setVisible(false);
+
     TILED_FOREGROUND_LAYERS.forEach(layerName => {
       map.createLayer(layerName, layerTilesets, 0, 0)?.setDepth(FOREGROUND_DEPTH);
     });
 
-    return { map, collisionLayer };
+    return { map, collisionLayer, obstacleLayer };
   }
 
   findSpawnTile(map: Phaser.Tilemaps.Tilemap) {
