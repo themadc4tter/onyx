@@ -25,6 +25,7 @@ const DIRECTION_VECTORS: Record<Facing, { dx: number; dy: number }> = {
 export class LocalPlayerController {
   readonly container: Phaser.GameObjects.Container;
 
+  private sprite: Phaser.GameObjects.Image;
   private tileX: number;
   private tileY: number;
   private facing: Facing;
@@ -50,8 +51,8 @@ export class LocalPlayerController {
     this.tileY = startPosition.tileY;
     this.facing = startPosition.facing;
 
-    const sprite = this.scene.add.image(0, 0, PLAYER_SPRITE_KEY);
-    this.container = this.scene.add.container(0, 0, [sprite]).setDepth(20);
+    this.sprite = this.scene.add.image(0, 0, PLAYER_SPRITE_KEY);
+    this.container = this.scene.add.container(0, 0, [this.sprite]).setDepth(20);
     this.equipmentOverlays = new EquipmentOverlayRenderer(this.scene, this.container);
     this.syncContainerToTile();
 
@@ -109,6 +110,14 @@ export class LocalPlayerController {
 
   setEquipment(equipment: EquipmentState) {
     this.equipmentOverlays.setEquipment(equipment);
+  }
+
+  playHitFeedback(damage: number) {
+    this.sprite.setTintFill(0xff6b3d);
+    this.scene.time.delayedCall(110, () => {
+      this.sprite.clearTint();
+    });
+    this.showFloatingDamage(damage);
   }
 
   private readPressedDirection(): Facing | null {
@@ -256,5 +265,28 @@ export class LocalPlayerController {
       this.tileX * TILE_SIZE + TILE_SIZE / 2,
       this.tileY * TILE_SIZE + TILE_SIZE / 2,
     );
+  }
+
+  private showFloatingDamage(damage: number) {
+    const label = this.scene.add
+      .text(this.container.x, this.container.y - TILE_SIZE, `-${Math.max(1, Math.floor(damage))}`, {
+        color: "#ff735c",
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontSize: "11px",
+        fontStyle: "bold",
+        stroke: "#2a0704",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(32);
+
+    this.scene.tweens.add({
+      targets: label,
+      y: label.y - 14,
+      alpha: 0,
+      duration: 620,
+      ease: "Cubic.easeOut",
+      onComplete: () => label.destroy(),
+    });
   }
 }

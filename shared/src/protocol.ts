@@ -67,6 +67,11 @@ export interface PlayerDiedPayload {
   combat: PlayerCombatState;
 }
 
+export interface PlayerDamagedPayload {
+  damage: number;
+  combat: PlayerCombatState;
+}
+
 export interface PlayerLeftPayload {
   socketId: string;
 }

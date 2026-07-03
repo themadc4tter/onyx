@@ -9,6 +9,8 @@ import type {
   MobSpawnState,
   MoveAck,
   PlayerCombatState,
+  PlayerDamagedPayload,
+  PlayerDiedPayload,
   PlayerEquipmentChangedPayload,
   PlayerLeftPayload,
   PlayerMovedPayload,
@@ -55,6 +57,8 @@ export class GameScene extends Phaser.Scene {
   private inventory: InventoryPayload | undefined;
   private equipment: EquipmentPayload | undefined;
   private combat: PlayerCombatState | undefined;
+  private deathNotice = false;
+  private pendingDeathNotice = false;
   private mapKey = getZoneMapConfig(DEFAULT_ZONE_ID).mapKey;
 
   private map!: Phaser.Tilemaps.Tilemap;
@@ -88,6 +92,7 @@ export class GameScene extends Phaser.Scene {
     inventory?: InventoryPayload;
     equipment?: EquipmentPayload;
     combat?: PlayerCombatState;
+    deathNotice?: boolean;
   }) {
     this.socket = data.socket;
     this.profile = data.profile;
@@ -101,6 +106,8 @@ export class GameScene extends Phaser.Scene {
     this.inventory = data.inventory;
     this.equipment = data.equipment;
     this.combat = data.combat;
+    this.deathNotice = data.deathNotice ?? false;
+    this.pendingDeathNotice = false;
   }
 
   preload() {
@@ -177,6 +184,9 @@ export class GameScene extends Phaser.Scene {
       getLocalTilePosition: () => this.player.getTilePosition(),
       onClearTarget: () => this.targeting?.clearTarget(),
     });
+    if (this.deathNotice) {
+      this.hudOverlay.addSystemMessage("You died and respawned at the settlement.");
+    }
     this.herbSpawners = new HerbSpawnerManager(this, this.socket, this.map, this.player, message => {
       this.hudOverlay.addSystemMessage(message);
     }, this.herbSpawnStates);
@@ -379,6 +389,18 @@ export class GameScene extends Phaser.Scene {
       this.player.setEquipment(equipment);
     });
 
+    this.socket.on("player:damaged", (payload: PlayerDamagedPayload) => {
+      this.combat = payload.combat;
+      this.hudOverlay?.setCombatState(payload.combat);
+      this.player.playHitFeedback(payload.damage);
+    });
+
+    this.socket.on("player:died", (_payload: PlayerDiedPayload) => {
+      this.pendingDeathNotice = true;
+      this.targeting?.clearTarget();
+      this.autoAttack?.stop();
+    });
+
     this.socket.on("player:left", (data: PlayerLeftPayload) => {
       this.remotePlayers.remove(data.socketId);
       this.socialPlayers = this.socialPlayers.filter(player => player.socketId !== data.socketId);
@@ -398,6 +420,7 @@ export class GameScene extends Phaser.Scene {
         inventory: payload.inventory,
         equipment: payload.equipment,
         combat: payload.combat,
+        deathNotice: this.pendingDeathNotice,
       });
     });
 

@@ -95,6 +95,10 @@ export class AutoAttackController {
     this.onActiveChanged(false);
   }
 
+  stop() {
+    this.disable();
+  }
+
   private updateAutoAttack() {
     if (!this.active) return;
 

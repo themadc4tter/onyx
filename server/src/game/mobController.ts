@@ -14,6 +14,7 @@ interface MobInstanceState extends MobSpawnState {
   nextWanderAt: number;
   nextChaseMoveAt: number;
   nextAttackAt: number;
+  aggroActiveAt: number;
   targetSocketId: string | null;
 }
 
@@ -37,6 +38,7 @@ const MOB_TICK_MS = 250;
 const MOB_WANDER_MOVE_MS = 1_200;
 const MOB_WANDER_JITTER_MS = 1_800;
 const MOB_CHASE_MOVE_MS = 600;
+const MOB_SPAWN_AGGRO_DELAY_MS = 600;
 const CARDINAL_DIRECTIONS = [
   { x: 0, y: -1 },
   { x: 1, y: 0 },
@@ -77,6 +79,7 @@ export class MobController {
     }
 
     for (const spawn of zone.mobSpawns) {
+      const nowMs = Date.now();
       const instanceIndex = 1;
       const instanceId = getMobInstanceId(spawn.id, instanceIndex);
       if (zoneInstances.has(instanceId)) continue;
@@ -105,9 +108,10 @@ export class MobController {
           ...mob.combat,
           ...spawn.combat,
         },
-        nextWanderAt: this.getNextWanderAt(Date.now()),
+        nextWanderAt: this.getNextWanderAt(nowMs + MOB_SPAWN_AGGRO_DELAY_MS),
         nextChaseMoveAt: 0,
         nextAttackAt: 0,
+        aggroActiveAt: nowMs + MOB_SPAWN_AGGRO_DELAY_MS,
         targetSocketId: null,
         hp: mob.maxHp,
         maxHp: mob.maxHp,
@@ -173,9 +177,11 @@ export class MobController {
       currentMob.tileY = currentMob.spawnTileY;
       currentMob.hp = currentMob.maxHp;
       currentMob.alive = true;
-      currentMob.nextWanderAt = this.getNextWanderAt(Date.now());
+      const nowMs = Date.now();
+      currentMob.nextWanderAt = this.getNextWanderAt(nowMs + MOB_SPAWN_AGGRO_DELAY_MS);
       currentMob.nextChaseMoveAt = 0;
       currentMob.nextAttackAt = 0;
+      currentMob.aggroActiveAt = nowMs + MOB_SPAWN_AGGRO_DELAY_MS;
       currentMob.targetSocketId = null;
       currentMob.aiState = "idle";
       this.emitMobState(zoneId, currentMob);
@@ -263,6 +269,8 @@ export class MobController {
       this.tickEvade(zoneId, mob, nowMs);
       return;
     }
+
+    if (nowMs < mob.aggroActiveAt) return;
 
     const target = this.getCurrentTarget(zoneId, mob) ?? this.acquireAggroTarget(zoneId, mob);
     if (target) {
@@ -414,6 +422,7 @@ export class MobController {
 
   private aggroMob(mob: MobInstanceState, zoneId: string, attackerSocketId: string | undefined) {
     if (!attackerSocketId || mob.targetSocketId) return;
+    if (Date.now() < mob.aggroActiveAt) return;
 
     const attacker = (this.options.getPlayersInZone?.(zoneId) ?? [])
       .find(player => player.socketId === attackerSocketId);

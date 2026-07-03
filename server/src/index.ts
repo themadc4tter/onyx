@@ -407,6 +407,11 @@ async function damagePlayer(io: Server, socket: Socket, damage: number) {
   if (!player || !player.alive || damage <= 0) return;
 
   player.hp = Math.max(0, player.hp - damage);
+  socket.emit("player:damaged", {
+    damage,
+    combat: getPlayerCombatStatePayload(player),
+  });
+
   if (player.hp > 0) {
     socket.emit("player:combat", getPlayerCombatStatePayload(player));
     return;

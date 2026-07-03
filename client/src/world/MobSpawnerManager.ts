@@ -162,6 +162,10 @@ export class MobSpawnerManager {
         alpha: 1,
         duration: 250,
         ease: "Sine.easeOut",
+        onComplete: () => {
+          mob.container.setAlpha(1);
+          mob.hpContainer.setAlpha(1);
+        },
       });
     }
   };
@@ -191,6 +195,10 @@ export class MobSpawnerManager {
     }
 
     this.scene.tweens.killTweensOf([mob.container, mob.hpContainer]);
+    if (mob.container.alpha < 1 || mob.hpContainer.alpha < 1) {
+      mob.container.setAlpha(1);
+      mob.hpContainer.setAlpha(1);
+    }
     this.scene.tweens.add({
       targets: [mob.container, mob.hpContainer],
       x: mob.tileX * TILE_SIZE + TILE_SIZE / 2,
