@@ -32,6 +32,7 @@ import {
   loadSkills,
 } from "./game/skills";
 import { resolveAutoAttack } from "./game/combat";
+import { HerbController } from "./game/herbController";
 import { MobController } from "./game/mobController";
 import { getItemDefinition } from "@onyx/shared/items";
 import {
@@ -56,7 +57,6 @@ import type {
   EquipmentUnequipPayload,
   Facing,
   HerbPickPayload,
-  HerbSpawnState,
   InventoryDeletePayload,
   InventoryMovePayload,
   InventoryPayload,
@@ -103,7 +103,6 @@ const MOVE_RATE_TOLERANCE_MS = 30;
 const MIN_MOVE_INTERVAL_MS = MOVE_INTERVAL_MS - MOVE_RATE_TOLERANCE_MS;
 const CHAT_RATE_LIMIT_MS = 800;
 const MAX_CHAT_LENGTH = 240;
-const HERB_RESPAWN_MS = 10_000;
 const MOONLEAF_HERBALISM_XP = 40;
 const TRADE_RANGE_TILES = 5;
 const DEFAULT_PLAYER_MAX_HP = 5;
@@ -111,7 +110,6 @@ const PLAYER_RESPAWN_DELAY_MS = 4_000;
 // Refreshed on: dealing damage, taking damage, or a mob locking aggro onto the player.
 const COMBAT_TIMEOUT_MS = 6_000;
 const HEALTH_REGEN_INTERVAL_MS = 30_000;
-const herbSpawnStates = new Map<string, Map<string, HerbSpawnState>>();
 
 // Debounced position saves: map of socketId → pending timeout
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -147,30 +145,6 @@ function flushSave(socketId: string, userId: string, zoneId: string, pos: Positi
 function emitMoveAck(socket: Socket, seq: number, position: Position) {
   const ack: MoveAck = { seq, position };
   socket.emit("move:ack", ack);
-}
-
-function getHerbSpawnStates(zoneId: string) {
-  const zone = ZONES[zoneId];
-  if (!zone) return [];
-
-  let zoneStates = herbSpawnStates.get(zoneId);
-  if (!zoneStates) {
-    zoneStates = new Map();
-    herbSpawnStates.set(zoneId, zoneStates);
-  }
-
-  for (const spawn of zone.herbSpawns) {
-    if (!zoneStates.has(spawn.id)) {
-      zoneStates.set(spawn.id, { ...spawn, available: true });
-    }
-  }
-
-  return [...zoneStates.values()];
-}
-
-function getHerbSpawnState(zoneId: string, herbId: string) {
-  getHerbSpawnStates(zoneId);
-  return herbSpawnStates.get(zoneId)?.get(herbId) ?? null;
 }
 
 function getInventoryPayload(userId: string): InventoryPayload {
@@ -438,7 +412,7 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
     position: newPos,
     initPlayers: newZonePlayers,
     combat: getPlayerCombatStatePayload(player),
-    herbSpawns: getHerbSpawnStates(newZoneId),
+    herbSpawns: herbController.getSpawnStates(newZoneId),
     mobSpawns: mobController.getMobStates(newZoneId),
     inventory: getInventoryPayload(player.userId),
     equipment: getEquipmentPayload(player.userId),
@@ -525,7 +499,7 @@ async function respawnPlayer(io: Server, socket: Socket) {
     position: newPos,
     initPlayers: newZonePlayers,
     combat,
-    herbSpawns: getHerbSpawnStates(newZoneId),
+    herbSpawns: herbController.getSpawnStates(newZoneId),
     mobSpawns: mobController.getMobStates(newZoneId),
     inventory: getInventoryPayload(player.userId),
     equipment: getEquipmentPayload(player.userId),
@@ -580,6 +554,7 @@ const io = new Server(httpServer, {
   pingTimeout:  10000,
 });
 
+const herbController = new HerbController();
 const mobController = new MobController({
   emitMobState: (zoneId, mob) => {
     io.to(zoneId).emit("mob:state", mob);
@@ -700,7 +675,7 @@ io.on("connection", async (socket) => {
     position: startPos,
     zoneId,
     combat: getPlayerCombatStatePayload(connectedPlayers.get(socket.id)!),
-    herbSpawns: getHerbSpawnStates(zoneId),
+    herbSpawns: herbController.getSpawnStates(zoneId),
     mobSpawns: mobController.getMobStates(zoneId),
     inventory: getInventoryPayload(userId),
     equipment: getEquipmentPayload(userId),
@@ -977,7 +952,7 @@ io.on("connection", async (socket) => {
     const herbId = payload?.id;
     if (!player || !herbId) return;
 
-    const spawn = getHerbSpawnState(player.zoneId, herbId);
+    const spawn = herbController.getSpawnState(player.zoneId, herbId);
     if (
       !spawn ||
       !spawn.available ||
@@ -994,11 +969,14 @@ io.on("connection", async (socket) => {
       return;
     }
 
-    spawn.available = false;
+    const pickedSpawn = herbController.pickSpawn(player.zoneId, spawn.id, state => {
+      io.to(player.zoneId).emit("herb:state", state);
+    });
+    if (!pickedSpawn) return;
+
     const xpGrant = spawn.itemId === "moonleaf"
       ? grantSkillXp(player.userId, "herbalism", MOONLEAF_HERBALISM_XP)
       : null;
-    io.to(player.zoneId).emit("herb:state", { id: spawn.id, available: false });
     socket.emit("inventory:changed", getInventoryPayload(player.userId));
     if (xpGrant) {
       socket.emit("skills:changed", getSkillsPayload(player.userId));
@@ -1006,11 +984,6 @@ io.on("connection", async (socket) => {
     }
     socket.emit("herb:picked", { itemId: spawn.itemId, itemName: item?.name ?? spawn.itemId });
     markInventoryDirty(player.userId);
-
-    setTimeout(() => {
-      spawn.available = true;
-      io.to(player.zoneId).emit("herb:state", { id: spawn.id, available: true });
-    }, HERB_RESPAWN_MS);
   });
 
   socket.on("mob:autoAttack", (payload: MobAutoAttackPayload) => {

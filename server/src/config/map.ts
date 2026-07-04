@@ -11,12 +11,22 @@ export const DEFAULT_ZONE_ID = "settlement";
 
 const TILE_SIZE = 16;
 const DEFAULT_MOB_ID = "orc_scout";
+const DEFAULT_HERB_RESPAWN_MS = 10_000;
 const MAP_DEFINITIONS = {
   settlement: "settlement.tmj",
   east_meadow: "east_meadow.tmj",
   inn: "inn.tmj",
   bank: "bank.tmj",
 } as const;
+
+const HERB_POOL_OVERRIDES: Partial<Record<ZoneId, Record<string, Partial<HerbPoolConfig>>>> = {
+  east_meadow: {
+    moonleaf: {
+      maxActive: 5,
+      respawnMs: 30_000,
+    },
+  },
+};
 
 const MAP_PATHS = findMapPaths();
 const mapMtimeMs: Partial<Record<ZoneId, number>> = {};
@@ -76,6 +86,13 @@ export interface HerbSpawn {
   itemId: string;
 }
 
+export interface HerbPoolConfig {
+  itemId: string;
+  spawnIds: string[];
+  maxActive: number;
+  respawnMs: number;
+}
+
 export interface MobSpawnerConfig {
   id: string;
   tileX: number;
@@ -95,6 +112,7 @@ export interface ZoneConfig {
   spawn: { x: number; y: number };
   exits: ZoneExit[];
   herbSpawns: HerbSpawn[];
+  herbPools: HerbPoolConfig[];
   mobSpawns: MobSpawnerConfig[];
 }
 
@@ -259,6 +277,27 @@ function getMobCombatOverrides(object: TiledObject): Partial<MobCombatDefinition
   return Object.keys(combat).length > 0 ? combat : undefined;
 }
 
+function buildHerbPools(zoneId: ZoneId, herbSpawns: HerbSpawn[]): HerbPoolConfig[] {
+  const spawnsByItemId = new Map<string, HerbSpawn[]>();
+
+  for (const spawn of herbSpawns) {
+    const spawns = spawnsByItemId.get(spawn.itemId) ?? [];
+    spawns.push(spawn);
+    spawnsByItemId.set(spawn.itemId, spawns);
+  }
+
+  return [...spawnsByItemId.entries()].map(([itemId, spawns]) => {
+    const override = HERB_POOL_OVERRIDES[zoneId]?.[itemId];
+
+    return {
+      itemId,
+      spawnIds: spawns.map(spawn => spawn.id),
+      maxActive: Math.min(override?.maxActive ?? spawns.length, spawns.length),
+      respawnMs: override?.respawnMs ?? DEFAULT_HERB_RESPAWN_MS,
+    };
+  });
+}
+
 function loadZone(zoneId: ZoneId): LoadedZone {
   const mapPath = MAP_PATHS[zoneId];
   const tiledMap = JSON.parse(fs.readFileSync(mapPath, "utf8")) as TiledMap;
@@ -292,6 +331,7 @@ function loadZone(zoneId: ZoneId): LoadedZone {
     rows: tiledMap.height,
     spawn: toTilePosition(spawn, tiledMap),
     herbSpawns: [],
+    herbPools: [],
     mobSpawns: [],
     entries,
     exitObjects: objectLayer.objects.filter(object => object.type === "exit" || object.name.startsWith("exit_")),
@@ -328,6 +368,23 @@ function buildZoneConfigs() {
       }
     }
 
+    const herbSpawns = zone.herbSpawnObjects.map((object, index) => {
+      const position = toTilePosition(object, {
+        width: zone.cols,
+        height: zone.rows,
+        tilewidth: TILE_SIZE,
+        tileheight: TILE_SIZE,
+        layers: [],
+      });
+
+      return {
+        id: object.name || `${zone.zoneId}_herb_${index + 1}`,
+        tileX: position.x,
+        tileY: position.y,
+        itemId: getStringProperty(object, ["itemId", "item_id", "herbId", "herb_id", "herb"]) ?? "moonleaf",
+      };
+    });
+
     zones[zone.zoneId] = {
       collisionData: zone.collisionData,
       obstacleData: zone.obstacleData,
@@ -335,22 +392,8 @@ function buildZoneConfigs() {
       rows: zone.rows,
       spawn: zone.spawn,
       exits,
-      herbSpawns: zone.herbSpawnObjects.map((object, index) => {
-        const position = toTilePosition(object, {
-          width: zone.cols,
-          height: zone.rows,
-          tilewidth: TILE_SIZE,
-          tileheight: TILE_SIZE,
-          layers: [],
-        });
-
-        return {
-          id: object.name || `${zone.zoneId}_herb_${index + 1}`,
-          tileX: position.x,
-          tileY: position.y,
-          itemId: "moonleaf",
-        };
-      }),
+      herbSpawns,
+      herbPools: buildHerbPools(zone.zoneId, herbSpawns),
       mobSpawns: zone.mobSpawnObjects.map((object, index) => {
         const position = toTilePosition(object, {
           width: zone.cols,
