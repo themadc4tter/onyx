@@ -63,6 +63,7 @@ export class BootScene extends Phaser.Scene {
           mobSpawns: data.mobSpawns ?? [],
           inventory: data.inventory,
           equipment: data.equipment,
+          skills: data.skills,
         });
       });
     });

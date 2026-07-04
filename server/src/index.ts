@@ -24,6 +24,13 @@ import {
   saveEquipment,
   unequipItem,
 } from "./game/equipment";
+import {
+  flushAllDirtySkills,
+  flushDirtySkills,
+  getSkillsPayload,
+  grantSkillXp,
+  loadSkills,
+} from "./game/skills";
 import { resolveAutoAttack } from "./game/combat";
 import { MobController } from "./game/mobController";
 import { getItemDefinition } from "@onyx/shared/items";
@@ -97,6 +104,7 @@ const MIN_MOVE_INTERVAL_MS = MOVE_INTERVAL_MS - MOVE_RATE_TOLERANCE_MS;
 const CHAT_RATE_LIMIT_MS = 800;
 const MAX_CHAT_LENGTH = 240;
 const HERB_RESPAWN_MS = 10_000;
+const MOONLEAF_HERBALISM_XP = 40;
 const TRADE_RANGE_TILES = 5;
 const DEFAULT_PLAYER_MAX_HP = 5;
 const PLAYER_RESPAWN_DELAY_MS = 4_000;
@@ -434,6 +442,7 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
     mobSpawns: mobController.getMobStates(newZoneId),
     inventory: getInventoryPayload(player.userId),
     equipment: getEquipmentPayload(player.userId),
+    skills: getSkillsPayload(player.userId),
   });
 
   flushSave(socket.id, player.userId, newZoneId, newPos);
@@ -520,6 +529,7 @@ async function respawnPlayer(io: Server, socket: Socket) {
     mobSpawns: mobController.getMobStates(newZoneId),
     inventory: getInventoryPayload(player.userId),
     equipment: getEquipmentPayload(player.userId),
+    skills: getSkillsPayload(player.userId),
   });
 
   flushSave(socket.id, player.userId, newZoneId, newPos);
@@ -633,6 +643,7 @@ io.on("connection", async (socket) => {
   await Promise.all([
     loadInventory(userId),
     loadEquipment(userId),
+    loadSkills(userId),
   ]);
 
   const username = profile?.username ?? userId;
@@ -693,6 +704,7 @@ io.on("connection", async (socket) => {
     mobSpawns: mobController.getMobStates(zoneId),
     inventory: getInventoryPayload(userId),
     equipment: getEquipmentPayload(userId),
+    skills: getSkillsPayload(userId),
   });
 
   // ─── Move ─────────────────────────────────────────────────────────────────
@@ -983,8 +995,15 @@ io.on("connection", async (socket) => {
     }
 
     spawn.available = false;
+    const xpGrant = spawn.itemId === "moonleaf"
+      ? grantSkillXp(player.userId, "herbalism", MOONLEAF_HERBALISM_XP)
+      : null;
     io.to(player.zoneId).emit("herb:state", { id: spawn.id, available: false });
     socket.emit("inventory:changed", getInventoryPayload(player.userId));
+    if (xpGrant) {
+      socket.emit("skills:changed", getSkillsPayload(player.userId));
+      socket.emit("skill:xpGained", xpGrant);
+    }
     socket.emit("herb:picked", { itemId: spawn.itemId, itemName: item?.name ?? spawn.itemId });
     markInventoryDirty(player.userId);
 
@@ -1141,6 +1160,9 @@ io.on("connection", async (socket) => {
       await flushDirtyInventory(player.userId).catch(error => {
         console.error(`[inventory] failed to flush inventory for ${player.userId} on disconnect`, error);
       });
+      await flushDirtySkills(player.userId).catch(error => {
+        console.error(`[skills] failed to flush skills for ${player.userId} on disconnect`, error);
+      });
     }
     connectedPlayers.delete(socket.id);
     io.to(socket.data.zoneId as string).emit("player:left", { socketId: socket.id });
@@ -1154,7 +1176,7 @@ let isShuttingDown = false;
 async function shutdown(signal: NodeJS.Signals) {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  console.log(`[server] received ${signal}, flushing dirty inventories...`);
+  console.log(`[server] received ${signal}, flushing dirty player data...`);
   mobController.stop();
 
   const forceExitTimer = setTimeout(() => {
@@ -1167,6 +1189,12 @@ async function shutdown(signal: NodeJS.Signals) {
     await flushAllDirtyInventories();
   } catch (error) {
     console.error("[inventory] failed to flush all dirty inventories during shutdown", error);
+  }
+
+  try {
+    await flushAllDirtySkills();
+  } catch (error) {
+    console.error("[skills] failed to flush all dirty skills during shutdown", error);
   }
 
   httpServer.close(() => {

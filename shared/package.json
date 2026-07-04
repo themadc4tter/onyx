@@ -23,6 +23,12 @@
       "require": "./dist/cjs/mobs.js",
       "default": "./dist/esm/mobs.js"
     },
+    "./skills": {
+      "types": "./dist/types/skills.d.ts",
+      "import": "./dist/esm/skills.js",
+      "require": "./dist/cjs/skills.js",
+      "default": "./dist/esm/skills.js"
+    },
     "./protocol": {
       "types": "./dist/types/protocol.d.ts",
       "import": "./dist/esm/protocol.js",

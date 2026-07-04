@@ -17,6 +17,7 @@ import type {
   PlayerProfile,
   Position,
   RemotePlayerData,
+  SkillsPayload,
   ZoneChangedPayload,
 } from "@onyx/shared/protocol";
 import { supabase } from "../lib/supabase";
@@ -60,6 +61,7 @@ export class GameScene extends Phaser.Scene {
   private mobStates: MobSpawnState[] = [];
   private inventory: InventoryPayload | undefined;
   private equipment: EquipmentPayload | undefined;
+  private skills: SkillsPayload | undefined;
   private combat: PlayerCombatState | undefined;
   private deathNotice = false;
   private pendingDeathNotice = false;
@@ -97,6 +99,7 @@ export class GameScene extends Phaser.Scene {
     mobSpawns?: MobSpawnState[];
     inventory?: InventoryPayload;
     equipment?: EquipmentPayload;
+    skills?: SkillsPayload;
     combat?: PlayerCombatState;
     deathNotice?: boolean;
   }) {
@@ -111,6 +114,7 @@ export class GameScene extends Phaser.Scene {
     this.mobStates = data.mobSpawns ?? [];
     this.inventory = data.inventory;
     this.equipment = data.equipment;
+    this.skills = data.skills;
     this.combat = data.combat;
     this.deathNotice = data.deathNotice ?? false;
     this.pendingDeathNotice = false;
@@ -182,6 +186,7 @@ export class GameScene extends Phaser.Scene {
       onMusicEnabledChange: this.setMusicEnabled,
       playerName: this.profile.username,
       combat: this.combat,
+      skills: this.skills,
       socialPlayers: this.socialPlayers.map(player => ({
         socketId: player.socketId,
         username: player.username,
@@ -432,6 +437,7 @@ export class GameScene extends Phaser.Scene {
         mobSpawns: payload.mobSpawns ?? [],
         inventory: payload.inventory,
         equipment: payload.equipment,
+        skills: payload.skills,
         combat: payload.combat,
         deathNotice: this.pendingDeathNotice,
       });

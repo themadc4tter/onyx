@@ -3,7 +3,15 @@ import type { Socket } from "socket.io-client";
 import { createEmptyEquipment, EQUIPMENT_SLOTS, type EquipmentSlot, type EquipmentState } from "../game/equipment";
 import { createEmptyInventory, type InventoryState } from "../game/inventory";
 import { getItemDefinition } from "@onyx/shared/items";
+import {
+  MAX_SKILL_LEVEL,
+  SKILL_DEFINITIONS,
+  getSkillProgress,
+  type SkillId,
+} from "@onyx/shared/skills";
 import type {
+  SkillXpGainedPayload,
+  SkillsPayload,
   TradeCancelledPayload,
   TradeDeclinedPayload,
   TradeErrorPayload,
@@ -19,10 +27,8 @@ import { HudChat } from "./chat/HudChat";
 type PanelId = "skills" | "inventory" | "equipment" | "social" | "settings";
 
 interface SkillMock {
+  id: SkillId;
   name: string;
-  level: number;
-  currentXp: number;
-  totalXp: number;
   nextUnlock: string;
 }
 
@@ -32,6 +38,7 @@ interface GameHudOverlayOptions {
   playerName: string;
   combat?: PlayerCombatState;
   onClearTarget?: () => void;
+  skills?: SkillsPayload;
   socialPlayers?: SocialPlayer[];
   getLocalTilePosition?: () => TilePosition;
 }
@@ -67,17 +74,23 @@ const DEFAULT_PLAYER_COMBAT: PlayerCombatState = {
   nextHealthRegenAt: 0,
 };
 
-const SKILLS: SkillMock[] = [
-  { name: "Melee", level: 12, currentXp: 124, totalXp: 200, nextUnlock: "Guarding Stance" },
-  { name: "Ranged", level: 8, currentXp: 68, totalXp: 200, nextUnlock: "Snare Trap" },
-  { name: "Magic", level: 10, currentXp: 96, totalXp: 200, nextUnlock: "Lesser Ward" },
-  { name: "Mining", level: 15, currentXp: 152, totalXp: 200, nextUnlock: "Iron Veins" },
-  { name: "Smithing", level: 11, currentXp: 104, totalXp: 200, nextUnlock: "Reinforced Buckles" },
-  { name: "Herbalism", level: 9, currentXp: 82, totalXp: 200, nextUnlock: "Moonleaf" },
-  { name: "Alchemy", level: 7, currentXp: 58, totalXp: 200, nextUnlock: "Mist Tonic" },
-  { name: "Cooking", level: 13, currentXp: 116, totalXp: 200, nextUnlock: "Hearty Stew" },
-  { name: "Fishing", level: 6, currentXp: 50, totalXp: 200, nextUnlock: "River Perch" },
-];
+const SKILL_UNLOCKS: Record<SkillId, string> = {
+  melee: "Guarding Stance",
+  ranged: "Snare Trap",
+  magic: "Lesser Ward",
+  mining: "Iron Veins",
+  smithing: "Reinforced Buckles",
+  herbalism: "Moonleaf",
+  alchemy: "Mist Tonic",
+  cooking: "Hearty Stew",
+  fishing: "River Perch",
+};
+
+const SKILLS: SkillMock[] = SKILL_DEFINITIONS.map(skill => ({
+  id: skill.id,
+  name: skill.name,
+  nextUnlock: SKILL_UNLOCKS[skill.id],
+}));
 
 const CSS = `
   #${HUD_LAYER_ID} {
@@ -1054,6 +1067,7 @@ export class GameHudOverlay {
   private tradeState: TradeStatePayload | null = null;
   private targetProfile: TargetProfile | null = null;
   private combat: PlayerCombatState;
+  private skillXpById = new Map<SkillId, number>();
   private combatTagTimer: ReturnType<typeof setTimeout> | null = null;
   private healthRegenAnimationFrame: number | null = null;
   private playerName: string;
@@ -1071,6 +1085,7 @@ export class GameHudOverlay {
     this.inventory = initialInventory ?? createEmptyInventory();
     this.equipment = initialEquipment ?? createEmptyEquipment();
     this.combat = options?.combat ?? DEFAULT_PLAYER_COMBAT;
+    this.setSkillsPayload(options?.skills);
     this.playerName = options?.playerName ?? "You";
     this.musicEnabled = options?.musicEnabled ?? true;
     this.socialPlayers = options?.socialPlayers ?? [];
@@ -1103,6 +1118,8 @@ export class GameHudOverlay {
     window.addEventListener("resize", this.updateCanvasBounds);
     this.socket.on("inventory:changed", this.handleInventoryChanged);
     this.socket.on("equipment:changed", this.handleEquipmentChanged);
+    this.socket.on("skills:changed", this.handleSkillsChanged);
+    this.socket.on("skill:xpGained", this.handleSkillXpGained);
     this.socket.on("player:combat", this.handleCombatChanged);
     this.socket.on("trade:request", this.handleTradeRequest);
     this.socket.on("trade:requestSent", this.handleTradeRequestSent);
@@ -1125,6 +1142,8 @@ export class GameHudOverlay {
     if (this.healthRegenAnimationFrame) cancelAnimationFrame(this.healthRegenAnimationFrame);
     this.socket.off("inventory:changed", this.handleInventoryChanged);
     this.socket.off("equipment:changed", this.handleEquipmentChanged);
+    this.socket.off("skills:changed", this.handleSkillsChanged);
+    this.socket.off("skill:xpGained", this.handleSkillXpGained);
     this.socket.off("player:combat", this.handleCombatChanged);
     this.socket.off("trade:request", this.handleTradeRequest);
     this.socket.off("trade:requestSent", this.handleTradeRequestSent);
@@ -1420,15 +1439,18 @@ export class GameHudOverlay {
     list.className = "skill-list";
 
     for (const skill of SKILLS) {
-      const percent = Math.round((skill.currentXp / skill.totalXp) * 100);
+      const progress = getSkillProgress(this.getSkillTotalXp(skill.id));
+      const xpMeta = progress.isMaxLevel
+        ? `${this.formatNumber(progress.totalXp)} XP`
+        : `${this.formatNumber(progress.xpIntoLevel)}/${this.formatNumber(progress.xpForNextLevel)} (${progress.percentToNextLevel}%)`;
       const row = document.createElement("button");
       row.type = "button";
-      row.className = `skill-row${skill.name === this.selectedSkill.name ? " active" : ""}`;
+      row.className = `skill-row${skill.id === this.selectedSkill.id ? " active" : ""}`;
       row.innerHTML = `
         <span class="skill-name">${skill.name}</span>
-        <span class="skill-level">${skill.level}</span>
-        <span class="xp-bar"><span class="xp-fill" style="width: ${percent}%"></span></span>
-        <span class="xp-meta">${skill.currentXp}/${skill.totalXp} (${percent}%)</span>
+        <span class="skill-level">${progress.level}</span>
+        <span class="xp-bar"><span class="xp-fill" style="width: ${progress.percentToNextLevel}%"></span></span>
+        <span class="xp-meta">${xpMeta}</span>
       `;
       row.addEventListener("click", () => {
         this.selectedSkill = skill;
@@ -1439,13 +1461,17 @@ export class GameHudOverlay {
 
     const detail = document.createElement("div");
     detail.className = "skill-detail";
+    const selectedProgress = getSkillProgress(this.getSkillTotalXp(this.selectedSkill.id));
+    const selectedXpLine = selectedProgress.isMaxLevel
+      ? `${this.formatNumber(selectedProgress.totalXp)} XP earned.`
+      : `${this.formatNumber(selectedProgress.xpIntoLevel)} of ${this.formatNumber(selectedProgress.xpForNextLevel)} XP toward level ${selectedProgress.level + 1}.`;
     detail.innerHTML = `
       <div class="detail-title">${this.selectedSkill.name}</div>
-      <p class="detail-copy">Level ${this.selectedSkill.level}. Progress is mocked for now, but this panel is sized for XP, unlocks, and specialization choices.</p>
+      <p class="detail-copy">Level ${selectedProgress.level}. ${selectedXpLine}</p>
       <div class="unlock-list">
         <div class="unlock-item"><span>Next unlock</span><strong>${this.selectedSkill.nextUnlock}</strong></div>
         <div class="unlock-item"><span>At level 20</span><strong>Branch perk</strong></div>
-        <div class="unlock-item"><span>At level 30</span><strong>Dungeon recipe</strong></div>
+        <div class="unlock-item"><span>At level ${MAX_SKILL_LEVEL}</span><strong>Mastery cap</strong></div>
       </div>
     `;
 
@@ -1673,6 +1699,39 @@ export class GameHudOverlay {
     }
   };
 
+  private setSkillsPayload(skillsPayload?: SkillsPayload) {
+    this.skillXpById = new Map(SKILL_DEFINITIONS.map(skill => [skill.id, 0]));
+
+    for (const skill of skillsPayload?.skills ?? []) {
+      this.skillXpById.set(skill.skillId, skill.totalXp);
+    }
+  }
+
+  private getSkillTotalXp(skillId: SkillId) {
+    return this.skillXpById.get(skillId) ?? 0;
+  }
+
+  private getSkillName(skillId: SkillId) {
+    return SKILL_DEFINITIONS.find(skill => skill.id === skillId)?.name ?? skillId;
+  }
+
+  private handleSkillsChanged = (skillsPayload: SkillsPayload) => {
+    this.setSkillsPayload(skillsPayload);
+    if (this.activePanel === "skills") {
+      this.renderActivePanel();
+    }
+  };
+
+  private handleSkillXpGained = (payload: SkillXpGainedPayload) => {
+    if (payload.xpGained <= 0) return;
+
+    this.skillXpById.set(payload.skillId, payload.totalXp);
+    this.addSystemMessage(`+${this.formatNumber(payload.xpGained)} ${this.getSkillName(payload.skillId)} XP`);
+    if (this.activePanel === "skills") {
+      this.renderActivePanel();
+    }
+  };
+
   private handleCombatChanged = (combat: PlayerCombatStatePayload) => {
     this.setCombatState(combat);
   };
@@ -1852,6 +1911,10 @@ export class GameHudOverlay {
       charm: "Charm",
     };
     return labels[slot];
+  }
+
+  private formatNumber(value: number) {
+    return new Intl.NumberFormat("en-US").format(value);
   }
 
   private formatStatName(stat: string) {

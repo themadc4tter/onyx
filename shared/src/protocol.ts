@@ -1,4 +1,5 @@
 import type { EquipmentSlot } from "./items";
+import type { SkillId } from "./skills";
 
 export type Facing = "up" | "down" | "left" | "right";
 
@@ -35,6 +36,21 @@ export interface EquippedItemPayload {
 
 export interface EquipmentPayload {
   slots: Record<EquipmentSlot, EquippedItemPayload | null>;
+}
+
+export interface SkillXpPayload {
+  skillId: SkillId;
+  totalXp: number;
+}
+
+export interface SkillsPayload {
+  skills: SkillXpPayload[];
+}
+
+export interface SkillXpGainedPayload {
+  skillId: SkillId;
+  xpGained: number;
+  totalXp: number;
 }
 
 export interface RemotePlayerData {
@@ -115,6 +131,7 @@ export interface ProfilePayload {
   mobSpawns?: MobSpawnState[];
   inventory?: InventoryPayload;
   equipment?: EquipmentPayload;
+  skills?: SkillsPayload;
 }
 
 export interface ZoneChangedPayload {
@@ -126,6 +143,7 @@ export interface ZoneChangedPayload {
   mobSpawns?: MobSpawnState[];
   inventory?: InventoryPayload;
   equipment?: EquipmentPayload;
+  skills?: SkillsPayload;
 }
 
 export type ChatChannel = "zone" | "world";

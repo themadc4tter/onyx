@@ -63,6 +63,9 @@
 - A soft specialization system is preferred over strict skill caps.
 - Skill progression should use a long XP curve with many incremental levels, closer to RuneScape than a small rank ladder.
 - Skills should have a level cap of 100.
+- Skill XP should use the Old School RuneScape cumulative XP curve stretched so this game's level 100 requires the same total XP as Old School RuneScape level 90: 5,346,332 XP.
+- The generated XP table in `shared/src/skills.ts` is the source of truth for exact per-level requirements.
+- XP checkpoint examples: level 10 requires 986 XP, level 20 requires 3,559 XP, level 50 requires 61,839 XP, level 75 requires 577,934 XP, and level 100 requires 5,346,332 XP.
 - Important skill unlocks should be spread throughout the full 1-100 range, not front-loaded too early.
 - Skill specialization should combine broad skill trees with interdependent recipes.
 - Each skill can have sub-specialization branches that let players develop different identities within the same skill.
