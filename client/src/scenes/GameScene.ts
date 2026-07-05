@@ -20,6 +20,7 @@ import type {
   SkillsPayload,
   ZoneChangedPayload,
 } from "@onyx/shared/protocol";
+import type { AbilityLoadoutPayload } from "@onyx/shared/abilities";
 import { supabase } from "../lib/supabase";
 import { NpcRenderer } from "../world/NpcRenderer";
 import { getNpcsForZone } from "../world/npcs";
@@ -35,6 +36,7 @@ import {
 import { MobSpawnerManager, MOB_SPRITE_ASSETS } from "../world/MobSpawnerManager";
 import { TargetingManager } from "../world/TargetingManager";
 import { AutoAttackController } from "../world/AutoAttackController";
+import { AbilityController } from "../world/abilities/AbilityController";
 import { LocalPlayerController } from "../player/LocalPlayerController";
 import { PLAYER_SPRITE_KEY, PLAYER_SPRITE_URL } from "../player/playerAssets";
 
@@ -62,6 +64,7 @@ export class GameScene extends Phaser.Scene {
   private inventory: InventoryPayload | undefined;
   private equipment: EquipmentPayload | undefined;
   private skills: SkillsPayload | undefined;
+  private abilities: AbilityLoadoutPayload | undefined;
   private combat: PlayerCombatState | undefined;
   private deathNotice = false;
   private pendingDeathNotice = false;
@@ -81,6 +84,7 @@ export class GameScene extends Phaser.Scene {
   private mobSpawners!: MobSpawnerManager;
   private targeting!: TargetingManager;
   private autoAttack!: AutoAttackController;
+  private abilityController!: AbilityController;
   private currentMusic: Phaser.Sound.BaseSound | null = null;
   private deathOverlay: HTMLDivElement | null = null;
   private musicEnabled = readMusicEnabledSetting();
@@ -100,6 +104,7 @@ export class GameScene extends Phaser.Scene {
     inventory?: InventoryPayload;
     equipment?: EquipmentPayload;
     skills?: SkillsPayload;
+    abilities?: AbilityLoadoutPayload;
     combat?: PlayerCombatState;
     deathNotice?: boolean;
   }) {
@@ -115,6 +120,7 @@ export class GameScene extends Phaser.Scene {
     this.inventory = data.inventory;
     this.equipment = data.equipment;
     this.skills = data.skills;
+    this.abilities = data.abilities;
     this.combat = data.combat;
     this.deathNotice = data.deathNotice ?? false;
     this.pendingDeathNotice = false;
@@ -181,11 +187,13 @@ export class GameScene extends Phaser.Scene {
     this.setupCamera();
     this.playZoneMusic();
     this.setupServerEvents();
+    this.abilityController = new AbilityController(this, this.socket);
     this.hudOverlay = new GameHudOverlay(this, this.socket, this.inventory, this.equipment, {
       musicEnabled: this.musicEnabled,
       onMusicEnabledChange: this.setMusicEnabled,
       playerName: this.profile.username,
       combat: this.combat,
+      abilities: this.abilities,
       skills: this.skills,
       socialPlayers: this.socialPlayers.map(player => ({
         socketId: player.socketId,
@@ -197,6 +205,7 @@ export class GameScene extends Phaser.Scene {
       })),
       getLocalTilePosition: () => this.player.getTilePosition(),
       onClearTarget: () => this.targeting?.clearTarget(),
+      onAbilitySlotUse: slotIndex => this.abilityController.useSlot(slotIndex),
     });
     if (this.deathNotice) {
       this.hudOverlay.addSystemMessage("You died and respawned at the settlement.");
@@ -438,6 +447,7 @@ export class GameScene extends Phaser.Scene {
         inventory: payload.inventory,
         equipment: payload.equipment,
         skills: payload.skills,
+        abilities: payload.abilities,
         combat: payload.combat,
         deathNotice: this.pendingDeathNotice,
       });

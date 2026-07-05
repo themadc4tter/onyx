@@ -1,5 +1,6 @@
 import type { EquipmentSlot } from "./items";
 import type { SkillId } from "./skills";
+import type { AbilityId, AbilityLoadoutPayload } from "./abilities";
 
 export type Facing = "up" | "down" | "left" | "right";
 
@@ -45,6 +46,25 @@ export interface SkillXpPayload {
 
 export interface SkillsPayload {
   skills: SkillXpPayload[];
+}
+
+export interface AbilityUsePayload {
+  slotIndex?: number;
+  abilityId?: AbilityId;
+  targetId?: string;
+}
+
+export interface AbilityUsedPayload {
+  abilityId: AbilityId;
+  casterSocketId: string;
+  originTileX: number;
+  originTileY: number;
+  affectedMobIds: string[];
+  cooldownMs: number;
+}
+
+export interface AbilityErrorPayload {
+  message?: string;
 }
 
 export interface SkillXpGainedPayload {
@@ -132,6 +152,7 @@ export interface ProfilePayload {
   inventory?: InventoryPayload;
   equipment?: EquipmentPayload;
   skills?: SkillsPayload;
+  abilities?: AbilityLoadoutPayload;
 }
 
 export interface ZoneChangedPayload {
@@ -144,6 +165,7 @@ export interface ZoneChangedPayload {
   inventory?: InventoryPayload;
   equipment?: EquipmentPayload;
   skills?: SkillsPayload;
+  abilities?: AbilityLoadoutPayload;
 }
 
 export type ChatChannel = "zone" | "world";

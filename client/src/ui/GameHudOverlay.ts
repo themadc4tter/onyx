@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { createEmptyEquipment, EQUIPMENT_SLOTS, type EquipmentSlot, type EquipmentState } from "../game/equipment";
 import { createEmptyInventory, type InventoryState } from "../game/inventory";
+import { TEST_ABILITY_LOADOUT, getAbilityDefinition, type AbilityLoadoutPayload } from "@onyx/shared/abilities";
 import { getItemDefinition } from "@onyx/shared/items";
 import {
   MAX_SKILL_LEVEL,
@@ -38,6 +39,8 @@ interface GameHudOverlayOptions {
   playerName: string;
   combat?: PlayerCombatState;
   onClearTarget?: () => void;
+  onAbilitySlotUse?: (slotIndex: number) => void;
+  abilities?: AbilityLoadoutPayload;
   skills?: SkillsPayload;
   socialPlayers?: SocialPlayer[];
   getLocalTilePosition?: () => TilePosition;
@@ -382,6 +385,26 @@ const CSS = `
     background:
       linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 44%),
       rgba(49, 42, 31, 0.88);
+  }
+
+  .hud-ability-icon {
+    position: relative;
+    z-index: 1;
+    width: 32px;
+    height: 32px;
+    image-rendering: pixelated;
+    object-fit: contain;
+  }
+
+  .hud-ability-key {
+    position: absolute;
+    z-index: 2;
+    left: 4px;
+    top: 2px;
+    color: rgba(242, 234, 216, 0.8);
+    font-size: 10px;
+    font-weight: 700;
+    text-shadow: 0 1px 1px #000;
   }
 
   .hud-dock {
@@ -1121,6 +1144,7 @@ export class GameHudOverlay {
   private targetProfile: TargetProfile | null = null;
   private combat: PlayerCombatState;
   private skillXpById = new Map<SkillId, number>();
+  private abilities: AbilityLoadoutPayload;
   private combatTagTimer: ReturnType<typeof setTimeout> | null = null;
   private healthRegenAnimationFrame: number | null = null;
   private playerName: string;
@@ -1138,6 +1162,7 @@ export class GameHudOverlay {
     this.inventory = initialInventory ?? createEmptyInventory();
     this.equipment = initialEquipment ?? createEmptyEquipment();
     this.combat = options?.combat ?? DEFAULT_PLAYER_COMBAT;
+    this.abilities = options?.abilities ?? TEST_ABILITY_LOADOUT;
     this.setSkillsPayload(options?.skills);
     this.playerName = options?.playerName ?? "You";
     this.musicEnabled = options?.musicEnabled ?? true;
@@ -1422,15 +1447,40 @@ export class GameHudOverlay {
 
     for (let slotIndex = 0; slotIndex < 4; slotIndex += 1) {
       const slotNumber = slotIndex + 1;
+      const abilityId = this.abilities.slots.find(slot => slot.slotIndex === slotIndex)?.abilityId ?? null;
+      const ability = abilityId ? getAbilityDefinition(abilityId) : null;
       const button = document.createElement("button");
       button.className = "hud-ability-slot";
       button.type = "button";
-      button.title = `Ability slot ${slotNumber}`;
-      button.setAttribute("aria-label", `Ability slot ${slotNumber}`);
+      button.title = ability ? `${ability.name}\n${ability.description}` : `Ability slot ${slotNumber}`;
+      button.setAttribute("aria-label", ability ? `${ability.name}, ability slot ${slotNumber}` : `Ability slot ${slotNumber}`);
+      button.disabled = !ability;
+      button.addEventListener("click", () => this.useAbilitySlot(slotIndex));
+
+      const key = document.createElement("span");
+      key.className = "hud-ability-key";
+      key.textContent = String(slotNumber);
+      button.appendChild(key);
+
+      if (ability) {
+        const icon = document.createElement("img");
+        icon.className = "hud-ability-icon";
+        icon.src = ability.iconUrl;
+        icon.alt = ability.name;
+        button.appendChild(icon);
+      }
+
       bar.appendChild(button);
     }
 
     return bar;
+  }
+
+  private useAbilitySlot(slotIndex: number) {
+    const abilityId = this.abilities.slots.find(slot => slot.slotIndex === slotIndex)?.abilityId ?? null;
+    if (!abilityId) return;
+
+    this.options?.onAbilitySlotUse?.(slotIndex);
   }
 
   private createDock() {
@@ -2410,6 +2460,15 @@ export class GameHudOverlay {
       return;
     }
 
+    if (!this.isTextInputFocused()) {
+      const slotIndex = this.getAbilitySlotIndexForKey(event);
+      if (slotIndex !== null) {
+        event.preventDefault();
+        this.useAbilitySlot(slotIndex);
+        return;
+      }
+    }
+
     if (event.key !== "Escape" || this.isTextInputFocused()) return;
 
     if (this.activePanel) {
@@ -2423,6 +2482,21 @@ export class GameHudOverlay {
       this.requestClearTarget();
     }
   };
+
+  private getAbilitySlotIndexForKey(event: KeyboardEvent) {
+    const keyToSlotIndex: Record<string, number> = {
+      "1": 0,
+      "2": 1,
+      "3": 2,
+      "4": 3,
+      Digit1: 0,
+      Digit2: 1,
+      Digit3: 2,
+      Digit4: 3,
+    };
+
+    return keyToSlotIndex[event.key] ?? keyToSlotIndex[event.code] ?? null;
+  }
 
   isTextInputFocused() {
     return this.chat.isFocused();

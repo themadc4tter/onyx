@@ -32,6 +32,7 @@ import {
   loadSkills,
 } from "./game/skills";
 import { resolveAutoAttack } from "./game/combat";
+import { getAbilityLoadoutPayload, resolveAbilityUse } from "./game/abilities";
 import { HerbController } from "./game/herbController";
 import { MobController } from "./game/mobController";
 import { getItemDefinition } from "@onyx/shared/items";
@@ -52,6 +53,7 @@ import {
 import type {
   ChatMessage,
   ChatSendPayload,
+  AbilityUsePayload,
   EquipmentEquipPayload,
   EquipmentPayload,
   EquipmentUnequipPayload,
@@ -417,6 +419,7 @@ async function handleZoneTransition(io: Server, socket: Socket, exit: ZoneExit) 
     inventory: getInventoryPayload(player.userId),
     equipment: getEquipmentPayload(player.userId),
     skills: getSkillsPayload(player.userId),
+    abilities: getAbilityLoadoutPayload(),
   });
 
   flushSave(socket.id, player.userId, newZoneId, newPos);
@@ -504,6 +507,7 @@ async function respawnPlayer(io: Server, socket: Socket) {
     inventory: getInventoryPayload(player.userId),
     equipment: getEquipmentPayload(player.userId),
     skills: getSkillsPayload(player.userId),
+    abilities: getAbilityLoadoutPayload(),
   });
 
   flushSave(socket.id, player.userId, newZoneId, newPos);
@@ -680,6 +684,7 @@ io.on("connection", async (socket) => {
     inventory: getInventoryPayload(userId),
     equipment: getEquipmentPayload(userId),
     skills: getSkillsPayload(userId),
+    abilities: getAbilityLoadoutPayload(),
   });
 
   // ─── Move ─────────────────────────────────────────────────────────────────
@@ -1016,6 +1021,41 @@ io.on("connection", async (socket) => {
     setTimeout(() => {
       mobController.damageMob(zoneId, mobInstanceId, result.damage, player.socketId);
     }, result.projectile.durationMs);
+  });
+
+  socket.on("ability:use", (payload: AbilityUsePayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player || !player.alive) return;
+
+    const zoneId = player.zoneId;
+    const result = resolveAbilityUse({
+      player,
+      payload,
+      mobs: mobController.getMobStates(zoneId),
+    });
+
+    if (!result.ok) {
+      socket.emit("chat:error", { message: result.message });
+      return;
+    }
+
+    const nowMs = Date.now();
+    enterCombat(player, nowMs);
+    scheduleHealthRegen(io, player, nowMs);
+    socket.emit("player:combat", getPlayerCombatStatePayload(player));
+
+    io.to(zoneId).emit("ability:used", {
+      abilityId: result.ability.id,
+      casterSocketId: player.socketId,
+      originTileX: player.position.tileX,
+      originTileY: player.position.tileY,
+      affectedMobIds: result.affectedMobIds,
+      cooldownMs: result.ability.cooldownMs,
+    });
+
+    for (const [mobInstanceId, damage] of result.damageByMobId) {
+      mobController.damageMob(zoneId, mobInstanceId, damage, player.socketId);
+    }
   });
 
   socket.on("inventory:move", (payload: InventoryMovePayload) => {

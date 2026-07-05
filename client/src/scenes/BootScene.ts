@@ -64,6 +64,7 @@ export class BootScene extends Phaser.Scene {
           inventory: data.inventory,
           equipment: data.equipment,
           skills: data.skills,
+          abilities: data.abilities,
         });
       });
     });

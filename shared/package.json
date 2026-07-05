@@ -17,6 +17,12 @@
       "require": "./dist/cjs/items.js",
       "default": "./dist/esm/items.js"
     },
+    "./abilities": {
+      "types": "./dist/types/abilities.d.ts",
+      "import": "./dist/esm/abilities.js",
+      "require": "./dist/cjs/abilities.js",
+      "default": "./dist/esm/abilities.js"
+    },
     "./mobs": {
       "types": "./dist/types/mobs.d.ts",
       "import": "./dist/esm/mobs.js",

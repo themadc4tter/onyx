@@ -67,9 +67,18 @@
 - The generated XP table in `shared/src/skills.ts` is the source of truth for exact per-level requirements.
 - XP checkpoint examples: level 10 requires 986 XP, level 20 requires 3,559 XP, level 50 requires 61,839 XP, level 75 requires 577,934 XP, and level 100 requires 5,346,332 XP.
 - Important skill unlocks should be spread throughout the full 1-100 range, not front-loaded too early.
-- Skill specialization should combine broad skill trees with interdependent recipes.
-- Each skill can have sub-specialization branches that let players develop different identities within the same skill.
-- Players should mostly choose skill sub-specializations through points or perks earned while leveling skills.
+- Each skill should have its own specialization tree, similar in spirit to Skyrim's per-skill perk trees.
+- Skill tree unlocks should require both a skill level requirement and a spent perk point.
+- Skill level represents experience and eligibility; perk spending represents player choice.
+- Skill-specific perk points should come from leveling or milestone progress within that skill.
+- Rare universal perk points should also exist and can come from major account milestones, first dungeon clears, guild achievements, trainer rewards, or similarly significant accomplishments.
+- Universal perk points should be rare enough that players cannot easily max unrelated trees by grinding the fastest skill.
+- Skill specialization should stay soft: players can still improve any skill they want, and there should be no hard profession-style lockout from training whole skills.
+- Minor hard lockouts are acceptable inside specialization trees when choosing one branch effect reasonably excludes another branch effect.
+- Specialization trees should include both active ability unlocks and passive effects where appropriate.
+- Active ability unlocks, passive effects, and recipe or tool improvements should all be valid perk rewards.
+- Perks should create skill identity and build identity without permanently locking the character into a class.
+- Skill specialization should combine per-skill trees with interdependent recipes.
 - Some crafting recipes should be discoverable as loot, similar to World of Warcraft recipe drops.
 - Discoverable crafting recipes should include a mix of tradeable recipes and bound recipes.
 - Recipe tradeability can depend on rarity, source, or intended prestige.
@@ -83,6 +92,10 @@
 - High-tier outputs should often require components or contributions from multiple skills, making cooperation more efficient than total self-sufficiency.
 - Skills should support both passive/low-attention activities with lower XP or yield and active activities with better XP, yield, or control.
 - RuneScape is a useful reference for the balance between relaxed skilling and more active training methods.
+- Players should be able to respecialize, but not casually or constantly.
+- A rare item should reset a small number of perk points so players can correct or adjust part of a specialization.
+- A very, very rare item should reset all spent perk points so players can fully rebuild their specialization.
+- Respecialization scarcity should protect build identity while avoiding permanent regret.
 
 ## Dungeon Structure
 
@@ -246,17 +259,17 @@ Persistent overworld skilling provides independent progression and preparation f
 - How important should other players be to the experience?
 - What is the primary verb after walking?
 - Should the world permanently change over time?
-- How deep should each skill's sub-specialization branches go?
+- How deep should each skill's specialization tree branches go?
 - How often should high-tier recipes require cooperation across multiple skills?
 - What should active skilling involve: timing, routing, minigames, risk, cooperation, choices, or resource optimization?
-- How should skill level, tools, and specialization affect gathering yield?
+- How should skill level, tools, and perk-tree specialization affect gathering yield?
 - What player services and systems belong in the main settlement at MVP?
 - What later player-ownership features would be most valuable: housing, shops, workshops, land, guild halls, or something else?
 - Which overworld areas should use environmental hazards, and which should use threat zones?
 - How wide should shared node respawn windows be?
 - How should players discover fixed dungeon entrances: visible map locations, clues, skill checks, keys, quests, or exploration?
 - Should early development support only 2-player and 5-player dungeons, or include a distinct 3-player tier too?
-- How should combat specializations work without permanent classes?
+- Which active abilities and passive effects belong in each combat skill tree?
 - How should support-style combat skills gain XP without falling behind damage-focused skills?
 - Which skills should produce dungeon-relevant consumables, and what problems should those consumables solve?
 - Which dungeon support effects should be consumable-only versus reusable tool-based?
