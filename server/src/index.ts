@@ -1039,10 +1039,12 @@ io.on("connection", async (socket) => {
       return;
     }
 
-    const nowMs = Date.now();
-    enterCombat(player, nowMs);
-    scheduleHealthRegen(io, player, nowMs);
-    socket.emit("player:combat", getPlayerCombatStatePayload(player));
+    if (result.damageByMobId.size > 0) {
+      const nowMs = Date.now();
+      enterCombat(player, nowMs);
+      scheduleHealthRegen(io, player, nowMs);
+      socket.emit("player:combat", getPlayerCombatStatePayload(player));
+    }
 
     io.to(zoneId).emit("ability:used", {
       abilityId: result.ability.id,

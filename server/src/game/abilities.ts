@@ -34,7 +34,7 @@ export type AbilityUseResult =
     }
   | {
       ok: false;
-      error: "ability_not_equipped" | "cooldown" | "invalid_ability" | "no_targets" | "requirements_not_met";
+      error: "ability_not_equipped" | "cooldown" | "invalid_ability" | "requirements_not_met";
       message: string;
     };
 
@@ -85,13 +85,6 @@ export function resolveAbilityUse(context: ResolveAbilityUseContext): AbilityUse
   }
 
   const damageByMobId = resolveAbilityDamage(context.player, ability, context.mobs);
-  if (damageByMobId.size === 0) {
-    return {
-      ok: false,
-      error: "no_targets",
-      message: "No enemies are in range.",
-    };
-  }
 
   lastAbilityUseAtByUserAbility.set(cooldownKey, nowMs);
   return {

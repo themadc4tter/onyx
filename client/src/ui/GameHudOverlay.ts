@@ -11,6 +11,7 @@ import {
   type SkillId,
 } from "@onyx/shared/skills";
 import type {
+  AbilityUsedPayload,
   SkillXpGainedPayload,
   SkillsPayload,
   TradeCancelledPayload,
@@ -369,6 +370,7 @@ const CSS = `
       inset 0 -8px 16px rgba(0, 0, 0, 0.18),
       0 8px 18px rgba(0, 0, 0, 0.32);
     cursor: default;
+    overflow: hidden;
     pointer-events: auto;
   }
 
@@ -376,8 +378,10 @@ const CSS = `
     content: "";
     position: absolute;
     inset: 8px;
+    z-index: 0;
     border: 1px solid rgba(242, 234, 216, 0.08);
     background: rgba(0, 0, 0, 0.18);
+    pointer-events: none;
   }
 
   .hud-ability-slot:hover {
@@ -405,6 +409,33 @@ const CSS = `
     font-size: 10px;
     font-weight: 700;
     text-shadow: 0 1px 1px #000;
+  }
+
+  .hud-ability-cooldown {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background:
+      conic-gradient(
+        from -90deg,
+        rgba(0, 0, 0, 0.74) var(--cooldown-angle, 360deg),
+        rgba(0, 0, 0, 0.16) var(--cooldown-angle, 360deg) 360deg
+      );
+    color: #f7ecd1;
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
+    text-shadow:
+      0 1px 2px #000,
+      0 0 6px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+  }
+
+  .hud-ability-slot.cooling-down .hud-ability-cooldown {
+    display: flex;
   }
 
   .hud-dock {
@@ -1145,6 +1176,9 @@ export class GameHudOverlay {
   private combat: PlayerCombatState;
   private skillXpById = new Map<SkillId, number>();
   private abilities: AbilityLoadoutPayload;
+  private abilityCooldownEndsAtBySlotIndex = new Map<number, number>();
+  private abilityCooldownDurationsBySlotIndex = new Map<number, number>();
+  private abilityCooldownAnimationFrame: number | null = null;
   private combatTagTimer: ReturnType<typeof setTimeout> | null = null;
   private healthRegenAnimationFrame: number | null = null;
   private playerName: string;
@@ -1199,6 +1233,7 @@ export class GameHudOverlay {
     this.socket.on("skills:changed", this.handleSkillsChanged);
     this.socket.on("skill:xpGained", this.handleSkillXpGained);
     this.socket.on("player:combat", this.handleCombatChanged);
+    this.socket.on("ability:used", this.handleAbilityUsed);
     this.socket.on("trade:request", this.handleTradeRequest);
     this.socket.on("trade:requestSent", this.handleTradeRequestSent);
     this.socket.on("trade:declined", this.handleTradeDeclined);
@@ -1218,11 +1253,13 @@ export class GameHudOverlay {
     this.stopSocialRefresh();
     if (this.combatTagTimer) clearTimeout(this.combatTagTimer);
     if (this.healthRegenAnimationFrame) cancelAnimationFrame(this.healthRegenAnimationFrame);
+    if (this.abilityCooldownAnimationFrame) cancelAnimationFrame(this.abilityCooldownAnimationFrame);
     this.socket.off("inventory:changed", this.handleInventoryChanged);
     this.socket.off("equipment:changed", this.handleEquipmentChanged);
     this.socket.off("skills:changed", this.handleSkillsChanged);
     this.socket.off("skill:xpGained", this.handleSkillXpGained);
     this.socket.off("player:combat", this.handleCombatChanged);
+    this.socket.off("ability:used", this.handleAbilityUsed);
     this.socket.off("trade:request", this.handleTradeRequest);
     this.socket.off("trade:requestSent", this.handleTradeRequestSent);
     this.socket.off("trade:declined", this.handleTradeDeclined);
@@ -1452,6 +1489,7 @@ export class GameHudOverlay {
       const button = document.createElement("button");
       button.className = "hud-ability-slot";
       button.type = "button";
+      button.dataset.slotIndex = String(slotIndex);
       button.title = ability ? `${ability.name}\n${ability.description}` : `Ability slot ${slotNumber}`;
       button.setAttribute("aria-label", ability ? `${ability.name}, ability slot ${slotNumber}` : `Ability slot ${slotNumber}`);
       button.disabled = !ability;
@@ -1468,6 +1506,11 @@ export class GameHudOverlay {
         icon.src = ability.iconUrl;
         icon.alt = ability.name;
         button.appendChild(icon);
+
+        const cooldown = document.createElement("span");
+        cooldown.className = "hud-ability-cooldown";
+        cooldown.setAttribute("aria-hidden", "true");
+        button.appendChild(cooldown);
       }
 
       bar.appendChild(button);
@@ -1479,8 +1522,63 @@ export class GameHudOverlay {
   private useAbilitySlot(slotIndex: number) {
     const abilityId = this.abilities.slots.find(slot => slot.slotIndex === slotIndex)?.abilityId ?? null;
     if (!abilityId) return;
+    if (Date.now() < (this.abilityCooldownEndsAtBySlotIndex.get(slotIndex) ?? 0)) return;
 
     this.options?.onAbilitySlotUse?.(slotIndex);
+  }
+
+  private handleAbilityUsed = (payload: AbilityUsedPayload) => {
+    if (payload.casterSocketId !== this.socket.id || payload.cooldownMs <= 0) return;
+
+    const slotIndex = this.abilities.slots.find(slot => slot.abilityId === payload.abilityId)?.slotIndex;
+    if (slotIndex === undefined) return;
+
+    this.abilityCooldownDurationsBySlotIndex.set(slotIndex, payload.cooldownMs);
+    this.abilityCooldownEndsAtBySlotIndex.set(slotIndex, Date.now() + payload.cooldownMs);
+    this.updateAbilityCooldowns();
+  };
+
+  private updateAbilityCooldowns = () => {
+    if (this.abilityCooldownAnimationFrame) {
+      cancelAnimationFrame(this.abilityCooldownAnimationFrame);
+      this.abilityCooldownAnimationFrame = null;
+    }
+
+    const now = Date.now();
+    let hasActiveCooldown = false;
+
+    for (const [slotIndex, endsAt] of this.abilityCooldownEndsAtBySlotIndex) {
+      const button = this.layer.querySelector<HTMLButtonElement>(`.hud-ability-slot[data-slot-index="${slotIndex}"]`);
+      const cooldown = button?.querySelector<HTMLSpanElement>(".hud-ability-cooldown") ?? null;
+      if (!button || !cooldown) continue;
+
+      const durationMs = this.abilityCooldownDurationsBySlotIndex.get(slotIndex) ?? 0;
+      const remainingMs = endsAt - now;
+      if (remainingMs <= 0 || durationMs <= 0) {
+        this.abilityCooldownEndsAtBySlotIndex.delete(slotIndex);
+        this.abilityCooldownDurationsBySlotIndex.delete(slotIndex);
+        button.classList.remove("cooling-down");
+        cooldown.textContent = "";
+        cooldown.style.setProperty("--cooldown-angle", "0deg");
+        continue;
+      }
+
+      hasActiveCooldown = true;
+      const remainingRatio = Phaser.Math.Clamp(remainingMs / durationMs, 0, 1);
+      cooldown.style.setProperty("--cooldown-angle", `${Math.round(remainingRatio * 360)}deg`);
+      cooldown.textContent = this.formatCooldownTime(remainingMs);
+      button.classList.add("cooling-down");
+    }
+
+    if (hasActiveCooldown) {
+      this.abilityCooldownAnimationFrame = requestAnimationFrame(this.updateAbilityCooldowns);
+    }
+  };
+
+  private formatCooldownTime(remainingMs: number) {
+    if (remainingMs >= 1_000) return String(Math.ceil(remainingMs / 1_000));
+
+    return (Math.ceil(remainingMs / 100) / 10).toFixed(1);
   }
 
   private createDock() {
