@@ -341,6 +341,49 @@ const CSS = `
     outline: none;
   }
 
+  .hud-ability-bar {
+    position: absolute;
+    left: var(--hud-canvas-left);
+    bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 56px);
+    width: var(--hud-canvas-width);
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+  }
+
+  .hud-ability-slot {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: 2px solid rgba(221, 198, 144, 0.6);
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 44%),
+      rgba(20, 22, 21, 0.84);
+    box-shadow:
+      inset 0 0 0 2px rgba(0, 0, 0, 0.28),
+      inset 0 -8px 16px rgba(0, 0, 0, 0.18),
+      0 8px 18px rgba(0, 0, 0, 0.32);
+    cursor: default;
+    pointer-events: auto;
+  }
+
+  .hud-ability-slot::after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border: 1px solid rgba(242, 234, 216, 0.08);
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  .hud-ability-slot:hover {
+    border-color: #e5c36b;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 44%),
+      rgba(49, 42, 31, 0.88);
+  }
+
   .hud-dock {
     position: absolute;
     right: calc(100% - var(--hud-canvas-left) - var(--hud-canvas-width) + var(--hud-inset));
@@ -1018,6 +1061,16 @@ const CSS = `
       width: min(260px, calc(var(--hud-canvas-width) - 24px));
     }
 
+    .hud-ability-bar {
+      bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 96px);
+      gap: 8px;
+    }
+
+    .hud-ability-slot {
+      width: 42px;
+      height: 42px;
+    }
+
     .skills-layout,
     .equipment-layout {
       grid-template-columns: 1fr;
@@ -1171,6 +1224,7 @@ export class GameHudOverlay {
 
   private render() {
     this.layer.appendChild(this.chat.element);
+    this.layer.appendChild(this.createAbilityBar());
     this.renderCombatFrame();
     this.layer.appendChild(this.createDock());
   }
@@ -1359,6 +1413,24 @@ export class GameHudOverlay {
     }
 
     this.setTargetProfile(null);
+  }
+
+  private createAbilityBar() {
+    const bar = document.createElement("div");
+    bar.className = "hud-ability-bar";
+    bar.setAttribute("aria-label", "Ability slots");
+
+    for (let slotIndex = 0; slotIndex < 4; slotIndex += 1) {
+      const slotNumber = slotIndex + 1;
+      const button = document.createElement("button");
+      button.className = "hud-ability-slot";
+      button.type = "button";
+      button.title = `Ability slot ${slotNumber}`;
+      button.setAttribute("aria-label", `Ability slot ${slotNumber}`);
+      bar.appendChild(button);
+    }
+
+    return bar;
   }
 
   private createDock() {
