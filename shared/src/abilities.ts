@@ -58,7 +58,7 @@ export const ABILITY_DEFINITIONS: Record<AbilityId, AbilityDefinition> = {
     description: "Strike all nearby enemies.",
     iconUrl: "assets/abilities/Ability_icons1_84.png",
     slotType: "combat",
-    cooldownMs: 0,
+    cooldownMs: 10_000,
     requirements: [
       { kind: "equipped_weapon_class", slot: "main_hand", weaponClass: "melee" },
     ],
