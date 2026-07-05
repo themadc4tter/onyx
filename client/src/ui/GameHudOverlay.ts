@@ -420,9 +420,9 @@ const CSS = `
     justify-content: center;
     background:
       conic-gradient(
-        from -90deg,
-        rgba(0, 0, 0, 0.74) var(--cooldown-angle, 360deg),
-        rgba(0, 0, 0, 0.16) var(--cooldown-angle, 360deg) 360deg
+        from 0deg,
+        rgba(0, 0, 0, 0.16) 0deg var(--cooldown-angle, 0deg),
+        rgba(0, 0, 0, 0.74) var(--cooldown-angle, 0deg) 360deg
       );
     color: #f7ecd1;
     font-size: 18px;
@@ -1564,8 +1564,8 @@ export class GameHudOverlay {
       }
 
       hasActiveCooldown = true;
-      const remainingRatio = Phaser.Math.Clamp(remainingMs / durationMs, 0, 1);
-      cooldown.style.setProperty("--cooldown-angle", `${Math.round(remainingRatio * 360)}deg`);
+      const elapsedRatio = Phaser.Math.Clamp(1 - remainingMs / durationMs, 0, 1);
+      cooldown.style.setProperty("--cooldown-angle", `${Math.round(elapsedRatio * 360)}deg`);
       cooldown.textContent = this.formatCooldownTime(remainingMs);
       button.classList.add("cooling-down");
     }
