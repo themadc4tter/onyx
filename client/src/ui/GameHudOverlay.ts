@@ -8,6 +8,7 @@ import {
   MAX_SKILL_LEVEL,
   SKILL_DEFINITIONS,
   getSkillProgress,
+  type SkillProgress,
   type SkillId,
 } from "@onyx/shared/skills";
 import type {
@@ -27,11 +28,31 @@ import type {
 import { HudChat } from "./chat/HudChat";
 
 type PanelId = "skills" | "inventory" | "equipment" | "social" | "settings";
+type HerbalismTabId = "overview" | "unlocks" | "specialization";
+type HerbalismPath = "Botanist" | "Mycologist" | "Bloomkeeper";
 
 interface SkillMock {
   id: SkillId;
   name: string;
   nextUnlock: string;
+}
+
+interface HerbalismUnlockMock {
+  level: number;
+  name: string;
+  nodeType: "Herb" | "Mushroom";
+  rarity: "Common" | "Uncommon" | "Rare";
+  location: string;
+  xp: number;
+  alchemyRole: string;
+}
+
+interface HerbalismPerkMock {
+  id: string;
+  path: HerbalismPath;
+  name: string;
+  effect: string;
+  requires: string;
 }
 
 interface GameHudOverlayOptions {
@@ -95,6 +116,108 @@ const SKILLS: SkillMock[] = SKILL_DEFINITIONS.map(skill => ({
   name: skill.name,
   nextUnlock: SKILL_UNLOCKS[skill.id],
 }));
+
+const HERBALISM_TABS: Array<{ id: HerbalismTabId; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "unlocks", label: "Unlocks" },
+  { id: "specialization", label: "Specialization" },
+];
+
+const HERBALISM_UNLOCKS: HerbalismUnlockMock[] = [
+  {
+    level: 1,
+    name: "Moonleaf",
+    nodeType: "Herb",
+    rarity: "Common",
+    location: "safe meadows near settlement",
+    xp: 8,
+    alchemyRole: "basic healing, weak restoration elixirs",
+  },
+  {
+    level: 5,
+    name: "Sunspindle",
+    nodeType: "Herb",
+    rarity: "Common",
+    location: "roadsides, sunny fields, farm edges",
+    xp: 11,
+    alchemyRole: "stamina, movement, light resistance",
+  },
+  {
+    level: 10,
+    name: "Briarcap",
+    nodeType: "Herb",
+    rarity: "Common",
+    location: "forest edges, thorny groves, denser wild areas",
+    xp: 15,
+    alchemyRole: "antidotes, bleed/poison mitigation",
+  },
+  {
+    level: 18,
+    name: "Gloomcap",
+    nodeType: "Mushroom",
+    rarity: "Uncommon",
+    location: "caves, dungeon side rooms, damp ruins",
+    xp: 22,
+    alchemyRole: "darkness vision, fear/magic resistance",
+  },
+  {
+    level: 20,
+    name: "Emberroot",
+    nodeType: "Herb",
+    rarity: "Uncommon",
+    location: "warm rocky slopes, dangerous meadow edges",
+    xp: 26,
+    alchemyRole: "fire resistance, burst damage elixirs",
+  },
+  {
+    level: 25,
+    name: "Silverthorn",
+    nodeType: "Herb",
+    rarity: "Rare",
+    location: "rare overworld nodes in risky outer zones",
+    xp: 32,
+    alchemyRole: "stronger healing, protection, Bloomheart synergy",
+  },
+  {
+    level: 28,
+    name: "Gravebloom Fungus",
+    nodeType: "Mushroom",
+    rarity: "Rare",
+    location: "deeper caves, dungeon boss-adjacent rooms",
+    xp: 38,
+    alchemyRole: "death/curse resistance, revive/last-stand elixirs",
+  },
+];
+
+const HERBALISM_PATH_SUMMARIES: Record<HerbalismPath, string> = {
+  Botanist: "Overworld herbs, herb yield, route awareness, color specialization.",
+  Mycologist: "Cave fungi, dungeon resources, uncommon mushroom sources.",
+  Bloomkeeper: "Bloomheart discovery, prospecting, rare drops, boss rewards.",
+};
+
+const HERBALISM_PERKS: HerbalismPerkMock[] = [
+  { id: "A", path: "Botanist", name: "Herb Collector", effect: "Gain 4% chance to get double yield from herbs.", requires: "None" },
+  { id: "C", path: "Botanist", name: "Leafsense", effect: "Briefly show the direction of the nearest herb node after picking a herb.", requires: "Herb Collector" },
+  { id: "F", path: "Botanist", name: "Herb Harvester", effect: "Gain 8% chance to get double yield from herbs.", requires: "Leafsense" },
+  { id: "G", path: "Botanist", name: "Tide Greens", effect: "Gain the ability to fish seaweed.", requires: "Leafsense" },
+  { id: "M", path: "Botanist", name: "Crimson Harvest", effect: "Red herbs gain +10% double yield and XP chance.", requires: "Herb Harvester" },
+  { id: "N", path: "Botanist", name: "Azure Harvest", effect: "Blue herbs gain +10% double yield and XP chance.", requires: "Herb Harvester" },
+  { id: "O", path: "Botanist", name: "Violet Harvest", effect: "Purple herbs gain +10% double yield and XP chance.", requires: "Herb Harvester" },
+  { id: "S", path: "Botanist", name: "Expert Herb Harvester", effect: "Gain 16% chance to get double yield from herbs.", requires: "Crimson, Azure, or Violet Harvest" },
+  { id: "B", path: "Mycologist", name: "Mushroom Collector", effect: "Gain 2% chance to get double yield from mushrooms.", requires: "None" },
+  { id: "D", path: "Mycologist", name: "Fungal Eye", effect: "Find mushrooms easier outside of dungeons.", requires: "Mushroom Collector" },
+  { id: "H", path: "Mycologist", name: "Mushroom Harvester", effect: "Gain 4% chance to get double yield from mushrooms.", requires: "Fungal Eye" },
+  { id: "I", path: "Mycologist", name: "Stonecap Lore", effect: "Gain the ability to mine stonecap mushrooms.", requires: "Fungal Eye" },
+  { id: "P", path: "Mycologist", name: "Pale Mycelia", effect: "White mushrooms gain +5% double yield and XP chance.", requires: "Mushroom Harvester" },
+  { id: "Q", path: "Mycologist", name: "Earthen Mycelia", effect: "Brown mushrooms gain +5% double yield and XP chance.", requires: "Mushroom Harvester" },
+  { id: "T", path: "Mycologist", name: "Expert Mushroom Harvester", effect: "Gain 8% chance to get double yield from mushrooms.", requires: "Pale or Earthen Mycelia" },
+  { id: "E", path: "Bloomkeeper", name: "Bloomheart Instinct", effect: "Increase the random drop chance of a Bloomheart by 1%.", requires: "Herb Collector or Mushroom Collector" },
+  { id: "J", path: "Bloomkeeper", name: "Herbal Prospecting", effect: "Prospect and consume herbs for a 5% chance to find a Bloomheart.", requires: "Bloomheart Instinct" },
+  { id: "K", path: "Bloomkeeper", name: "Fungal Prospecting", effect: "Prospect and consume mushrooms for a 10% chance to find a Bloomheart.", requires: "Bloomheart Instinct" },
+  { id: "L", path: "Bloomkeeper", name: "Living Core", effect: "Increase the random drop chance of a Bloomheart by 2%.", requires: "Herbal or Fungal Prospecting" },
+  { id: "R", path: "Bloomkeeper", name: "Heart of the Hoard", effect: "Dungeon bosses have a chance to drop a Bloomheart.", requires: "Living Core" },
+  { id: "U", path: "Bloomkeeper", name: "Bloomkeeper's Gift", effect: "Increase the random drop chance of a Bloomheart by 4%.", requires: "Heart of the Hoard" },
+];
 
 const CSS = `
   #${HUD_LAYER_ID} {
@@ -493,6 +616,7 @@ const CSS = `
 
   .hud-window-skills {
     bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 58px);
+    width: min(790px, calc(var(--hud-canvas-width) - 24px));
     max-height: min(720px, calc(var(--hud-canvas-height) - 82px));
   }
 
@@ -603,6 +727,7 @@ const CSS = `
   .equipment-stats,
   .settings-summary,
   .social-summary {
+    min-width: 0;
     border: 1px solid rgba(242, 234, 216, 0.1);
     background: rgba(255, 255, 255, 0.035);
     padding: 12px;
@@ -640,6 +765,358 @@ const CSS = `
     background: rgba(0, 0, 0, 0.22);
     border: 1px solid rgba(242, 234, 216, 0.08);
     font-size: 13px;
+  }
+
+  .herbalism-detail {
+    display: grid;
+    gap: 12px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .herbalism-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid rgba(242, 234, 216, 0.1);
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .herbalism-header .detail-copy {
+    margin-bottom: 0;
+  }
+
+  .herbalism-level-badge {
+    flex-shrink: 0;
+    min-width: 56px;
+    padding: 7px 9px;
+    border: 1px solid rgba(95, 191, 137, 0.5);
+    background: rgba(33, 83, 58, 0.34);
+    color: #9af0b8;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .herbalism-summary-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .herbalism-metric {
+    min-width: 0;
+    padding: 9px;
+    border: 1px solid rgba(242, 234, 216, 0.09);
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .herbalism-metric-label {
+    display: block;
+    margin-bottom: 4px;
+    color: rgba(242, 234, 216, 0.62);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .herbalism-metric-value {
+    display: block;
+    color: #ffe7a8;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  .herbalism-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 0 0 8px;
+    border-bottom: 1px solid rgba(229, 195, 107, 0.18);
+  }
+
+  .herbalism-tab {
+    min-width: 96px;
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid rgba(221, 198, 144, 0.26);
+    background: rgba(0, 0, 0, 0.2);
+    color: rgba(242, 234, 216, 0.82);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .herbalism-tab:hover,
+  .herbalism-tab.active {
+    border-color: #e5c36b;
+    background: rgba(49, 42, 31, 0.75);
+    color: #ffe7a8;
+  }
+
+  .herbalism-tab-body {
+    display: grid;
+    gap: 12px;
+  }
+
+  .herbalism-section {
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid rgba(242, 234, 216, 0.09);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .herbalism-section-title {
+    margin-bottom: 8px;
+    color: #ffe7a8;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .herbalism-rule-list,
+  .herbalism-family-list,
+  .herbalism-milestone-list {
+    display: grid;
+    gap: 7px;
+  }
+
+  .herbalism-rule,
+  .herbalism-family,
+  .herbalism-milestone {
+    display: grid;
+    grid-template-columns: minmax(92px, 0.45fr) 1fr;
+    gap: 9px;
+    align-items: start;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(242, 234, 216, 0.07);
+    background: rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .herbalism-rule strong,
+  .herbalism-family strong,
+  .herbalism-milestone strong {
+    color: #ffe7a8;
+    font-size: 12px;
+  }
+
+  .herbalism-rule span,
+  .herbalism-family span,
+  .herbalism-milestone span {
+    color: rgba(242, 234, 216, 0.78);
+  }
+
+  .herbalism-overview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .herbalism-overview-grid .herbalism-section:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .herbalism-unlock-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .herbalism-unlock-header,
+  .herbalism-unlock-row {
+    display: grid;
+    grid-template-columns: 48px minmax(104px, 1fr) 82px minmax(130px, 1.35fr) 44px 74px;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .herbalism-unlock-header {
+    padding: 0 8px 2px;
+    color: rgba(242, 234, 216, 0.58);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .herbalism-unlock-row {
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(242, 234, 216, 0.08);
+    background: rgba(0, 0, 0, 0.2);
+    color: #f2ead8;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .herbalism-unlock-row.locked {
+    border-color: rgba(242, 105, 86, 0.44);
+    background: rgba(93, 29, 26, 0.24);
+    color: #ffb5a8;
+  }
+
+  .herbalism-unlock-level,
+  .herbalism-unlock-name {
+    color: #ffe7a8;
+    font-weight: 800;
+  }
+
+  .herbalism-unlock-row.locked .herbalism-unlock-level,
+  .herbalism-unlock-row.locked .herbalism-unlock-name {
+    color: #ff8f7e;
+  }
+
+  .herbalism-unlock-location,
+  .herbalism-unlock-xp {
+    color: rgba(242, 234, 216, 0.72);
+  }
+
+  .herbalism-unlock-row.locked .herbalism-unlock-location,
+  .herbalism-unlock-row.locked .herbalism-unlock-xp {
+    color: rgba(255, 181, 168, 0.78);
+  }
+
+  .herbalism-status {
+    justify-self: end;
+    min-width: 66px;
+    padding: 3px 6px;
+    border: 1px solid rgba(95, 191, 137, 0.35);
+    color: #9af0b8;
+    font-size: 10px;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .herbalism-status.locked {
+    border-color: rgba(242, 105, 86, 0.52);
+    color: #ff8f7e;
+  }
+
+  .specialization-map {
+    display: grid;
+    gap: 10px;
+  }
+
+  .specialization-paths {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .specialization-path {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid rgba(242, 234, 216, 0.1);
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  .specialization-path.botanist {
+    border-color: rgba(95, 191, 137, 0.42);
+  }
+
+  .specialization-path.mycologist {
+    border-color: rgba(114, 173, 255, 0.4);
+  }
+
+  .specialization-path.bloomkeeper {
+    border-color: rgba(229, 112, 138, 0.42);
+  }
+
+  .specialization-path-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: #ffe7a8;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .specialization-path-tag {
+    color: rgba(242, 234, 216, 0.58);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .specialization-path-copy {
+    color: rgba(242, 234, 216, 0.72);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .perk-list {
+    display: grid;
+    gap: 7px;
+  }
+
+  .perk-node {
+    position: relative;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(242, 234, 216, 0.1);
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .perk-node::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: -8px;
+    width: 1px;
+    height: 7px;
+    background: rgba(242, 234, 216, 0.2);
+  }
+
+  .perk-node:first-child::before {
+    display: none;
+  }
+
+  .perk-heading {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    gap: 7px;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+
+  .perk-id {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(229, 195, 107, 0.36);
+    color: #ffe7a8;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .perk-name {
+    min-width: 0;
+    color: #f2ead8;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .perk-effect,
+  .perk-requirement {
+    color: rgba(242, 234, 216, 0.72);
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .perk-requirement {
+    margin-top: 4px;
+    color: rgba(229, 195, 107, 0.78);
   }
 
   .inventory-header,
@@ -1130,6 +1607,42 @@ const CSS = `
       grid-template-columns: 1fr;
     }
 
+    .herbalism-summary-strip,
+    .herbalism-overview-grid,
+    .specialization-paths {
+      grid-template-columns: 1fr;
+    }
+
+    .herbalism-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .herbalism-tab {
+      min-width: 0;
+      padding: 0 6px;
+    }
+
+    .herbalism-unlock-header {
+      display: none;
+    }
+
+    .herbalism-unlock-row {
+      grid-template-columns: 44px 1fr auto;
+      gap: 6px 8px;
+    }
+
+    .herbalism-unlock-type,
+    .herbalism-unlock-location,
+    .herbalism-unlock-xp {
+      grid-column: 2 / -1;
+    }
+
+    .herbalism-status {
+      grid-column: 3;
+      grid-row: 1;
+    }
+
     .inventory-grid {
       grid-template-columns: repeat(4, minmax(42px, 1fr));
     }
@@ -1161,6 +1674,7 @@ export class GameHudOverlay {
   private styleEl: HTMLStyleElement;
   private activePanel: PanelId | null = null;
   private selectedSkill = SKILLS[0];
+  private selectedHerbalismTab: HerbalismTabId = "overview";
   private buttons = new Map<PanelId, HTMLButtonElement>();
   private chat: HudChat;
   private inventory: InventoryState;
@@ -1679,9 +2193,18 @@ export class GameHudOverlay {
       list.appendChild(row);
     }
 
+    const selectedProgress = getSkillProgress(this.getSkillTotalXp(this.selectedSkill.id));
+    const detail = this.selectedSkill.id === "herbalism"
+      ? this.createHerbalismSkillDetail(selectedProgress)
+      : this.createBasicSkillDetail(selectedProgress);
+
+    layout.append(list, detail);
+    return layout;
+  }
+
+  private createBasicSkillDetail(selectedProgress: SkillProgress) {
     const detail = document.createElement("div");
     detail.className = "skill-detail";
-    const selectedProgress = getSkillProgress(this.getSkillTotalXp(this.selectedSkill.id));
     const selectedXpLine = selectedProgress.isMaxLevel
       ? `${this.formatNumber(selectedProgress.totalXp)} XP earned.`
       : `${this.formatNumber(selectedProgress.xpIntoLevel)} of ${this.formatNumber(selectedProgress.xpForNextLevel)} XP toward level ${selectedProgress.level + 1}.`;
@@ -1695,8 +2218,222 @@ export class GameHudOverlay {
       </div>
     `;
 
-    layout.append(list, detail);
-    return layout;
+    return detail;
+  }
+
+  private createHerbalismSkillDetail(selectedProgress: SkillProgress) {
+    const detail = document.createElement("div");
+    detail.className = "skill-detail herbalism-detail";
+    const selectedXpLine = selectedProgress.isMaxLevel
+      ? `${this.formatNumber(selectedProgress.totalXp)} XP earned.`
+      : `${this.formatNumber(selectedProgress.xpIntoLevel)} of ${this.formatNumber(selectedProgress.xpForNextLevel)} XP toward level ${selectedProgress.level + 1}.`;
+    const nextUnlock = HERBALISM_UNLOCKS.find(unlock => unlock.level > selectedProgress.level);
+
+    const header = document.createElement("div");
+    header.className = "herbalism-header";
+    header.innerHTML = `
+      <div>
+        <div class="detail-title">Herbalism</div>
+        <p class="detail-copy">Level ${selectedProgress.level}. ${selectedXpLine}</p>
+      </div>
+      <div class="herbalism-level-badge">Lv ${selectedProgress.level}</div>
+    `;
+
+    const summary = document.createElement("div");
+    summary.className = "herbalism-summary-strip";
+    summary.append(
+      this.createHerbalismMetric("Next unlock", nextUnlock ? `Lv ${nextUnlock.level} ${nextUnlock.name}` : "All slice unlocks reached"),
+      this.createHerbalismMetric("Base yield", "1 item per gather"),
+      this.createHerbalismMetric("Stack size", "20 per inventory stack"),
+    );
+
+    const tabs = document.createElement("div");
+    tabs.className = "herbalism-tabs";
+    for (const tab of HERBALISM_TABS) {
+      const button = document.createElement("button");
+      button.className = `herbalism-tab${tab.id === this.selectedHerbalismTab ? " active" : ""}`;
+      button.type = "button";
+      button.textContent = tab.label;
+      button.addEventListener("click", () => {
+        this.selectedHerbalismTab = tab.id;
+        this.renderActivePanel();
+      });
+      tabs.appendChild(button);
+    }
+
+    const body = document.createElement("div");
+    body.className = "herbalism-tab-body";
+    if (this.selectedHerbalismTab === "overview") body.appendChild(this.createHerbalismOverview(selectedProgress));
+    if (this.selectedHerbalismTab === "unlocks") body.appendChild(this.createHerbalismUnlocks(selectedProgress));
+    if (this.selectedHerbalismTab === "specialization") body.appendChild(this.createHerbalismSpecialization());
+
+    detail.append(header, summary, tabs, body);
+    return detail;
+  }
+
+  private createHerbalismMetric(label: string, value: string) {
+    const metric = document.createElement("div");
+    metric.className = "herbalism-metric";
+    metric.innerHTML = `
+      <span class="herbalism-metric-label">${label}</span>
+      <span class="herbalism-metric-value">${value}</span>
+    `;
+    return metric;
+  }
+
+  private createHerbalismOverview(selectedProgress: SkillProgress) {
+    const container = document.createElement("div");
+    container.className = "herbalism-overview-grid";
+    const unlockedCount = HERBALISM_UNLOCKS.filter(unlock => unlock.level <= selectedProgress.level).length;
+    const nextMilestones = HERBALISM_UNLOCKS
+      .filter(unlock => unlock.level > selectedProgress.level)
+      .slice(0, 3);
+
+    const rules = this.createHerbalismSection("What This Skill Does");
+    const ruleList = document.createElement("div");
+    ruleList.className = "herbalism-rule-list";
+    ruleList.append(
+      this.createLabelValueRow("Role", "Gathers plants, fungi, and rare Bloomhearts for Alchemy, trading, and dungeon preparation.", "herbalism-rule"),
+      this.createLabelValueRow("Unlocked", `${unlockedCount} of ${HERBALISM_UNLOCKS.length} first-slice reagents.`, "herbalism-rule"),
+      this.createLabelValueRow("Gathering", "Nodes above your Herbalism level stay visible, but show their required level.", "herbalism-rule"),
+      this.createLabelValueRow("Progression", "Higher levels make more of the world useful instead of replacing old herbs.", "herbalism-rule"),
+    );
+    rules.appendChild(ruleList);
+
+    const families = this.createHerbalismSection("Item Families");
+    const familyList = document.createElement("div");
+    familyList.className = "herbalism-family-list";
+    familyList.append(
+      this.createLabelValueRow("Herbs", "Fairly common overworld nodes. Main path: Botanist.", "herbalism-family"),
+      this.createLabelValueRow("Mushrooms", "More uncommon cave, dungeon, and damp-area nodes. Main path: Mycologist.", "herbalism-family"),
+      this.createLabelValueRow("Bloomhearts", "Very rare living reagent cores found through gathering, prospecting, bosses, and special sources. Main path: Bloomkeeper.", "herbalism-family"),
+    );
+    families.appendChild(familyList);
+
+    const milestones = this.createHerbalismSection("Next Milestones");
+    const milestoneList = document.createElement("div");
+    milestoneList.className = "herbalism-milestone-list";
+    const visibleMilestones = nextMilestones.length > 0 ? nextMilestones : HERBALISM_UNLOCKS.slice(-3);
+    for (const unlock of visibleMilestones) {
+      milestoneList.appendChild(this.createLabelValueRow(`Lv ${unlock.level}`, `${unlock.name} - ${unlock.alchemyRole}.`, "herbalism-milestone"));
+    }
+    milestones.appendChild(milestoneList);
+
+    container.append(rules, families, milestones);
+    return container;
+  }
+
+  private createHerbalismUnlocks(selectedProgress: SkillProgress) {
+    const section = this.createHerbalismSection("Unlocks");
+    const list = document.createElement("div");
+    list.className = "herbalism-unlock-list";
+
+    const header = document.createElement("div");
+    header.className = "herbalism-unlock-header";
+    header.innerHTML = `
+      <span>Level</span>
+      <span>Reagent</span>
+      <span>Type</span>
+      <span>Where</span>
+      <span>XP</span>
+      <span>Status</span>
+    `;
+    list.appendChild(header);
+
+    for (const unlock of HERBALISM_UNLOCKS) {
+      const unlocked = selectedProgress.level >= unlock.level;
+      const row = document.createElement("div");
+      row.className = `herbalism-unlock-row${unlocked ? "" : " locked"}`;
+      row.title = unlock.alchemyRole;
+      row.innerHTML = `
+        <span class="herbalism-unlock-level">Lv ${unlock.level}</span>
+        <span class="herbalism-unlock-name">${unlock.name}</span>
+        <span class="herbalism-unlock-type">${unlock.nodeType} - ${unlock.rarity}</span>
+        <span class="herbalism-unlock-location">${unlock.location}</span>
+        <span class="herbalism-unlock-xp">${unlock.xp}</span>
+        <span class="herbalism-status${unlocked ? "" : " locked"}">${unlocked ? "Unlocked" : "Locked"}</span>
+      `;
+      list.appendChild(row);
+    }
+
+    section.appendChild(list);
+    return section;
+  }
+
+  private createHerbalismSpecialization() {
+    const container = document.createElement("div");
+    container.className = "specialization-map";
+
+    const intro = this.createHerbalismSection("Specialization Paths");
+    const introList = document.createElement("div");
+    introList.className = "herbalism-rule-list";
+    introList.append(
+      this.createLabelValueRow("Botanist", HERBALISM_PATH_SUMMARIES.Botanist, "herbalism-rule"),
+      this.createLabelValueRow("Mycologist", HERBALISM_PATH_SUMMARIES.Mycologist, "herbalism-rule"),
+      this.createLabelValueRow("Bloomkeeper", HERBALISM_PATH_SUMMARIES.Bloomkeeper, "herbalism-rule"),
+    );
+    intro.appendChild(introList);
+
+    const paths = document.createElement("div");
+    paths.className = "specialization-paths";
+    for (const path of ["Botanist", "Mycologist", "Bloomkeeper"] as HerbalismPath[]) {
+      paths.appendChild(this.createSpecializationPath(path));
+    }
+
+    container.append(intro, paths);
+    return container;
+  }
+
+  private createSpecializationPath(path: HerbalismPath) {
+    const pathEl = document.createElement("div");
+    pathEl.className = `specialization-path ${path.toLowerCase()}`;
+    pathEl.innerHTML = `
+      <div class="specialization-path-title">
+        <span>${path}</span>
+        <span class="specialization-path-tag">Planned</span>
+      </div>
+      <div class="specialization-path-copy">${HERBALISM_PATH_SUMMARIES[path]}</div>
+    `;
+
+    const perkList = document.createElement("div");
+    perkList.className = "perk-list";
+    for (const perk of HERBALISM_PERKS.filter(candidate => candidate.path === path)) {
+      const node = document.createElement("div");
+      node.className = "perk-node";
+      node.innerHTML = `
+        <div class="perk-heading">
+          <span class="perk-id">${perk.id}</span>
+          <span class="perk-name">${perk.name}</span>
+        </div>
+        <div class="perk-effect">${perk.effect}</div>
+        <div class="perk-requirement">Requires: ${perk.requires}</div>
+      `;
+      perkList.appendChild(node);
+    }
+
+    pathEl.appendChild(perkList);
+    return pathEl;
+  }
+
+  private createHerbalismSection(titleText: string) {
+    const section = document.createElement("div");
+    section.className = "herbalism-section";
+    const title = document.createElement("div");
+    title.className = "herbalism-section-title";
+    title.textContent = titleText;
+    section.appendChild(title);
+    return section;
+  }
+
+  private createLabelValueRow(label: string, value: string, className: string) {
+    const row = document.createElement("div");
+    row.className = className;
+    const labelEl = document.createElement("strong");
+    labelEl.textContent = label;
+    const valueEl = document.createElement("span");
+    valueEl.textContent = value;
+    row.append(labelEl, valueEl);
+    return row;
   }
 
   private createInventoryPanel() {

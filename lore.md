@@ -71,6 +71,76 @@ This file is the living source of truth for the game's worldbuilding.
 - Knowledge-Magic City-State: study, refinement, magical power, healing, and formal spellcraft skills.
 - Some skills may overlap between city-states. For example, alchemy belongs mostly to the Food City-State if treated as plant-based, kitchen-adjacent, herbal, and practical, but it could still have scholarly or magical branches elsewhere.
 
+## Draft Reputation Factions
+
+- Hearthcross: the central trading post and Fourth Little Power. Reputation comes from helping locals, protecting travelers, resolving disputes, improving the market, and supporting Mayor Elian Voss.
+- Velmora: the Food City-State, Kitchen of the Road. Reputation comes from helping pilgrim kitchens, protecting harvest stores, working with herbs, alchemy, cooking, fishing, and defending guest-right.
+- Brindlehook: the Repair City-State, City of Second Uses. Reputation comes from repairing damaged infrastructure, recovering lost tools, helping workshops, mining, crafting, blacksmithing, leatherworking, and fighting in direct melee styles.
+- Aurelith: the Knowledge-Magic City-State, Gilded Academy. Reputation comes from recovering records, solving magical problems, assisting scholars, enchanting, restoration, and magic combat.
+- Ashen Witnesses: hidden or unknown at first. This reputation should not openly reveal Solmere early. Early actions may secretly affect it through old contracts, missing records, northern symbols, debt disputes, and choices about whether to expose or suppress uncomfortable truths.
+
+## Side Towns and Minor Factions
+
+### Mossbank
+
+- Type: smaller town within the Velmora city-state.
+- Current concept: a fishing village or riverside settlement that adds depth to Velmora beyond farms, kitchens, and seed traditions.
+- To flesh out later: local culture, notable NPCs, relationship to Velmora's old families, fishing-related quests, possible river or marsh mysteries.
+
+### Lanternwrights
+
+- Type: small organization that can appear in any city-state.
+- Current concept: craftspeople who make and maintain road lanterns, market lamps, shrine lights, and signal lamps.
+- To flesh out later: whether their lights reveal hidden marks, how they travel between city-states, what materials they need, and whether they know old road secrets.
+
+### Tallyhouse
+
+- Type: smaller organization based in Hearthcross.
+- Current concept: a neutral accounting office or trade office that handles ordinary ledgers, invoices, contracts, market fees, and trade disputes.
+- To flesh out later: staff, public trust, connection to Hearthcross politics, sidequests around counterfeit seals or missing invoices, and possible foreshadowing of Ashen Witness contract magic.
+
+### Thimble Court
+
+- Type: small faction associated with Aurelith's high-class society.
+- Current concept: a formal circle of tailors, cobblers, leatherworkers, designers, and etiquette-minded judges of fashion and presentation.
+- To flesh out later: social rules, noble patrons, crafting rewards, comedic disputes, and whether clothing carries magical or political meaning in Aurelith.
+
+### Seedwardens
+
+- Type: small but highly regarded organization in Velmora.
+- Current concept: guardians of heirloom seeds, traveling herb bundles, crop lines, and possibly the seed vault.
+- To flesh out later: ranks, rituals, connection to old families, seed vault duties, herbalism and alchemy quests, and possible involvement in a future dungeon.
+
+### Quarry Families
+
+- Type: smaller faction that adds depth to Brindlehook.
+- Current concept: mining clans or stonecutting families who provide ore, stone, minerals, and raw materials for Brindlehook's repairs and crafts.
+- To flesh out later: family rivalries, mine claims, relationship to Brindlehook workshops, mining quests, cave hazards, and possible old-road discoveries underground.
+
+## Map Drafts
+
+### World Map Draft 01
+
+- File: `assets/lore/world-map-draft-01.png`
+- Draft geography: Hearthcross sits at the center of the region.
+- Velmora lies to the west, surrounded by rivers, farmland, orchards, pilgrim fields, and warm green lowlands.
+- Mossbank lies southwest of Velmora in a reed-lined fishing wetland.
+- Brindlehook lies to the east among rocky foothills, quarries, mines, workshops, rails, and repaired bridges.
+- Aurelith lies to the south in an elegant highland region with towers, libraries, gardens, observatories, and refined estates.
+- Frostveil Pass lies to the north, where the old fourth road disappears into snow, pine forest, mountains, mist, and ruined waymarkers.
+- Solmere lies beyond Frostveil Pass as a hidden or half-ruined northern city-state.
+
+### World Map Draft 02
+
+- File: `assets/lore/world-map-draft-02.png`
+- Purpose: a more realistic-scale version of the world map.
+- Hearthcross is smaller and more modest, sitting at the central crossroads with long roads between major settlements.
+- The known city-states are depicted as smaller, farther apart, and separated by meaningful travel terrain.
+- Velmora sits west in a river valley of farms, orchards, forests, and wetlands, with Mossbank farther southwest on marshy lake shores.
+- Brindlehook sits east across stony hills, quarries, mining camps, ravines, and workshop country.
+- Aurelith sits south beyond meadows, lakes, old woods, and elegant highlands.
+- Frostveil Pass and Solmere remain north, distant, snowy, and obscured by mountains, pine forest, mist, and broken waymarkers.
+
 ## Open Questions
 
 - Which direction is each city-state from the trading post?
