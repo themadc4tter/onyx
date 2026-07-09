@@ -7,6 +7,7 @@ import { supabase } from "./lib/supabase";
 import { DEFAULT_ZONE_ID, isTileWalkable, normalizeZoneId, ZONES, type ZoneExit } from "./config/map";
 import {
   addItemToInventory,
+  canAddItemToInventory,
   deleteInventoryItem,
   flushAllDirtyInventories,
   flushDirtyInventory,
@@ -30,12 +31,16 @@ import {
   getSkillsPayload,
   grantSkillXp,
   loadSkills,
+  refundUniversalPerkPoints,
+  unlockSkillPerk,
 } from "./game/skills";
+import { resolveSkillEffects } from "./game/skillEffects";
 import { resolveAutoAttack } from "./game/combat";
 import { getAbilityLoadoutPayload, resolveAbilityUse } from "./game/abilities";
 import { HerbController } from "./game/herbController";
 import { MobController } from "./game/mobController";
 import { getItemDefinition } from "@onyx/shared/items";
+import { getSkillUnlockByItemId } from "@onyx/shared/skills";
 import {
   acceptTradeRequest,
   addTradeOfferItem,
@@ -69,6 +74,8 @@ import type {
   NormalizedChatPayload,
   PlayerCombatState,
   Position,
+  SkillPerkUnlockPayload,
+  SkillUniversalPerkRefundPayload,
   TradeOfferPayload,
   TradeRemoveOfferPayload,
   TradeRequestPayload,
@@ -105,7 +112,6 @@ const MOVE_RATE_TOLERANCE_MS = 30;
 const MIN_MOVE_INTERVAL_MS = MOVE_INTERVAL_MS - MOVE_RATE_TOLERANCE_MS;
 const CHAT_RATE_LIMIT_MS = 800;
 const MAX_CHAT_LENGTH = 240;
-const MOONLEAF_HERBALISM_XP = 40;
 const TRADE_RANGE_TILES = 5;
 const DEFAULT_PLAYER_MAX_HP = 5;
 const PLAYER_RESPAWN_DELAY_MS = 4_000;
@@ -286,6 +292,20 @@ function getTradeErrorMessage(error?: string) {
   };
 
   return messages[error ?? ""] ?? "Trade action failed.";
+}
+
+function getSkillPerkErrorMessage(error?: string) {
+  const messages: Record<string, string> = {
+    already_unlocked: "You have already learned that perk.",
+    missing_requirements: "You need to learn the required perk first.",
+    no_universal_points_allocated: "There are no universal perk points invested in that skill.",
+    not_enough_points: "You do not have enough perk points.",
+    perk_blocked: "That perk is not available yet.",
+    unknown_perk: "That perk is not available.",
+    unknown_skill: "That skill is not available.",
+  };
+
+  return messages[error ?? ""] ?? "Skill perk action failed.";
 }
 
 function emitInventoryActionResult(socket: Socket, userId: string, ok: boolean, error?: string) {
@@ -952,6 +972,53 @@ io.on("connection", async (socket) => {
     }
   });
 
+  socket.on("skill:perkUnlock", (payload: SkillPerkUnlockPayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player || !payload?.skillId || !payload?.perkId) return;
+
+    const result = unlockSkillPerk(
+      player.userId,
+      payload.skillId,
+      payload.perkId,
+      payload.spendUniversalIfNeeded === true,
+    );
+
+    if (!result.ok || !result.skillId || !result.perkId) {
+      socket.emit("chat:error", { message: getSkillPerkErrorMessage(result.error) });
+      return;
+    }
+
+    socket.emit("skills:changed", getSkillsPayload(player.userId));
+    socket.emit("skill:perkUnlocked", {
+      skillId: result.skillId,
+      perkId: result.perkId,
+      spentUniversalPoints: result.spentUniversalPoints ?? 0,
+    });
+  });
+
+  socket.on("skill:refundUniversalPerks", (payload: SkillUniversalPerkRefundPayload) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player || !payload?.skillId) return;
+
+    const result = refundUniversalPerkPoints(
+      player.userId,
+      payload.skillId,
+      payload.refund === "all" ? "all" : "one",
+    );
+
+    if (!result.ok || !result.skillId) {
+      socket.emit("chat:error", { message: getSkillPerkErrorMessage(result.error) });
+      return;
+    }
+
+    socket.emit("skills:changed", getSkillsPayload(player.userId));
+    socket.emit("skill:universalPerkRefunded", {
+      skillId: result.skillId,
+      refundedUniversalPoints: result.refundedUniversalPoints ?? 0,
+      removedPerkIds: result.removedPerkIds ?? [],
+    });
+  });
+
   socket.on("herb:pick", (payload: HerbPickPayload) => {
     const player = connectedPlayers.get(socket.id);
     const herbId = payload?.id;
@@ -967,7 +1034,27 @@ io.on("connection", async (socket) => {
       return;
     }
 
-    const addResult = addItemToInventory(player.userId, spawn.itemId, 1);
+    const herbalismUnlock = getSkillUnlockByItemId("herbalism", spawn.itemId);
+    const baseYield = herbalismUnlock?.baseYield ?? 1;
+    if (!canAddItemToInventory(player.userId, spawn.itemId, baseYield)) {
+      socket.emit("chat:error", { message: "Inventory is full." });
+      return;
+    }
+
+    const resolvedEffects = herbalismUnlock
+      ? resolveSkillEffects(player.userId, {
+          type: "gather",
+          skillId: "herbalism",
+          itemId: spawn.itemId,
+          family: herbalismUnlock.family,
+        })
+      : { doubleYieldChance: 0 };
+    const bonusQuantity = Math.random() < resolvedEffects.doubleYieldChance && canAddItemToInventory(player.userId, spawn.itemId, baseYield * 2)
+      ? baseYield
+      : 0;
+    const gatheredQuantity = baseYield + bonusQuantity;
+
+    const addResult = addItemToInventory(player.userId, spawn.itemId, gatheredQuantity);
     const item = getItemDefinition(spawn.itemId);
     if (!addResult.ok) {
       socket.emit("chat:error", { message: "Inventory is full." });
@@ -979,15 +1066,20 @@ io.on("connection", async (socket) => {
     });
     if (!pickedSpawn) return;
 
-    const xpGrant = spawn.itemId === "moonleaf"
-      ? grantSkillXp(player.userId, "herbalism", MOONLEAF_HERBALISM_XP)
+    const xpGrant = herbalismUnlock
+      ? grantSkillXp(player.userId, "herbalism", herbalismUnlock.xp)
       : null;
     socket.emit("inventory:changed", getInventoryPayload(player.userId));
     if (xpGrant) {
       socket.emit("skills:changed", getSkillsPayload(player.userId));
       socket.emit("skill:xpGained", xpGrant);
     }
-    socket.emit("herb:picked", { itemId: spawn.itemId, itemName: item?.name ?? spawn.itemId });
+    socket.emit("herb:picked", {
+      itemId: spawn.itemId,
+      itemName: item?.name ?? spawn.itemId,
+      quantity: gatheredQuantity,
+      bonusQuantity,
+    });
     markInventoryDirty(player.userId);
   });
 

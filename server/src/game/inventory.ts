@@ -232,6 +232,12 @@ export function addItemToInventory(userId: string, itemId: string, quantity: num
   };
 }
 
+export function canAddItemToInventory(userId: string, itemId: string, quantity: number) {
+  const inventory = getInventory(userId);
+  const preview = cloneInventory(inventory);
+  return addItemToInventoryState(preview, itemId, quantity).ok;
+}
+
 function cloneInventory(inventory: InventoryState): InventoryState {
   return {
     slotCount: inventory.slotCount,

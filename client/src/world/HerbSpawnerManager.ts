@@ -103,7 +103,9 @@ export class HerbSpawnerManager {
   };
 
   private handleHerbPicked = (payload: HerbPickedPayload) => {
-    this.addSystemMessage(`You picked 1 ${payload.itemName ?? payload.itemId ?? HERB_ITEM_NAME}.`);
+    const quantity = payload.quantity ?? 1;
+    const bonusText = (payload.bonusQuantity ?? 0) > 0 ? " Bonus yield!" : "";
+    this.addSystemMessage(`You picked ${quantity} ${payload.itemName ?? payload.itemId ?? HERB_ITEM_NAME}.${bonusText}`);
   };
 
   private destroy = () => {
