@@ -7,12 +7,20 @@ import { getItemDefinition } from "@onyx/shared/items";
 import {
   MAX_SKILL_LEVEL,
   SKILL_DEFINITIONS,
+  getSkillContentDefinition,
+  getSkillPerkDefinition,
   getSkillProgress,
+  type SkillPerkDefinition,
+  type SkillPerkRequirement,
+  type SkillSpecializationPathDefinition,
   type SkillProgress,
   type SkillId,
 } from "@onyx/shared/skills";
 import type {
   AbilityUsedPayload,
+  SkillPerkUnlockedPayload,
+  SkillUniversalPerkRefundedPayload,
+  SkillXpPayload,
   SkillXpGainedPayload,
   SkillsPayload,
   TradeCancelledPayload,
@@ -29,30 +37,11 @@ import { HudChat } from "./chat/HudChat";
 
 type PanelId = "skills" | "inventory" | "equipment" | "social" | "settings";
 type HerbalismTabId = "overview" | "unlocks" | "specialization";
-type HerbalismPath = "Botanist" | "Mycologist" | "Bloomkeeper";
 
 interface SkillMock {
   id: SkillId;
   name: string;
   nextUnlock: string;
-}
-
-interface HerbalismUnlockMock {
-  level: number;
-  name: string;
-  nodeType: "Herb" | "Mushroom";
-  rarity: "Common" | "Uncommon" | "Rare";
-  location: string;
-  xp: number;
-  alchemyRole: string;
-}
-
-interface HerbalismPerkMock {
-  id: string;
-  path: HerbalismPath;
-  name: string;
-  effect: string;
-  requires: string;
 }
 
 interface GameHudOverlayOptions {
@@ -121,102 +110,6 @@ const HERBALISM_TABS: Array<{ id: HerbalismTabId; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "unlocks", label: "Unlocks" },
   { id: "specialization", label: "Specialization" },
-];
-
-const HERBALISM_UNLOCKS: HerbalismUnlockMock[] = [
-  {
-    level: 1,
-    name: "Moonleaf",
-    nodeType: "Herb",
-    rarity: "Common",
-    location: "safe meadows near settlement",
-    xp: 8,
-    alchemyRole: "basic healing, weak restoration elixirs",
-  },
-  {
-    level: 5,
-    name: "Sunspindle",
-    nodeType: "Herb",
-    rarity: "Common",
-    location: "roadsides, sunny fields, farm edges",
-    xp: 11,
-    alchemyRole: "stamina, movement, light resistance",
-  },
-  {
-    level: 10,
-    name: "Briarcap",
-    nodeType: "Herb",
-    rarity: "Common",
-    location: "forest edges, thorny groves, denser wild areas",
-    xp: 15,
-    alchemyRole: "antidotes, bleed/poison mitigation",
-  },
-  {
-    level: 18,
-    name: "Gloomcap",
-    nodeType: "Mushroom",
-    rarity: "Uncommon",
-    location: "caves, dungeon side rooms, damp ruins",
-    xp: 22,
-    alchemyRole: "darkness vision, fear/magic resistance",
-  },
-  {
-    level: 20,
-    name: "Emberroot",
-    nodeType: "Herb",
-    rarity: "Uncommon",
-    location: "warm rocky slopes, dangerous meadow edges",
-    xp: 26,
-    alchemyRole: "fire resistance, burst damage elixirs",
-  },
-  {
-    level: 25,
-    name: "Silverthorn",
-    nodeType: "Herb",
-    rarity: "Rare",
-    location: "rare overworld nodes in risky outer zones",
-    xp: 32,
-    alchemyRole: "stronger healing, protection, Bloomheart synergy",
-  },
-  {
-    level: 28,
-    name: "Gravebloom Fungus",
-    nodeType: "Mushroom",
-    rarity: "Rare",
-    location: "deeper caves, dungeon boss-adjacent rooms",
-    xp: 38,
-    alchemyRole: "death/curse resistance, revive/last-stand elixirs",
-  },
-];
-
-const HERBALISM_PATH_SUMMARIES: Record<HerbalismPath, string> = {
-  Botanist: "Overworld herbs, herb yield, route awareness, color specialization.",
-  Mycologist: "Cave fungi, dungeon resources, uncommon mushroom sources.",
-  Bloomkeeper: "Bloomheart discovery, prospecting, rare drops, boss rewards.",
-};
-
-const HERBALISM_PERKS: HerbalismPerkMock[] = [
-  { id: "A", path: "Botanist", name: "Herb Collector", effect: "Gain 4% chance to get double yield from herbs.", requires: "None" },
-  { id: "C", path: "Botanist", name: "Leafsense", effect: "Briefly show the direction of the nearest herb node after picking a herb.", requires: "Herb Collector" },
-  { id: "F", path: "Botanist", name: "Herb Harvester", effect: "Gain 8% chance to get double yield from herbs.", requires: "Leafsense" },
-  { id: "G", path: "Botanist", name: "Tide Greens", effect: "Gain the ability to fish seaweed.", requires: "Leafsense" },
-  { id: "M", path: "Botanist", name: "Crimson Harvest", effect: "Red herbs gain +10% double yield and XP chance.", requires: "Herb Harvester" },
-  { id: "N", path: "Botanist", name: "Azure Harvest", effect: "Blue herbs gain +10% double yield and XP chance.", requires: "Herb Harvester" },
-  { id: "O", path: "Botanist", name: "Violet Harvest", effect: "Purple herbs gain +10% double yield and XP chance.", requires: "Herb Harvester" },
-  { id: "S", path: "Botanist", name: "Expert Herb Harvester", effect: "Gain 16% chance to get double yield from herbs.", requires: "Crimson, Azure, or Violet Harvest" },
-  { id: "B", path: "Mycologist", name: "Mushroom Collector", effect: "Gain 2% chance to get double yield from mushrooms.", requires: "None" },
-  { id: "D", path: "Mycologist", name: "Fungal Eye", effect: "Find mushrooms easier outside of dungeons.", requires: "Mushroom Collector" },
-  { id: "H", path: "Mycologist", name: "Mushroom Harvester", effect: "Gain 4% chance to get double yield from mushrooms.", requires: "Fungal Eye" },
-  { id: "I", path: "Mycologist", name: "Stonecap Lore", effect: "Gain the ability to mine stonecap mushrooms.", requires: "Fungal Eye" },
-  { id: "P", path: "Mycologist", name: "Pale Mycelia", effect: "White mushrooms gain +5% double yield and XP chance.", requires: "Mushroom Harvester" },
-  { id: "Q", path: "Mycologist", name: "Earthen Mycelia", effect: "Brown mushrooms gain +5% double yield and XP chance.", requires: "Mushroom Harvester" },
-  { id: "T", path: "Mycologist", name: "Expert Mushroom Harvester", effect: "Gain 8% chance to get double yield from mushrooms.", requires: "Pale or Earthen Mycelia" },
-  { id: "E", path: "Bloomkeeper", name: "Bloomheart Instinct", effect: "Increase the random drop chance of a Bloomheart by 1%.", requires: "Herb Collector or Mushroom Collector" },
-  { id: "J", path: "Bloomkeeper", name: "Herbal Prospecting", effect: "Prospect and consume herbs for a 5% chance to find a Bloomheart.", requires: "Bloomheart Instinct" },
-  { id: "K", path: "Bloomkeeper", name: "Fungal Prospecting", effect: "Prospect and consume mushrooms for a 10% chance to find a Bloomheart.", requires: "Bloomheart Instinct" },
-  { id: "L", path: "Bloomkeeper", name: "Living Core", effect: "Increase the random drop chance of a Bloomheart by 2%.", requires: "Herbal or Fungal Prospecting" },
-  { id: "R", path: "Bloomkeeper", name: "Heart of the Hoard", effect: "Dungeon bosses have a chance to drop a Bloomheart.", requires: "Living Core" },
-  { id: "U", path: "Bloomkeeper", name: "Bloomkeeper's Gift", effect: "Increase the random drop chance of a Bloomheart by 4%.", requires: "Heart of the Hoard" },
 ];
 
 const CSS = `
@@ -803,7 +696,7 @@ const CSS = `
 
   .herbalism-summary-strip {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -1065,6 +958,20 @@ const CSS = `
     background: rgba(255, 255, 255, 0.035);
   }
 
+  .perk-node.learned {
+    border-color: rgba(95, 191, 137, 0.52);
+    background: rgba(95, 191, 137, 0.09);
+  }
+
+  .perk-node.blocked {
+    border-color: rgba(242, 105, 86, 0.32);
+    background: rgba(93, 29, 26, 0.18);
+  }
+
+  .perk-node.available {
+    border-color: rgba(229, 195, 107, 0.58);
+  }
+
   .perk-node::before {
     content: "";
     position: absolute;
@@ -1117,6 +1024,52 @@ const CSS = `
   .perk-requirement {
     margin-top: 4px;
     color: rgba(229, 195, 107, 0.78);
+  }
+
+  .perk-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 7px;
+  }
+
+  .perk-status {
+    color: rgba(242, 234, 216, 0.62);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .perk-status.learned {
+    color: #9af0b8;
+  }
+
+  .perk-status.blocked {
+    color: #ff8f7e;
+  }
+
+  .perk-learn-button {
+    min-width: 68px;
+    min-height: 26px;
+    padding: 0 8px;
+    border: 1px solid rgba(221, 198, 144, 0.34);
+    background: rgba(0, 0, 0, 0.24);
+    color: #f2ead8;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .perk-learn-button:hover:not(:disabled) {
+    border-color: #e5c36b;
+    color: #ffe7a8;
+  }
+
+  .perk-learn-button:disabled {
+    cursor: default;
+    opacity: 0.52;
   }
 
   .inventory-header,
@@ -1689,6 +1642,8 @@ export class GameHudOverlay {
   private targetProfile: TargetProfile | null = null;
   private combat: PlayerCombatState;
   private skillXpById = new Map<SkillId, number>();
+  private skillPayloadById = new Map<SkillId, SkillXpPayload>();
+  private universalPerkPoints = { available: 0, lifetimeEarned: 0 };
   private abilities: AbilityLoadoutPayload;
   private abilityCooldownEndsAtBySlotIndex = new Map<number, number>();
   private abilityCooldownDurationsBySlotIndex = new Map<number, number>();
@@ -1746,6 +1701,8 @@ export class GameHudOverlay {
     this.socket.on("equipment:changed", this.handleEquipmentChanged);
     this.socket.on("skills:changed", this.handleSkillsChanged);
     this.socket.on("skill:xpGained", this.handleSkillXpGained);
+    this.socket.on("skill:perkUnlocked", this.handleSkillPerkUnlocked);
+    this.socket.on("skill:universalPerkRefunded", this.handleUniversalPerkRefunded);
     this.socket.on("player:combat", this.handleCombatChanged);
     this.socket.on("ability:used", this.handleAbilityUsed);
     this.socket.on("trade:request", this.handleTradeRequest);
@@ -1772,6 +1729,8 @@ export class GameHudOverlay {
     this.socket.off("equipment:changed", this.handleEquipmentChanged);
     this.socket.off("skills:changed", this.handleSkillsChanged);
     this.socket.off("skill:xpGained", this.handleSkillXpGained);
+    this.socket.off("skill:perkUnlocked", this.handleSkillPerkUnlocked);
+    this.socket.off("skill:universalPerkRefunded", this.handleUniversalPerkRefunded);
     this.socket.off("player:combat", this.handleCombatChanged);
     this.socket.off("ability:used", this.handleAbilityUsed);
     this.socket.off("trade:request", this.handleTradeRequest);
@@ -2222,12 +2181,17 @@ export class GameHudOverlay {
   }
 
   private createHerbalismSkillDetail(selectedProgress: SkillProgress) {
+    const content = getSkillContentDefinition("herbalism");
+    if (!content) return this.createBasicSkillDetail(selectedProgress);
+
     const detail = document.createElement("div");
     detail.className = "skill-detail herbalism-detail";
+    const skillPayload = this.getSkillPayload("herbalism");
     const selectedXpLine = selectedProgress.isMaxLevel
       ? `${this.formatNumber(selectedProgress.totalXp)} XP earned.`
       : `${this.formatNumber(selectedProgress.xpIntoLevel)} of ${this.formatNumber(selectedProgress.xpForNextLevel)} XP toward level ${selectedProgress.level + 1}.`;
-    const nextUnlock = HERBALISM_UNLOCKS.find(unlock => unlock.level > selectedProgress.level);
+    const nextUnlock = content.unlocks.find(unlock => unlock.level > selectedProgress.level);
+    const firstUnlock = content.unlocks[0];
 
     const header = document.createElement("div");
     header.className = "herbalism-header";
@@ -2243,8 +2207,9 @@ export class GameHudOverlay {
     summary.className = "herbalism-summary-strip";
     summary.append(
       this.createHerbalismMetric("Next unlock", nextUnlock ? `Lv ${nextUnlock.level} ${nextUnlock.name}` : "All slice unlocks reached"),
-      this.createHerbalismMetric("Base yield", "1 item per gather"),
-      this.createHerbalismMetric("Stack size", "20 per inventory stack"),
+      this.createHerbalismMetric("Perk points", `${skillPayload.availableTreePoints} available`),
+      this.createHerbalismMetric("Universal", `${this.universalPerkPoints.available} unspent`),
+      this.createHerbalismMetric("Yield", `${firstUnlock?.baseYield ?? 1} item, stacks of ${firstUnlock?.stackSize ?? 20}`),
     );
 
     const tabs = document.createElement("div");
@@ -2263,9 +2228,9 @@ export class GameHudOverlay {
 
     const body = document.createElement("div");
     body.className = "herbalism-tab-body";
-    if (this.selectedHerbalismTab === "overview") body.appendChild(this.createHerbalismOverview(selectedProgress));
-    if (this.selectedHerbalismTab === "unlocks") body.appendChild(this.createHerbalismUnlocks(selectedProgress));
-    if (this.selectedHerbalismTab === "specialization") body.appendChild(this.createHerbalismSpecialization());
+    if (this.selectedHerbalismTab === "overview") body.appendChild(this.createHerbalismOverview(content, selectedProgress));
+    if (this.selectedHerbalismTab === "unlocks") body.appendChild(this.createHerbalismUnlocks(content, selectedProgress));
+    if (this.selectedHerbalismTab === "specialization") body.appendChild(this.createHerbalismSpecialization(content));
 
     detail.append(header, summary, tabs, body);
     return detail;
@@ -2281,11 +2246,11 @@ export class GameHudOverlay {
     return metric;
   }
 
-  private createHerbalismOverview(selectedProgress: SkillProgress) {
+  private createHerbalismOverview(content: NonNullable<ReturnType<typeof getSkillContentDefinition>>, selectedProgress: SkillProgress) {
     const container = document.createElement("div");
     container.className = "herbalism-overview-grid";
-    const unlockedCount = HERBALISM_UNLOCKS.filter(unlock => unlock.level <= selectedProgress.level).length;
-    const nextMilestones = HERBALISM_UNLOCKS
+    const unlockedCount = content.unlocks.filter(unlock => unlock.level <= selectedProgress.level).length;
+    const nextMilestones = content.unlocks
       .filter(unlock => unlock.level > selectedProgress.level)
       .slice(0, 3);
 
@@ -2293,10 +2258,10 @@ export class GameHudOverlay {
     const ruleList = document.createElement("div");
     ruleList.className = "herbalism-rule-list";
     ruleList.append(
-      this.createLabelValueRow("Role", "Gathers plants, fungi, and rare Bloomhearts for Alchemy, trading, and dungeon preparation.", "herbalism-rule"),
-      this.createLabelValueRow("Unlocked", `${unlockedCount} of ${HERBALISM_UNLOCKS.length} first-slice reagents.`, "herbalism-rule"),
-      this.createLabelValueRow("Gathering", "Nodes above your Herbalism level stay visible, but show their required level.", "herbalism-rule"),
-      this.createLabelValueRow("Progression", "Higher levels make more of the world useful instead of replacing old herbs.", "herbalism-rule"),
+      this.createLabelValueRow("Role", content.overview.role, "herbalism-rule"),
+      this.createLabelValueRow("Unlocked", `${unlockedCount} of ${content.unlocks.length} first-slice reagents.`, "herbalism-rule"),
+      this.createLabelValueRow("Gathering", content.overview.gathering, "herbalism-rule"),
+      this.createLabelValueRow("Progression", content.overview.progression, "herbalism-rule"),
     );
     rules.appendChild(ruleList);
 
@@ -2313,7 +2278,7 @@ export class GameHudOverlay {
     const milestones = this.createHerbalismSection("Next Milestones");
     const milestoneList = document.createElement("div");
     milestoneList.className = "herbalism-milestone-list";
-    const visibleMilestones = nextMilestones.length > 0 ? nextMilestones : HERBALISM_UNLOCKS.slice(-3);
+    const visibleMilestones = nextMilestones.length > 0 ? nextMilestones : content.unlocks.slice(-3);
     for (const unlock of visibleMilestones) {
       milestoneList.appendChild(this.createLabelValueRow(`Lv ${unlock.level}`, `${unlock.name} - ${unlock.alchemyRole}.`, "herbalism-milestone"));
     }
@@ -2323,7 +2288,7 @@ export class GameHudOverlay {
     return container;
   }
 
-  private createHerbalismUnlocks(selectedProgress: SkillProgress) {
+  private createHerbalismUnlocks(content: NonNullable<ReturnType<typeof getSkillContentDefinition>>, selectedProgress: SkillProgress) {
     const section = this.createHerbalismSection("Unlocks");
     const list = document.createElement("div");
     list.className = "herbalism-unlock-list";
@@ -2340,7 +2305,7 @@ export class GameHudOverlay {
     `;
     list.appendChild(header);
 
-    for (const unlock of HERBALISM_UNLOCKS) {
+    for (const unlock of content.unlocks) {
       const unlocked = selectedProgress.level >= unlock.level;
       const row = document.createElement("div");
       row.className = `herbalism-unlock-row${unlocked ? "" : " locked"}`;
@@ -2360,54 +2325,94 @@ export class GameHudOverlay {
     return section;
   }
 
-  private createHerbalismSpecialization() {
+  private createHerbalismSpecialization(content: NonNullable<ReturnType<typeof getSkillContentDefinition>>) {
     const container = document.createElement("div");
     container.className = "specialization-map";
 
     const intro = this.createHerbalismSection("Specialization Paths");
     const introList = document.createElement("div");
     introList.className = "herbalism-rule-list";
-    introList.append(
-      this.createLabelValueRow("Botanist", HERBALISM_PATH_SUMMARIES.Botanist, "herbalism-rule"),
-      this.createLabelValueRow("Mycologist", HERBALISM_PATH_SUMMARIES.Mycologist, "herbalism-rule"),
-      this.createLabelValueRow("Bloomkeeper", HERBALISM_PATH_SUMMARIES.Bloomkeeper, "herbalism-rule"),
-    );
+    for (const path of content.specializationPaths) {
+      introList.appendChild(this.createLabelValueRow(path.name, path.summary, "herbalism-rule"));
+    }
     intro.appendChild(introList);
 
     const paths = document.createElement("div");
     paths.className = "specialization-paths";
-    for (const path of ["Botanist", "Mycologist", "Bloomkeeper"] as HerbalismPath[]) {
-      paths.appendChild(this.createSpecializationPath(path));
+    for (const path of content.specializationPaths) {
+      paths.appendChild(this.createSpecializationPath(path, content.perks.filter(perk => perk.pathId === path.id)));
     }
 
     container.append(intro, paths);
     return container;
   }
 
-  private createSpecializationPath(path: HerbalismPath) {
+  private createSpecializationPath(path: SkillSpecializationPathDefinition, perks: SkillPerkDefinition[]) {
     const pathEl = document.createElement("div");
-    pathEl.className = `specialization-path ${path.toLowerCase()}`;
+    pathEl.className = `specialization-path ${path.id}`;
+    const liveCount = perks.filter(perk => perk.implementation.status === "live").length;
     pathEl.innerHTML = `
       <div class="specialization-path-title">
-        <span>${path}</span>
-        <span class="specialization-path-tag">Planned</span>
+        <span>${path.name}</span>
+        <span class="specialization-path-tag">${liveCount > 0 ? `${liveCount} live` : "Planned"}</span>
       </div>
-      <div class="specialization-path-copy">${HERBALISM_PATH_SUMMARIES[path]}</div>
+      <div class="specialization-path-copy">${path.summary}</div>
     `;
 
     const perkList = document.createElement("div");
     perkList.className = "perk-list";
-    for (const perk of HERBALISM_PERKS.filter(candidate => candidate.path === path)) {
+    for (const perk of perks) {
+      const skillPayload = this.getSkillPayload(perk.skillId);
+      const unlocked = skillPayload.unlockedPerkIds.includes(perk.id);
+      const blocked = perk.implementation.status !== "live" || !perk.implementation.unlockable;
+      const requirementsMet = this.areSkillPerkRequirementsMet(perk.requires, skillPayload);
+      const neededUniversalPoints = Math.max(0, perk.cost - skillPayload.availableTreePoints);
+      const hasPoints = skillPayload.availableTreePoints >= perk.cost || this.universalPerkPoints.available >= neededUniversalPoints;
+      const canUnlock = !unlocked && !blocked && requirementsMet && hasPoints;
+      const status = this.getPerkStatusText({
+        unlocked,
+        blocked,
+        requirementsMet,
+        hasPoints,
+        neededUniversalPoints,
+      });
       const node = document.createElement("div");
-      node.className = "perk-node";
+      node.className = [
+        "perk-node",
+        unlocked ? "learned" : "",
+        blocked ? "blocked" : "",
+        canUnlock ? "available" : "",
+      ].filter(Boolean).join(" ");
       node.innerHTML = `
         <div class="perk-heading">
-          <span class="perk-id">${perk.id}</span>
+          <span class="perk-id">${perk.code}</span>
           <span class="perk-name">${perk.name}</span>
         </div>
-        <div class="perk-effect">${perk.effect}</div>
-        <div class="perk-requirement">Requires: ${perk.requires}</div>
+        <div class="perk-effect">${perk.effectText}</div>
+        <div class="perk-requirement">Requires: ${perk.requirementText}</div>
+        ${perk.plannedRequirementText ? `<div class="perk-requirement">Planned path: ${perk.plannedRequirementText}</div>` : ""}
       `;
+
+      const footer = document.createElement("div");
+      footer.className = "perk-footer";
+
+      const statusEl = document.createElement("span");
+      statusEl.className = [
+        "perk-status",
+        unlocked ? "learned" : "",
+        blocked ? "blocked" : "",
+      ].filter(Boolean).join(" ");
+      statusEl.textContent = status;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "perk-learn-button";
+      button.disabled = !canUnlock;
+      button.textContent = unlocked ? "Learned" : "Learn";
+      button.addEventListener("click", () => this.requestSkillPerkUnlock(perk, neededUniversalPoints));
+
+      footer.append(statusEl, button);
+      node.appendChild(footer);
       perkList.appendChild(node);
     }
 
@@ -2423,6 +2428,45 @@ export class GameHudOverlay {
     title.textContent = titleText;
     section.appendChild(title);
     return section;
+  }
+
+  private areSkillPerkRequirementsMet(requirements: SkillPerkRequirement[], skillPayload: SkillXpPayload) {
+    const unlockedPerkIds = new Set(skillPayload.unlockedPerkIds);
+    const skillLevel = getSkillProgress(skillPayload.totalXp).level;
+
+    return requirements.every(requirement => {
+      if (requirement.type === "perk") return unlockedPerkIds.has(requirement.perkId);
+      if (requirement.type === "any_perk") return requirement.perkIds.some(perkId => unlockedPerkIds.has(perkId));
+      return skillLevel >= requirement.level;
+    });
+  }
+
+  private getPerkStatusText(options: {
+    unlocked: boolean;
+    blocked: boolean;
+    requirementsMet: boolean;
+    hasPoints: boolean;
+    neededUniversalPoints: number;
+  }) {
+    if (options.unlocked) return "Learned";
+    if (options.blocked) return "Planned";
+    if (!options.requirementsMet) return "Locked";
+    if (!options.hasPoints) return "Need points";
+    if (options.neededUniversalPoints > 0) return "Uses universal";
+    return "Available";
+  }
+
+  private requestSkillPerkUnlock(perk: SkillPerkDefinition, neededUniversalPoints: number) {
+    if (neededUniversalPoints > 0) {
+      const confirmed = window.confirm(`Use ${neededUniversalPoints} universal perk point${neededUniversalPoints === 1 ? "" : "s"} for ${perk.name}?`);
+      if (!confirmed) return;
+    }
+
+    this.socket.emit("skill:perkUnlock", {
+      skillId: perk.skillId,
+      perkId: perk.id,
+      spendUniversalIfNeeded: neededUniversalPoints > 0,
+    });
   }
 
   private createLabelValueRow(label: string, value: string, className: string) {
@@ -2658,14 +2702,28 @@ export class GameHudOverlay {
 
   private setSkillsPayload(skillsPayload?: SkillsPayload) {
     this.skillXpById = new Map(SKILL_DEFINITIONS.map(skill => [skill.id, 0]));
+    this.skillPayloadById = new Map();
+    this.universalPerkPoints = skillsPayload?.universalPerkPoints ?? { available: 0, lifetimeEarned: 0 };
 
     for (const skill of skillsPayload?.skills ?? []) {
       this.skillXpById.set(skill.skillId, skill.totalXp);
+      this.skillPayloadById.set(skill.skillId, skill);
     }
   }
 
   private getSkillTotalXp(skillId: SkillId) {
     return this.skillXpById.get(skillId) ?? 0;
+  }
+
+  private getSkillPayload(skillId: SkillId): SkillXpPayload {
+    return this.skillPayloadById.get(skillId) ?? {
+      skillId,
+      totalXp: this.getSkillTotalXp(skillId),
+      skillPerkPointsEarned: 0,
+      universalPerkPointsAllocated: 0,
+      availableTreePoints: 0,
+      unlockedPerkIds: [],
+    };
   }
 
   private getSkillName(skillId: SkillId) {
@@ -2684,8 +2742,27 @@ export class GameHudOverlay {
 
     this.skillXpById.set(payload.skillId, payload.totalXp);
     this.addSystemMessage(`+${this.formatNumber(payload.xpGained)} ${this.getSkillName(payload.skillId)} XP`);
+    if ((payload.skillPerkPointsGained ?? 0) > 0) {
+      const pointCount = payload.skillPerkPointsGained ?? 0;
+      this.addSystemMessage(`+${pointCount} ${this.getSkillName(payload.skillId)} perk point${pointCount === 1 ? "" : "s"}`);
+    }
     if (this.activePanel === "skills") {
       this.renderActivePanel();
+    }
+  };
+
+  private handleSkillPerkUnlocked = (payload: SkillPerkUnlockedPayload) => {
+    const perk = getSkillPerkDefinition(payload.skillId, payload.perkId);
+    const universalText = payload.spentUniversalPoints > 0
+      ? ` using ${payload.spentUniversalPoints} universal point${payload.spentUniversalPoints === 1 ? "" : "s"}`
+      : "";
+    this.addSystemMessage(`Learned ${perk?.name ?? "perk"}${universalText}.`);
+  };
+
+  private handleUniversalPerkRefunded = (payload: SkillUniversalPerkRefundedPayload) => {
+    this.addSystemMessage(`Refunded ${payload.refundedUniversalPoints} universal point${payload.refundedUniversalPoints === 1 ? "" : "s"}.`);
+    if (payload.removedPerkIds.length > 0) {
+      this.addSystemMessage(`${payload.removedPerkIds.length} dependent perk${payload.removedPerkIds.length === 1 ? "" : "s"} removed.`);
     }
   };
 

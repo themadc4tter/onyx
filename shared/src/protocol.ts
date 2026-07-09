@@ -42,10 +42,20 @@ export interface EquipmentPayload {
 export interface SkillXpPayload {
   skillId: SkillId;
   totalXp: number;
+  skillPerkPointsEarned: number;
+  universalPerkPointsAllocated: number;
+  availableTreePoints: number;
+  unlockedPerkIds: string[];
+}
+
+export interface UniversalPerkPointsPayload {
+  available: number;
+  lifetimeEarned: number;
 }
 
 export interface SkillsPayload {
   skills: SkillXpPayload[];
+  universalPerkPoints: UniversalPerkPointsPayload;
 }
 
 export interface AbilityUsePayload {
@@ -71,6 +81,30 @@ export interface SkillXpGainedPayload {
   skillId: SkillId;
   xpGained: number;
   totalXp: number;
+  skillPerkPointsGained?: number;
+}
+
+export interface SkillPerkUnlockPayload {
+  skillId?: SkillId;
+  perkId?: string;
+  spendUniversalIfNeeded?: boolean;
+}
+
+export interface SkillPerkUnlockedPayload {
+  skillId: SkillId;
+  perkId: string;
+  spentUniversalPoints: number;
+}
+
+export interface SkillUniversalPerkRefundPayload {
+  skillId?: SkillId;
+  refund?: "one" | "all";
+}
+
+export interface SkillUniversalPerkRefundedPayload {
+  skillId: SkillId;
+  refundedUniversalPoints: number;
+  removedPerkIds: string[];
 }
 
 export interface RemotePlayerData {
@@ -205,6 +239,8 @@ export interface HerbStatePayload {
 export interface HerbPickedPayload {
   itemId?: string;
   itemName?: string;
+  quantity?: number;
+  bonusQuantity?: number;
 }
 
 export interface MobStatePayload extends MobSpawnState {}

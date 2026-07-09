@@ -125,7 +125,7 @@ function meetsAbilityRequirement(userId: string, requirement: AbilityRequirement
     }
 
     case "skill_level": {
-      const totalXp = getSkills(userId).get(requirement.skillId) ?? 0;
+      const totalXp = getSkills(userId).get(requirement.skillId)?.totalXp ?? 0;
       return getSkillLevelForXp(totalXp) >= requirement.level;
     }
   }
