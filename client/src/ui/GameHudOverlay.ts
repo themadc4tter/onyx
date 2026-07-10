@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { createEmptyEquipment, EQUIPMENT_SLOTS, type EquipmentSlot, type EquipmentState } from "../game/equipment";
 import { createEmptyInventory, type InventoryState } from "../game/inventory";
-import { TEST_ABILITY_LOADOUT, getAbilityDefinition, type AbilityLoadoutPayload } from "@onyx/shared/abilities";
+import { TEST_ABILITY_LOADOUT, getAbilityDefinition, type AbilityId, type AbilityLoadoutPayload } from "@onyx/shared/abilities";
 import { getItemDefinition } from "@onyx/shared/items";
 import {
   MAX_SKILL_LEVEL,
@@ -41,7 +41,8 @@ import {
   buildPerkTooltip,
 } from "./tooltips/tooltipBuilders";
 
-type PanelId = "skills" | "inventory" | "equipment" | "social" | "settings";
+type PanelId = "skills" | "inventory" | "character" | "social" | "settings";
+type CharacterTabId = "equipment" | "abilities";
 type HerbalismTabId = "overview" | "unlocks" | "specialization";
 
 interface SkillMock {
@@ -112,11 +113,18 @@ const SKILLS: SkillMock[] = SKILL_DEFINITIONS.map(skill => ({
   nextUnlock: SKILL_UNLOCKS[skill.id],
 }));
 
+const CHARACTER_TABS: Array<{ id: CharacterTabId; label: string }> = [
+  { id: "equipment", label: "Equipment" },
+  { id: "abilities", label: "Abilities" },
+];
+
 const HERBALISM_TABS: Array<{ id: HerbalismTabId; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "unlocks", label: "Unlocks" },
   { id: "specialization", label: "Specialization" },
 ];
+
+const UNLOCKED_ABILITY_IDS: AbilityId[] = ["whirlwind"];
 
 const CSS = `
   #${HUD_LAYER_ID} {
@@ -687,6 +695,17 @@ const CSS = `
     max-height: none;
   }
 
+  .hud-window-character {
+    left: calc(var(--hud-canvas-left) + (var(--hud-canvas-width) / 2));
+    top: calc(var(--hud-canvas-top) + (var(--hud-canvas-height) / 2));
+    right: auto;
+    bottom: auto;
+    width: min(760px, calc(var(--hud-canvas-width) - 48px));
+    height: min(560px, calc(var(--hud-canvas-height) - 72px));
+    max-height: none;
+    transform: translate(-50%, -50%);
+  }
+
   .hud-window-header {
     display: flex;
     align-items: center;
@@ -723,6 +742,53 @@ const CSS = `
     min-height: 0;
     overflow: auto;
     padding: 14px;
+  }
+
+  .hud-window-character .hud-window-body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .character-panel {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .character-tabs {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+    border-bottom: 1px solid rgba(229, 195, 107, 0.18);
+    padding-bottom: 8px;
+  }
+
+  .character-tab {
+    min-width: 112px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid rgba(221, 198, 144, 0.26);
+    background: rgba(0, 0, 0, 0.2);
+    color: rgba(242, 234, 216, 0.82);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .character-tab:hover,
+  .character-tab.active {
+    border-color: #e5c36b;
+    background: rgba(49, 42, 31, 0.75);
+    color: #ffe7a8;
+  }
+
+  .character-tab-body {
+    min-height: 0;
+    overflow: auto;
   }
 
   .skills-layout {
@@ -1463,6 +1529,60 @@ const CSS = `
     line-height: 1.2;
   }
 
+  .abilities-panel {
+    min-height: 0;
+  }
+
+  .abilities-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+    gap: 10px;
+    align-content: start;
+  }
+
+  .ability-entry {
+    min-width: 0;
+    min-height: 66px;
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 8px;
+    border: 1px solid rgba(242, 234, 216, 0.08);
+    background: rgba(0, 0, 0, 0.22);
+  }
+
+  .ability-spell-icon {
+    width: 48px;
+    height: 48px;
+    padding: 4px;
+    border: 1px solid rgba(229, 195, 107, 0.44);
+    background: rgba(0, 0, 0, 0.34);
+    cursor: help;
+  }
+
+  .ability-spell-icon:hover,
+  .ability-spell-icon:focus-visible {
+    border-color: #e5c36b;
+    outline: none;
+  }
+
+  .ability-spell-icon img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    image-rendering: pixelated;
+    object-fit: contain;
+  }
+
+  .ability-spell-name {
+    min-width: 0;
+    color: #ffe7a8;
+    font-size: 13px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
   .slot-item,
   .stat-value,
   .social-role {
@@ -1720,6 +1840,17 @@ const CSS = `
       max-height: none;
     }
 
+    .hud-window-character {
+      left: calc(var(--hud-canvas-left) + var(--hud-inset));
+      right: calc(100% - var(--hud-canvas-left) - var(--hud-canvas-width) + var(--hud-inset));
+      top: calc(var(--hud-canvas-top) + 8px);
+      bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 58px);
+      width: auto;
+      height: auto;
+      max-height: calc(var(--hud-canvas-height) - 82px);
+      transform: none;
+    }
+
     .hud-dock {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       width: min(260px, calc(var(--hud-canvas-width) - 24px));
@@ -1737,6 +1868,20 @@ const CSS = `
 
     .skills-layout,
     .equipment-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .character-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .character-tab {
+      min-width: 0;
+      padding: 0 6px;
+    }
+
+    .abilities-list {
       grid-template-columns: 1fr;
     }
 
@@ -1807,6 +1952,7 @@ export class GameHudOverlay {
   private styleEl: HTMLStyleElement;
   private tooltip: TooltipManager;
   private activePanel: PanelId | null = null;
+  private selectedCharacterTab: CharacterTabId = "equipment";
   private selectedSkill = SKILLS[0];
   private selectedHerbalismTab: HerbalismTabId = "overview";
   private buttons = new Map<PanelId, HTMLButtonElement>();
@@ -2245,7 +2391,7 @@ export class GameHudOverlay {
     dock.setAttribute("aria-label", "Game panels");
 
     const panels: Array<{ id: PanelId; label: string; title: string }> = [
-      { id: "equipment", label: "Equipment", title: "Equipment" },
+      { id: "character", label: "Character", title: "Character" },
       { id: "inventory", label: "Inventory", title: "Inventory" },
       { id: "skills", label: "Skills", title: "Skills" },
       { id: "social", label: "Social", title: "Social" },
@@ -2302,7 +2448,7 @@ export class GameHudOverlay {
     const body = panel.querySelector<HTMLDivElement>(".hud-window-body")!;
     if (this.activePanel === "skills") body.appendChild(this.createSkillsPanel());
     if (this.activePanel === "inventory") body.appendChild(this.createInventoryPanel());
-    if (this.activePanel === "equipment") body.appendChild(this.createEquipmentPanel());
+    if (this.activePanel === "character") body.appendChild(this.createCharacterPanel());
     if (this.activePanel === "social") body.appendChild(this.createSocialPanel());
     if (this.activePanel === "settings") body.appendChild(this.createSettingsPanel());
 
@@ -2889,7 +3035,7 @@ export class GameHudOverlay {
     ) {
       this.selectedEquipmentSlot = null;
     }
-    if (this.activePanel === "equipment") {
+    if (this.activePanel === "character" && this.selectedCharacterTab === "equipment") {
       this.renderActivePanel();
     }
   };
@@ -2963,6 +3109,74 @@ export class GameHudOverlay {
   private handleCombatChanged = (combat: PlayerCombatStatePayload) => {
     this.setCombatState(combat);
   };
+
+  private createCharacterPanel() {
+    const panel = document.createElement("div");
+    panel.className = "character-panel";
+
+    const tabs = document.createElement("div");
+    tabs.className = "character-tabs";
+    for (const tab of CHARACTER_TABS) {
+      const button = document.createElement("button");
+      button.className = `character-tab${tab.id === this.selectedCharacterTab ? " active" : ""}`;
+      button.type = "button";
+      button.textContent = tab.label;
+      button.setAttribute("aria-pressed", String(tab.id === this.selectedCharacterTab));
+      button.addEventListener("click", () => {
+        this.selectedCharacterTab = tab.id;
+        this.renderActivePanel();
+      });
+      tabs.appendChild(button);
+    }
+
+    const body = document.createElement("div");
+    body.className = "character-tab-body";
+    if (this.selectedCharacterTab === "equipment") body.appendChild(this.createEquipmentPanel());
+    if (this.selectedCharacterTab === "abilities") body.appendChild(this.createAbilitiesPanel());
+
+    panel.append(tabs, body);
+    return panel;
+  }
+
+  private createAbilitiesPanel() {
+    const panel = document.createElement("div");
+    panel.className = "abilities-panel";
+
+    const list = document.createElement("div");
+    list.className = "abilities-list";
+
+    for (const ability of this.getUnlockedAbilities()) {
+      const entry = document.createElement("div");
+      entry.className = "ability-entry";
+
+      const iconButton = document.createElement("button");
+      iconButton.className = "ability-spell-icon";
+      iconButton.type = "button";
+      iconButton.setAttribute("aria-label", ability.name);
+      this.tooltip.attach(iconButton, () => buildAbilityTooltip(ability));
+
+      const icon = document.createElement("img");
+      icon.src = ability.iconUrl;
+      icon.alt = "";
+      iconButton.appendChild(icon);
+
+      const name = document.createElement("strong");
+      name.className = "ability-spell-name";
+      name.textContent = ability.name;
+
+      entry.append(iconButton, name);
+      list.appendChild(entry);
+    }
+
+    panel.appendChild(list);
+    return panel;
+  }
+
+  private getUnlockedAbilities() {
+    return UNLOCKED_ABILITY_IDS
+      .map(abilityId => getAbilityDefinition(abilityId))
+      .filter((ability): ability is NonNullable<ReturnType<typeof getAbilityDefinition>> => ability !== null);
+  }
 
   private createEquipmentPanel() {
     const panel = document.createElement("div");
@@ -3064,7 +3278,7 @@ export class GameHudOverlay {
 
   private selectEquipmentSlot(equipmentSlot: EquipmentSlot) {
     this.selectedEquipmentSlot = this.selectedEquipmentSlot === equipmentSlot ? null : equipmentSlot;
-    if (this.activePanel === "equipment") this.renderActivePanel();
+    if (this.activePanel === "character") this.renderActivePanel();
   }
 
   private unequipSelectedEquipmentItem() {
@@ -3560,7 +3774,7 @@ export class GameHudOverlay {
     const titles: Record<PanelId, string> = {
       skills: "Skills",
       inventory: "Inventory",
-      equipment: "Equipment",
+      character: "Character",
       social: "Social",
       settings: "Settings",
     };
