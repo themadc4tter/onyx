@@ -34,6 +34,12 @@ import type {
   TradeStatePayload,
 } from "@onyx/shared/protocol";
 import { HudChat } from "./chat/HudChat";
+import { TooltipManager } from "./tooltips/TooltipManager";
+import {
+  buildAbilityTooltip,
+  buildItemTooltip,
+  buildPerkTooltip,
+} from "./tooltips/tooltipBuilders";
 
 type PanelId = "skills" | "inventory" | "equipment" | "social" | "settings";
 type HerbalismTabId = "overview" | "unlocks" | "specialization";
@@ -491,6 +497,171 @@ const CSS = `
     inset: 0;
     z-index: 20;
     pointer-events: none;
+  }
+
+  .hud-tooltip {
+    position: absolute;
+    z-index: 80;
+    width: min(300px, calc(var(--hud-canvas-width) - 16px));
+    max-width: calc(100vw - 16px);
+    padding: 10px;
+    border: 1px solid rgba(229, 195, 107, 0.62);
+    background:
+      linear-gradient(180deg, rgba(39, 36, 30, 0.98), rgba(15, 17, 18, 0.98)),
+      rgba(15, 17, 18, 0.98);
+    color: #f2ead8;
+    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.58);
+    pointer-events: none;
+  }
+
+  .hud-tooltip[hidden] {
+    display: none;
+  }
+
+  .hud-tooltip-header {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 9px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .hud-tooltip-icon {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(242, 234, 216, 0.22);
+    background: rgba(0, 0, 0, 0.38);
+    image-rendering: pixelated;
+    object-fit: contain;
+  }
+
+  .hud-tooltip-title-group {
+    min-width: 0;
+  }
+
+  .hud-tooltip-title {
+    color: #ffe7a8;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.22;
+    overflow-wrap: anywhere;
+  }
+
+  .hud-tooltip-subtitle {
+    margin-top: 2px;
+    color: rgba(242, 234, 216, 0.62);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .hud-tooltip-description {
+    margin-top: 8px;
+    color: rgba(242, 234, 216, 0.82);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .hud-tooltip-section {
+    display: grid;
+    gap: 5px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(242, 234, 216, 0.12);
+  }
+
+  .hud-tooltip-text,
+  .hud-tooltip-stat {
+    color: rgba(242, 234, 216, 0.78);
+    font-size: 12px;
+    line-height: 1.3;
+  }
+
+  .hud-tooltip-stat {
+    display: grid;
+    grid-template-columns: minmax(74px, auto) 1fr;
+    gap: 10px;
+    align-items: start;
+  }
+
+  .hud-tooltip-stat-label {
+    color: rgba(242, 234, 216, 0.58);
+  }
+
+  .hud-tooltip-stat-value {
+    min-width: 0;
+    color: rgba(242, 234, 216, 0.86);
+    font-weight: 700;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .hud-tooltip-text.tone-muted,
+  .hud-tooltip-stat.tone-muted .hud-tooltip-stat-value {
+    color: rgba(242, 234, 216, 0.55);
+  }
+
+  .hud-tooltip-text.tone-good,
+  .hud-tooltip-stat.tone-good .hud-tooltip-stat-value {
+    color: #9af0b8;
+  }
+
+  .hud-tooltip-text.tone-bad,
+  .hud-tooltip-stat.tone-bad .hud-tooltip-stat-value {
+    color: #ff8f7e;
+  }
+
+  .hud-tooltip-text.tone-warning,
+  .hud-tooltip-stat.tone-warning .hud-tooltip-stat-value {
+    color: #e5c36b;
+  }
+
+  .hud-tooltip-footer {
+    margin-top: 9px;
+    color: #e5c36b;
+    font-size: 11px;
+    font-weight: 800;
+    text-align: right;
+  }
+
+  .hud-tooltip.tone-common {
+    border-color: rgba(242, 234, 216, 0.34);
+  }
+
+  .hud-tooltip.tone-uncommon {
+    border-color: rgba(95, 191, 137, 0.66);
+  }
+
+  .hud-tooltip.tone-rare {
+    border-color: rgba(114, 173, 255, 0.68);
+  }
+
+  .hud-tooltip.tone-ability {
+    border-color: rgba(229, 195, 107, 0.72);
+  }
+
+  .hud-tooltip.tone-perk {
+    border-color: rgba(229, 112, 138, 0.58);
+  }
+
+  .hud-tooltip.tone-warning {
+    border-color: rgba(242, 105, 86, 0.62);
+  }
+
+  .hud-tooltip.tone-common .hud-tooltip-title {
+    color: #f2ead8;
+  }
+
+  .hud-tooltip.tone-uncommon .hud-tooltip-title {
+    color: #9af0b8;
+  }
+
+  .hud-tooltip.tone-rare .hud-tooltip-title {
+    color: #8fbaff;
+  }
+
+  .hud-tooltip.tone-warning .hud-tooltip-title {
+    color: #ffb5a8;
   }
 
   .hud-window {
@@ -1634,6 +1805,7 @@ export class GameHudOverlay {
   private windowRoot: HTMLDivElement;
   private tradeRoot: HTMLDivElement;
   private styleEl: HTMLStyleElement;
+  private tooltip: TooltipManager;
   private activePanel: PanelId | null = null;
   private selectedSkill = SKILLS[0];
   private selectedHerbalismTab: HerbalismTabId = "overview";
@@ -1685,6 +1857,7 @@ export class GameHudOverlay {
     document.head.appendChild(this.styleEl);
 
     this.layer = this.ensureLayer(root);
+    this.tooltip = new TooltipManager(this.layer, () => this.scene.game.canvas.getBoundingClientRect());
     this.unitFramesRoot = document.createElement("div");
     this.unitFramesRoot.className = "hud-unit-frames";
     this.layer.appendChild(this.unitFramesRoot);
@@ -1752,6 +1925,7 @@ export class GameHudOverlay {
     this.socket.off("trade:error", this.handleTradeError);
     this.scene.scale.off(Phaser.Scale.Events.RESIZE, this.updateCanvasBounds);
     this.chat.destroy();
+    this.tooltip.destroy();
     this.layer.remove();
     this.styleEl.remove();
   };
@@ -1972,10 +2146,12 @@ export class GameHudOverlay {
       button.className = "hud-ability-slot";
       button.type = "button";
       button.dataset.slotIndex = String(slotIndex);
-      button.title = ability ? `${ability.name}\n${ability.description}` : `Ability slot ${slotNumber}`;
       button.setAttribute("aria-label", ability ? `${ability.name}, ability slot ${slotNumber}` : `Ability slot ${slotNumber}`);
       button.disabled = !ability;
       button.addEventListener("click", () => this.useAbilitySlot(slotIndex));
+      if (ability) {
+        this.tooltip.attach(button, () => buildAbilityTooltip(ability, { slotNumber }));
+      }
 
       const key = document.createElement("span");
       key.className = "hud-ability-key";
@@ -2081,7 +2257,6 @@ export class GameHudOverlay {
       button.className = "hud-dock-button";
       button.type = "button";
       button.textContent = panel.label;
-      button.title = panel.title;
       button.setAttribute("aria-label", panel.title);
       button.addEventListener("click", () => this.togglePanel(panel.id));
       this.buttons.set(panel.id, button);
@@ -2098,6 +2273,7 @@ export class GameHudOverlay {
   }
 
   private renderActivePanel() {
+    this.tooltip.hide();
     this.windowRoot.replaceChildren();
 
     for (const [panelId, button] of this.buttons) {
@@ -2314,7 +2490,6 @@ export class GameHudOverlay {
       const unlocked = selectedProgress.level >= unlock.level;
       const row = document.createElement("div");
       row.className = `herbalism-unlock-row${unlocked ? "" : " locked"}`;
-      row.title = unlock.alchemyRole;
       row.innerHTML = `
         <span class="herbalism-unlock-level">Lv ${unlock.level}</span>
         <span class="herbalism-unlock-name">${unlock.name}</span>
@@ -2397,6 +2572,14 @@ export class GameHudOverlay {
         <div class="perk-requirement">Requires: ${perk.requirementText}</div>
         ${perk.plannedRequirementText ? `<div class="perk-requirement">Planned path: ${perk.plannedRequirementText}</div>` : ""}
       `;
+      this.tooltip.attach(node, () => buildPerkTooltip(perk, {
+        status,
+        unlocked,
+        blocked,
+        requirementsMet,
+        hasPoints,
+        neededUniversalPoints,
+      }));
 
       const footer = document.createElement("div");
       footer.className = "perk-footer";
@@ -2537,8 +2720,13 @@ export class GameHudOverlay {
         item?.rarity ?? "",
         this.selectedInventorySlotIndex === slotIndex ? "selected" : "",
       ].filter(Boolean).join(" ");
-      slot.title = item ? `${item.name}\n${item.description}` : "";
       slot.dataset.slotIndex = String(slotIndex);
+      if (slotItem && item) {
+        this.tooltip.attach(slot, () => buildItemTooltip(item, {
+          quantity: slotItem.quantity,
+          context: "inventory",
+        }));
+      }
 
       if (slotItem) {
         slot.draggable = true;
@@ -2550,6 +2738,7 @@ export class GameHudOverlay {
           this.promptSplitInventoryStack(slotIndex);
         });
         slot.addEventListener("dragstart", event => {
+          this.tooltip.hide();
           this.draggedInventorySlotIndex = slotIndex;
           event.dataTransfer?.setData("text/plain", String(slotIndex));
           event.dataTransfer?.setDragImage(slot, slot.clientWidth / 2, slot.clientHeight / 2);
@@ -2828,7 +3017,9 @@ export class GameHudOverlay {
       item?.rarity ?? "",
       this.selectedEquipmentSlot === equipmentSlot ? "selected" : "",
     ].filter(Boolean).join(" ");
-    slot.title = item ? `${item.name}\n${item.description}` : "";
+    if (item) {
+      this.tooltip.attach(slot, () => buildItemTooltip(item, { context: "equipment" }));
+    }
     slot.addEventListener("click", () => this.selectEquipmentSlot(equipmentSlot));
     slot.addEventListener("dblclick", () => this.unequipEquipmentItem(equipmentSlot));
 
@@ -3145,6 +3336,7 @@ export class GameHudOverlay {
   };
 
   private renderTradeWindow() {
+    this.tooltip.hide();
     this.tradeRoot.replaceChildren();
     if (!this.tradeState) return;
 
@@ -3297,7 +3489,12 @@ export class GameHudOverlay {
         offeredSlotIndexes.has(slotIndex) ? "selected" : "",
       ].filter(Boolean).join(" ");
       slot.disabled = !slotItem;
-      slot.title = item ? `${item.name}\n${item.description}` : "";
+      if (slotItem && item) {
+        this.tooltip.attach(slot, () => buildItemTooltip(item, {
+          quantity: slotItem.quantity,
+          context: "trade",
+        }));
+      }
 
       if (slotItem && item) {
         const icon = document.createElement("img");
