@@ -508,9 +508,12 @@ const CSS = `
   }
 
   .hud-window-skills {
-    bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 58px);
-    width: min(790px, calc(var(--hud-canvas-width) - 24px));
-    max-height: min(720px, calc(var(--hud-canvas-height) - 82px));
+    left: calc(var(--hud-canvas-left) + 32px);
+    right: calc(100% - var(--hud-canvas-left) - var(--hud-canvas-width) + 32px);
+    top: calc(var(--hud-canvas-top) + 32px);
+    bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 32px);
+    width: auto;
+    max-height: none;
   }
 
   .hud-window-header {
@@ -555,11 +558,14 @@ const CSS = `
     display: grid;
     grid-template-columns: minmax(190px, 230px) 1fr;
     gap: 14px;
+    align-items: start;
   }
 
   .skill-list {
     display: grid;
     gap: 7px;
+    align-self: start;
+    align-content: start;
   }
 
   .skill-row {
@@ -567,6 +573,7 @@ const CSS = `
     grid-template-columns: 1fr 34px;
     gap: 6px 8px;
     align-items: center;
+    min-height: 62px;
     padding: 7px 8px;
     border: 1px solid rgba(242, 234, 216, 0.1);
     background: rgba(255, 255, 255, 0.035);
@@ -696,7 +703,7 @@ const CSS = `
 
   .herbalism-summary-strip {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -1537,7 +1544,9 @@ const CSS = `
     }
 
     .hud-window-skills {
-      max-height: calc(var(--hud-canvas-height) - 82px);
+      top: calc(var(--hud-canvas-top) + 8px);
+      bottom: calc(100% - var(--hud-canvas-top) - var(--hud-canvas-height) + 8px);
+      max-height: none;
     }
 
     .hud-dock {
@@ -2191,25 +2200,23 @@ export class GameHudOverlay {
       ? `${this.formatNumber(selectedProgress.totalXp)} XP earned.`
       : `${this.formatNumber(selectedProgress.xpIntoLevel)} of ${this.formatNumber(selectedProgress.xpForNextLevel)} XP toward level ${selectedProgress.level + 1}.`;
     const nextUnlock = content.unlocks.find(unlock => unlock.level > selectedProgress.level);
-    const firstUnlock = content.unlocks[0];
 
     const header = document.createElement("div");
     header.className = "herbalism-header";
     header.innerHTML = `
       <div>
         <div class="detail-title">Herbalism</div>
-        <p class="detail-copy">Level ${selectedProgress.level}. ${selectedXpLine}</p>
+        <p class="detail-copy">${selectedXpLine}</p>
       </div>
-      <div class="herbalism-level-badge">Lv ${selectedProgress.level}</div>
+      <div class="herbalism-level-badge">${selectedProgress.level}</div>
     `;
 
     const summary = document.createElement("div");
     summary.className = "herbalism-summary-strip";
     summary.append(
       this.createHerbalismMetric("Next unlock", nextUnlock ? `Lv ${nextUnlock.level} ${nextUnlock.name}` : "All slice unlocks reached"),
-      this.createHerbalismMetric("Perk points", `${skillPayload.availableTreePoints} available`),
-      this.createHerbalismMetric("Universal", `${this.universalPerkPoints.available} unspent`),
-      this.createHerbalismMetric("Yield", `${firstUnlock?.baseYield ?? 1} item, stacks of ${firstUnlock?.stackSize ?? 20}`),
+      this.createHerbalismMetric("Skill points", `${skillPayload.availableTreePoints} available`),
+      this.createHerbalismMetric("Universal points", `${this.universalPerkPoints.available} available`),
     );
 
     const tabs = document.createElement("div");
@@ -2249,7 +2256,6 @@ export class GameHudOverlay {
   private createHerbalismOverview(content: NonNullable<ReturnType<typeof getSkillContentDefinition>>, selectedProgress: SkillProgress) {
     const container = document.createElement("div");
     container.className = "herbalism-overview-grid";
-    const unlockedCount = content.unlocks.filter(unlock => unlock.level <= selectedProgress.level).length;
     const nextMilestones = content.unlocks
       .filter(unlock => unlock.level > selectedProgress.level)
       .slice(0, 3);
@@ -2259,7 +2265,6 @@ export class GameHudOverlay {
     ruleList.className = "herbalism-rule-list";
     ruleList.append(
       this.createLabelValueRow("Role", content.overview.role, "herbalism-rule"),
-      this.createLabelValueRow("Unlocked", `${unlockedCount} of ${content.unlocks.length} first-slice reagents.`, "herbalism-rule"),
       this.createLabelValueRow("Gathering", content.overview.gathering, "herbalism-rule"),
       this.createLabelValueRow("Progression", content.overview.progression, "herbalism-rule"),
     );
