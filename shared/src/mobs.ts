@@ -35,7 +35,7 @@ export const MOB_DEFINITIONS: Record<string, MobDefinition> = {
     name: "Orc Scout",
     spriteKey: "mob-orc-scout",
     spriteUrl: "assets/characters/male_orc.png",
-    maxHp: 10,
+    maxHp: 25,
     playersCanRunThrough: false,
     behavior: {
       aggression: "aggressive",
@@ -50,7 +50,7 @@ export const MOB_DEFINITIONS: Record<string, MobDefinition> = {
     combat: {
       attackRange: 1,
       attackSpeedMs: 2_000,
-      damage: 1,
+      damage: 5,
     },
   },
 };

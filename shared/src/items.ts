@@ -83,7 +83,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
       attackSpeed: 2.8,
       attackRange: 5,
       stats: {
-        attack_damage: 8,
+        attack_damage: 13,
       },
     },
   },
@@ -102,7 +102,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
       weaponType: "sword",
       attackSpeed: 1.5,
       stats: {
-        attack_damage: 4,
+        attack_damage: 5,
       },
     },
   },
@@ -122,7 +122,7 @@ export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
       attackSpeed: 2.5,
       attackRange: 6,
       stats: {
-        attack_damage: 4,
+        attack_damage: 10,
       },
     },
   },

@@ -72,8 +72,8 @@ const HUD_INSET_PX = 12;
 const SOCIAL_RANGE_TILES = 5;
 const SOCIAL_REFRESH_MS = 2_000;
 const DEFAULT_PLAYER_COMBAT: PlayerCombatState = {
-  hp: 5,
-  maxHp: 5,
+  hp: 100,
+  maxHp: 100,
   alive: true,
   combatEndsAt: 0,
   healthRegenStartedAt: 0,

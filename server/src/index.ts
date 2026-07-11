@@ -113,7 +113,7 @@ const MIN_MOVE_INTERVAL_MS = MOVE_INTERVAL_MS - MOVE_RATE_TOLERANCE_MS;
 const CHAT_RATE_LIMIT_MS = 800;
 const MAX_CHAT_LENGTH = 240;
 const TRADE_RANGE_TILES = 5;
-const DEFAULT_PLAYER_MAX_HP = 5;
+const DEFAULT_PLAYER_MAX_HP = 100;
 const PLAYER_RESPAWN_DELAY_MS = 4_000;
 // Refreshed on: dealing damage, taking damage, or a mob locking aggro onto the player.
 const COMBAT_TIMEOUT_MS = 6_000;

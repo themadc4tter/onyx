@@ -70,7 +70,7 @@ export const ABILITY_DEFINITIONS: Record<AbilityId, AbilityDefinition> = {
     effects: [
       {
         kind: "damage",
-        amount: 5,
+        amount: 15,
         target: "enemies_in_area",
         damageClass: "melee",
       },

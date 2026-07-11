@@ -56,6 +56,7 @@ export type CombatAttackResult =
     };
 
 const UNARMED_ATTACK_SPEED_MS = 1_000;
+const BASE_ATTACK_DAMAGE = 3;
 const MELEE_RANGE_TILES = 1;
 const COOLDOWN_GRACE_MS = 75;
 const PROJECTILE_BASE_DURATION_MS = 260;
@@ -182,14 +183,14 @@ function getAutoAttackProfile(userId: string): AutoAttackProfile {
 }
 
 function getAttackDamage(equipment: EquipmentState) {
-  const damage = Object.values(equipment.slots).reduce((total, equippedItem) => {
+  const bonusDamage = Object.values(equipment.slots).reduce((total, equippedItem) => {
     if (!equippedItem) return total;
 
     const item = getItemDefinition(equippedItem.itemId);
     return total + (item?.equipment?.stats.attack_damage ?? 0);
   }, 0);
 
-  return Math.max(1, damage);
+  return BASE_ATTACK_DAMAGE + bonusDamage;
 }
 
 function isInMeleeRange(position: Position, mob: MobSpawnState) {
