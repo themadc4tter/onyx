@@ -644,6 +644,10 @@ const CSS = `
     border-color: rgba(114, 173, 255, 0.68);
   }
 
+  .hud-tooltip.tone-epic {
+    border-color: rgba(192, 132, 252, 0.72);
+  }
+
   .hud-tooltip.tone-ability {
     border-color: rgba(229, 195, 107, 0.72);
   }
@@ -666,6 +670,10 @@ const CSS = `
 
   .hud-tooltip.tone-rare .hud-tooltip-title {
     color: #8fbaff;
+  }
+
+  .hud-tooltip.tone-epic .hud-tooltip-title {
+    color: #d8b4fe;
   }
 
   .hud-tooltip.tone-warning .hud-tooltip-title {
@@ -1431,6 +1439,7 @@ const CSS = `
 
   .inventory-slot.uncommon { border-color: rgba(95, 191, 137, 0.7); }
   .inventory-slot.rare { border-color: rgba(114, 173, 255, 0.78); }
+  .inventory-slot.epic { border-color: rgba(192, 132, 252, 0.82); }
 
   .item-count {
     position: absolute;
@@ -1482,6 +1491,7 @@ const CSS = `
 
   .equipment-slot.uncommon { border-color: rgba(95, 191, 137, 0.7); }
   .equipment-slot.rare { border-color: rgba(114, 173, 255, 0.78); }
+  .equipment-slot.epic { border-color: rgba(192, 132, 252, 0.82); }
 
   .equipment-slot.selected {
     outline: 2px solid #e5c36b;

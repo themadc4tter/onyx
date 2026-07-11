@@ -1,4 +1,4 @@
-export type ItemRarity = "common" | "uncommon" | "rare";
+export type ItemRarity = "common" | "uncommon" | "rare" | "epic";
 export type ItemType = "material" | "consumable" | "equipment" | "quest";
 export type EquipmentSlot = "head" | "chest" | "legs" | "feet" | "main_hand" | "off_hand" | "ring" | "charm";
 export type WeaponClass = "melee" | "ranged" | "magic";

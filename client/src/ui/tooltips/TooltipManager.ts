@@ -1,4 +1,4 @@
-export type TooltipTone = "default" | "common" | "uncommon" | "rare" | "ability" | "perk" | "warning";
+export type TooltipTone = "default" | "common" | "uncommon" | "rare" | "epic" | "ability" | "perk" | "warning";
 export type TooltipTextTone = "normal" | "muted" | "good" | "bad" | "warning";
 
 export interface TooltipTextRow {

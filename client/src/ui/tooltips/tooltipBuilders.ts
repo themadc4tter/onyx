@@ -38,6 +38,7 @@ const RARITY_LABELS: Record<ItemRarity, string> = {
   common: "Common",
   uncommon: "Uncommon",
   rare: "Rare",
+  epic: "Epic",
 };
 
 const ITEM_TYPE_LABELS: Record<ItemType, string> = {
