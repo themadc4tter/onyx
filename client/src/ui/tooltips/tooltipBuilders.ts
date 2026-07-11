@@ -223,7 +223,8 @@ function formatAbilityEffect(effect: AbilityEffectDefinition) {
     return `Deals ${effect.amount} ${WEAPON_CLASS_LABELS[effect.damageClass].toLowerCase()} damage to ${target}.`;
   }
 
-  return "Applies an effect.";
+  const target = effect.target === "selected" ? "selected enemy" : "nearby enemies";
+  return `Applies ${formatLabel(effect.statusEffectType)} to ${target} for ${formatDuration(effect.durationMs)}.`;
 }
 
 function formatAbilityRequirement(requirement: AbilityRequirement) {

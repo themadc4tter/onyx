@@ -1,9 +1,10 @@
 import type { WeaponClass, WeaponType } from "./items";
 import type { SkillId } from "./skills";
+import type { StatusEffectType } from "./statusEffects";
 
 export const ABILITY_SLOT_COUNT = 4;
 
-export type AbilityId = "whirlwind";
+export type AbilityId = "whirlwind" | "grasping_roots";
 
 export type AbilityRequirement =
   | { kind: "skill_level"; skillId: SkillId; level: number }
@@ -21,9 +22,16 @@ export type AbilityEffectDefinition =
       amount: number;
       target: "selected" | "enemies_in_area";
       damageClass: WeaponClass;
+    }
+  | {
+      kind: "status_effect";
+      statusEffectType: StatusEffectType;
+      durationMs: number;
+      target: "selected" | "enemies_in_area";
     };
 
 export type AbilityAnimationDefinition =
+  | { kind: "none" }
   | { kind: "directional_slash" }
   | { kind: "radial_slash"; radiusTiles: number }
   | { kind: "projectile"; projectileClass: "ranged" | "magic" };
@@ -80,13 +88,37 @@ export const ABILITY_DEFINITIONS: Record<AbilityId, AbilityDefinition> = {
       radiusTiles: 1,
     },
   },
+  grasping_roots: {
+    id: "grasping_roots",
+    name: "Grasping Roots",
+    description: "Root a selected enemy in place for 4 seconds.",
+    iconUrl: "assets/abilities/Ability_icons6_52.png",
+    slotType: "combat",
+    cooldownMs: 10_000,
+    requirements: [],
+    targeting: {
+      kind: "selected_enemy",
+      rangeTiles: 8,
+    },
+    effects: [
+      {
+        kind: "status_effect",
+        statusEffectType: "root",
+        durationMs: 4_000,
+        target: "selected",
+      },
+    ],
+    animation: {
+      kind: "none",
+    },
+  },
 };
 
 export const TEST_ABILITY_LOADOUT: AbilityLoadoutPayload = {
   slotCount: ABILITY_SLOT_COUNT,
   slots: Array.from({ length: ABILITY_SLOT_COUNT }, (_, slotIndex) => ({
     slotIndex,
-    abilityId: slotIndex === 0 ? "whirlwind" : null,
+    abilityId: slotIndex === 0 ? "whirlwind" : slotIndex === 1 ? "grasping_roots" : null,
   })),
 };
 

@@ -23,6 +23,12 @@
       "require": "./dist/cjs/abilities.js",
       "default": "./dist/esm/abilities.js"
     },
+    "./statusEffects": {
+      "types": "./dist/types/statusEffects.d.ts",
+      "import": "./dist/esm/statusEffects.js",
+      "require": "./dist/cjs/statusEffects.js",
+      "default": "./dist/esm/statusEffects.js"
+    },
     "./mobs": {
       "types": "./dist/types/mobs.d.ts",
       "import": "./dist/esm/mobs.js",

@@ -1,5 +1,6 @@
 import { getMobDefinition, type MobBehaviorDefinition, type MobCombatDefinition } from "@onyx/shared/mobs";
 import type { MobSpawnState, PlayerMeleeImpactPayload } from "@onyx/shared/protocol";
+import { blocksMovement, getActiveStatusEffects, type ActiveStatusEffect } from "@onyx/shared/statusEffects";
 import { isTileWalkable, ZONES } from "../config/map";
 import { applyMobDamage } from "./combat";
 import { findMobPath, type MobPathResult, type TilePosition } from "./mobPathfinding";
@@ -16,6 +17,7 @@ interface MobInstanceState extends MobSpawnState {
   nextAttackAt: number;
   aggroActiveAt: number;
   targetSocketId: string | null;
+  statusEffects: ActiveStatusEffect[];
 }
 
 interface MobControllerPlayer {
@@ -122,6 +124,7 @@ export class MobController {
         hp: mob.maxHp,
         maxHp: mob.maxHp,
         alive: true,
+        statusEffects: [],
       });
     }
 
@@ -170,6 +173,7 @@ export class MobController {
     if (defeated) {
       mob.targetSocketId = null;
       mob.aiState = "idle";
+      mob.statusEffects = [];
     }
     this.emitMobState(zoneId, mob);
     if (!defeated) return;
@@ -190,8 +194,27 @@ export class MobController {
       currentMob.aggroActiveAt = nowMs + MOB_SPAWN_AGGRO_DELAY_MS;
       currentMob.targetSocketId = null;
       currentMob.aiState = "idle";
+      currentMob.statusEffects = [];
       this.emitMobState(zoneId, currentMob);
     }, mob.behavior.respawnMs);
+  }
+
+  applyStatusEffects(
+    zoneId: string,
+    mobInstanceId: string,
+    statusEffects: ActiveStatusEffect[],
+    attackerSocketId?: string,
+  ) {
+    const mob = this.getMobInstance(zoneId, mobInstanceId);
+    if (!mob || !mob.alive || statusEffects.length === 0) return;
+    if (mob.aiState === "evading") {
+      this.emitMobState(zoneId, mob);
+      return;
+    }
+
+    this.aggroMob(mob, zoneId, attackerSocketId);
+    mob.statusEffects = mergeStatusEffects(mob.statusEffects, statusEffects, Date.now());
+    this.emitMobState(zoneId, mob);
   }
 
   isMobBlockingTile(zoneId: string, tileX: number, tileY: number, ignoredMobId?: string) {
@@ -270,9 +293,10 @@ export class MobController {
 
   private tickMob(zoneId: string, mob: MobInstanceState, nowMs: number) {
     if (!mob.alive) return;
+    const movementBlocked = this.isMobMovementBlocked(mob, nowMs);
 
     if (mob.aiState === "evading") {
-      this.tickEvade(zoneId, mob, nowMs);
+      this.tickEvade(zoneId, mob, nowMs, movementBlocked);
       return;
     }
 
@@ -280,10 +304,11 @@ export class MobController {
 
     const target = this.getCurrentTarget(zoneId, mob) ?? this.acquireAggroTarget(zoneId, mob);
     if (target) {
-      this.tickChase(zoneId, mob, target, nowMs);
+      this.tickChase(zoneId, mob, target, nowMs, movementBlocked);
       return;
     }
 
+    if (movementBlocked) return;
     if (mob.behavior.wanderRadius <= 0 || nowMs < mob.nextWanderAt) return;
 
     mob.nextWanderAt = this.getNextWanderAt(nowMs);
@@ -295,7 +320,13 @@ export class MobController {
     this.emitMobState(zoneId, mob);
   }
 
-  private tickChase(zoneId: string, mob: MobInstanceState, target: MobControllerPlayer, nowMs: number) {
+  private tickChase(
+    zoneId: string,
+    mob: MobInstanceState,
+    target: MobControllerPlayer,
+    nowMs: number,
+    movementBlocked: boolean,
+  ) {
     if (this.shouldEvade(mob)) {
       this.startEvade(zoneId, mob, nowMs);
       return;
@@ -306,6 +337,7 @@ export class MobController {
       return;
     }
 
+    if (movementBlocked) return;
     if (nowMs < mob.nextChaseMoveAt) return;
 
     mob.nextChaseMoveAt = nowMs + MOB_CHASE_MOVE_MS;
@@ -322,12 +354,13 @@ export class MobController {
     this.emitMobState(zoneId, mob);
   }
 
-  private tickEvade(zoneId: string, mob: MobInstanceState, nowMs: number) {
+  private tickEvade(zoneId: string, mob: MobInstanceState, nowMs: number, movementBlocked: boolean) {
     if (mob.tileX === mob.spawnTileX && mob.tileY === mob.spawnTileY) {
       this.finishEvade(zoneId, mob, nowMs);
       return;
     }
 
+    if (movementBlocked) return;
     if (nowMs < mob.nextChaseMoveAt) return;
 
     mob.nextChaseMoveAt = nowMs + MOB_CHASE_MOVE_MS;
@@ -473,6 +506,8 @@ export class MobController {
   }
 
   private toPayload(mob: MobInstanceState): MobSpawnState {
+    const statusEffects = this.pruneExpiredStatusEffects(mob, Date.now());
+
     return {
       id: mob.id,
       spawnId: mob.spawnId,
@@ -482,7 +517,21 @@ export class MobController {
       hp: mob.hp,
       maxHp: mob.maxHp,
       alive: mob.alive,
+      statusEffects,
     };
+  }
+
+  private isMobMovementBlocked(mob: MobInstanceState, nowMs: number) {
+    return blocksMovement(this.pruneExpiredStatusEffects(mob, nowMs), nowMs);
+  }
+
+  private pruneExpiredStatusEffects(mob: MobInstanceState, nowMs: number) {
+    const activeStatusEffects = getActiveStatusEffects(mob.statusEffects, nowMs);
+    if (activeStatusEffects.length !== mob.statusEffects.length) {
+      mob.statusEffects = activeStatusEffects;
+    }
+
+    return activeStatusEffects;
   }
 }
 
@@ -503,4 +552,30 @@ function shuffle<T>(items: T[]) {
   }
 
   return shuffled;
+}
+
+function mergeStatusEffects(
+  currentStatusEffects: ActiveStatusEffect[],
+  nextStatusEffects: ActiveStatusEffect[],
+  nowMs: number,
+) {
+  const merged = new Map<string, ActiveStatusEffect>();
+
+  for (const effect of getActiveStatusEffects(currentStatusEffects, nowMs)) {
+    merged.set(getStatusEffectMergeKey(effect), effect);
+  }
+
+  for (const effect of getActiveStatusEffects(nextStatusEffects, nowMs)) {
+    const key = getStatusEffectMergeKey(effect);
+    const current = merged.get(key);
+    if (!current || effect.expiresAt > current.expiresAt) {
+      merged.set(key, effect);
+    }
+  }
+
+  return [...merged.values()];
+}
+
+function getStatusEffectMergeKey(effect: ActiveStatusEffect) {
+  return `${effect.type}:${effect.sourceId ?? "unknown"}`;
 }

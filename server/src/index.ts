@@ -1131,7 +1131,7 @@ io.on("connection", async (socket) => {
       return;
     }
 
-    if (result.damageByMobId.size > 0) {
+    if (result.affectedMobIds.length > 0) {
       const nowMs = Date.now();
       enterCombat(player, nowMs);
       scheduleHealthRegen(io, player, nowMs);
@@ -1149,6 +1149,10 @@ io.on("connection", async (socket) => {
 
     for (const [mobInstanceId, damage] of result.damageByMobId) {
       mobController.damageMob(zoneId, mobInstanceId, damage, player.socketId);
+    }
+
+    for (const [mobInstanceId, statusEffects] of result.statusEffectsByMobId) {
+      mobController.applyStatusEffects(zoneId, mobInstanceId, statusEffects, player.socketId);
     }
   });
 

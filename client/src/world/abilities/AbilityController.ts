@@ -17,8 +17,8 @@ export class AbilityController {
     this.scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
   }
 
-  useSlot(slotIndex: number) {
-    this.socket.emit("ability:use", { slotIndex });
+  useSlot(slotIndex: number, targetId?: string) {
+    this.socket.emit("ability:use", { slotIndex, targetId });
   }
 
   private handleAbilityUsed = (payload: AbilityUsedPayload) => {

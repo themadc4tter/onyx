@@ -205,7 +205,7 @@ export class GameScene extends Phaser.Scene {
       })),
       getLocalTilePosition: () => this.player.getTilePosition(),
       onClearTarget: () => this.targeting?.clearTarget(),
-      onAbilitySlotUse: slotIndex => this.abilityController.useSlot(slotIndex),
+      onAbilitySlotUse: slotIndex => this.abilityController.useSlot(slotIndex, this.targeting?.getTarget()?.id),
     });
     if (this.deathNotice) {
       this.hudOverlay.addSystemMessage("You died and respawned at the settlement.");

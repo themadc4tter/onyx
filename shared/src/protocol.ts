@@ -1,6 +1,7 @@
 import type { EquipmentSlot } from "./items";
 import type { SkillId } from "./skills";
 import type { AbilityId, AbilityLoadoutPayload } from "./abilities";
+import type { ActiveStatusEffect } from "./statusEffects";
 
 export type Facing = "up" | "down" | "left" | "right";
 
@@ -174,6 +175,7 @@ export interface MobSpawnState {
   hp: number;
   maxHp: number;
   alive: boolean;
+  statusEffects?: ActiveStatusEffect[];
 }
 
 export interface ProfilePayload {

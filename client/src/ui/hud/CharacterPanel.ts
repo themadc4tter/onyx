@@ -24,7 +24,7 @@ const CHARACTER_TABS: Array<{ id: CharacterTabId; label: string }> = [
   { id: "abilities", label: "Abilities" },
 ];
 
-const UNLOCKED_ABILITY_IDS: AbilityId[] = ["whirlwind"];
+const UNLOCKED_ABILITY_IDS: AbilityId[] = ["whirlwind", "grasping_roots"];
 
 export function createCharacterPanel(options: CharacterPanelOptions) {
   const panel = document.createElement("div");
