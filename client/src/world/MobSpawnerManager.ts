@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
 import { getMobDefinition, MOB_DEFINITIONS } from "@onyx/shared/mobs";
 import type { MobSpawnState, MobStatePayload } from "@onyx/shared/protocol";
+import { hasActiveStatusEffect } from "@onyx/shared/statusEffects";
 import { TILE_SIZE } from "../config/map";
 import type { Targetable } from "./TargetingManager";
 
@@ -10,6 +11,7 @@ interface RenderedMob extends MobSpawnState, Targetable {
   name: string;
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Image;
+  rootOverlay: Phaser.GameObjects.Image;
   hpContainer: Phaser.GameObjects.Container;
   hpFill: Phaser.GameObjects.Rectangle;
 }
@@ -25,6 +27,9 @@ const MOB_STATUS_DEPTH = 23;
 const HP_BAR_WIDTH = 18;
 const HP_BAR_HEIGHT = 3;
 const MOB_MOVE_DURATION_MS = 350;
+
+export const ROOT_EFFECT_TEXTURE_KEY = "effect-roots";
+export const ROOT_EFFECT_TEXTURE_URL = "assets/effects/roots.png";
 
 export const MOB_SPRITE_ASSETS = Object.values(MOB_DEFINITIONS).map(mob => ({
   key: mob.spriteKey,
@@ -74,11 +79,22 @@ export class MobSpawnerManager {
     return mob ? { x: mob.container.x, y: mob.container.y } : null;
   }
 
+  update() {
+    for (const mob of this.mobs.values()) {
+      this.updateRootOverlay(mob);
+    }
+  }
+
   private createMob(state: MobSpawnState) {
     const definition = getMobDefinition(state.mobId);
     if (!definition || this.mobs.has(state.id)) return null;
 
     const sprite = this.scene.add.image(0, 0, definition.spriteKey);
+    const rootOverlay = this.scene.add
+      .image(0, 0, ROOT_EFFECT_TEXTURE_KEY)
+      .setDisplaySize(TILE_SIZE, TILE_SIZE)
+      .setAlpha(0.95)
+      .setVisible(false);
     const hpBackground = this.scene.add
       .rectangle(-HP_BAR_WIDTH / 2, -TILE_SIZE / 2 - 5, HP_BAR_WIDTH, HP_BAR_HEIGHT, 0x391616)
       .setOrigin(0, 0.5);
@@ -98,7 +114,7 @@ export class MobSpawnerManager {
       .container(
         state.tileX * TILE_SIZE + TILE_SIZE / 2,
         state.tileY * TILE_SIZE + TILE_SIZE / 2,
-        [sprite],
+        [sprite, rootOverlay],
       )
       .setDepth(MOB_DEPTH)
       .setVisible(state.alive);
@@ -109,6 +125,7 @@ export class MobSpawnerManager {
       name: definition.name,
       container,
       sprite,
+      rootOverlay,
       hpContainer,
       hpFill,
     };
@@ -174,6 +191,7 @@ export class MobSpawnerManager {
     const hpRatio = mob.maxHp > 0 ? Phaser.Math.Clamp(mob.hp / mob.maxHp, 0, 1) : 0;
     mob.hpFill.setDisplaySize(Math.max(0.1, HP_BAR_WIDTH * hpRatio), HP_BAR_HEIGHT);
     mob.hpContainer.setVisible(mob.alive);
+    this.updateRootOverlay(mob);
   }
 
   private syncMobPosition(mob: RenderedMob) {
@@ -206,6 +224,10 @@ export class MobSpawnerManager {
       duration: MOB_MOVE_DURATION_MS,
       ease: "Linear",
     });
+  }
+
+  private updateRootOverlay(mob: RenderedMob) {
+    mob.rootOverlay.setVisible(mob.alive && hasActiveStatusEffect(mob.statusEffects, "root"));
   }
 
   private destroy = () => {

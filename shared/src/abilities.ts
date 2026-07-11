@@ -91,7 +91,7 @@ export const ABILITY_DEFINITIONS: Record<AbilityId, AbilityDefinition> = {
   grasping_roots: {
     id: "grasping_roots",
     name: "Grasping Roots",
-    description: "Root a selected enemy in place for 4 seconds.",
+    description: "Root a selected enemy in place for 5 seconds.",
     iconUrl: "assets/abilities/Ability_icons6_52.png",
     slotType: "combat",
     cooldownMs: 10_000,
@@ -104,7 +104,7 @@ export const ABILITY_DEFINITIONS: Record<AbilityId, AbilityDefinition> = {
       {
         kind: "status_effect",
         statusEffectType: "root",
-        durationMs: 4_000,
+        durationMs: 5_000,
         target: "selected",
       },
     ],

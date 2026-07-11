@@ -33,7 +33,12 @@ import {
   HERB_SPRITE_ASSET_KEY,
   HERB_SPRITE_URL,
 } from "../world/HerbSpawnerManager";
-import { MobSpawnerManager, MOB_SPRITE_ASSETS } from "../world/MobSpawnerManager";
+import {
+  MobSpawnerManager,
+  MOB_SPRITE_ASSETS,
+  ROOT_EFFECT_TEXTURE_KEY,
+  ROOT_EFFECT_TEXTURE_URL,
+} from "../world/MobSpawnerManager";
 import { TargetingManager } from "../world/TargetingManager";
 import { AutoAttackController } from "../world/AutoAttackController";
 import { AbilityController } from "../world/abilities/AbilityController";
@@ -149,6 +154,9 @@ export class GameScene extends Phaser.Scene {
         this.load.image(asset.key, asset.url);
       }
     }
+    if (!this.textures.exists(ROOT_EFFECT_TEXTURE_KEY)) {
+      this.load.image(ROOT_EFFECT_TEXTURE_KEY, ROOT_EFFECT_TEXTURE_URL);
+    }
     for (const npc of getNpcsForZone(this.zoneId)) {
       if (!this.textures.exists(npc.spriteKey)) {
         this.load.image(npc.spriteKey, npc.spriteUrl);
@@ -239,6 +247,7 @@ export class GameScene extends Phaser.Scene {
     const textInputBlocked = this.hudOverlay?.isTextInputFocused() ?? false;
     this.player.update(textInputBlocked);
     this.herbSpawners?.update(textInputBlocked);
+    this.mobSpawners?.update();
     this.autoAttack?.update(textInputBlocked);
     this.targeting?.update();
   }
