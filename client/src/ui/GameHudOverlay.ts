@@ -1,19 +1,13 @@
 import Phaser from "phaser";
 import type { Socket } from "socket.io-client";
-import { createEmptyEquipment, EQUIPMENT_SLOTS, type EquipmentSlot, type EquipmentState } from "../game/equipment";
+import { createEmptyEquipment, type EquipmentSlot, type EquipmentState } from "../game/equipment";
 import { createEmptyInventory, type InventoryState } from "../game/inventory";
-import { TEST_ABILITY_LOADOUT, getAbilityDefinition, type AbilityId, type AbilityLoadoutPayload } from "@onyx/shared/abilities";
+import { TEST_ABILITY_LOADOUT, getAbilityDefinition, type AbilityLoadoutPayload } from "@onyx/shared/abilities";
 import { getItemDefinition } from "@onyx/shared/items";
 import {
-  MAX_SKILL_LEVEL,
   SKILL_DEFINITIONS,
-  getSkillContentDefinition,
   getSkillPerkDefinition,
-  getSkillProgress,
   type SkillPerkDefinition,
-  type SkillPerkRequirement,
-  type SkillSpecializationPathDefinition,
-  type SkillProgress,
   type SkillId,
 } from "@onyx/shared/skills";
 import type {
@@ -26,7 +20,6 @@ import type {
   TradeCancelledPayload,
   TradeDeclinedPayload,
   TradeErrorPayload,
-  TradeOfferItem,
   PlayerCombatState,
   PlayerCombatStatePayload,
   TradeRequestReceivedPayload,
@@ -34,22 +27,14 @@ import type {
   TradeStatePayload,
 } from "@onyx/shared/protocol";
 import { HudChat } from "./chat/HudChat";
+import { createCharacterPanel, type CharacterTabId } from "./hud/CharacterPanel";
+import { createInventoryPanel } from "./hud/InventoryPanel";
+import { createSkillsPanel, SKILLS, type HerbalismTabId } from "./hud/SkillsPanel";
+import { createTradeWindow, getTradeCancelledMessage } from "./hud/TradeWindow";
 import { TooltipManager } from "./tooltips/TooltipManager";
-import {
-  buildAbilityTooltip,
-  buildItemTooltip,
-  buildPerkTooltip,
-} from "./tooltips/tooltipBuilders";
+import { buildAbilityTooltip } from "./tooltips/tooltipBuilders";
 
 type PanelId = "skills" | "inventory" | "character" | "social" | "settings";
-type CharacterTabId = "equipment" | "abilities";
-type HerbalismTabId = "overview" | "unlocks" | "specialization";
-
-interface SkillMock {
-  id: SkillId;
-  name: string;
-  nextUnlock: string;
-}
 
 interface GameHudOverlayOptions {
   musicEnabled: boolean;
@@ -94,37 +79,6 @@ const DEFAULT_PLAYER_COMBAT: PlayerCombatState = {
   healthRegenStartedAt: 0,
   nextHealthRegenAt: 0,
 };
-
-const SKILL_UNLOCKS: Record<SkillId, string> = {
-  melee: "Guarding Stance",
-  ranged: "Snare Trap",
-  magic: "Lesser Ward",
-  mining: "Iron Veins",
-  smithing: "Reinforced Buckles",
-  herbalism: "Moonleaf",
-  alchemy: "Mist Tonic",
-  cooking: "Hearty Stew",
-  fishing: "River Perch",
-};
-
-const SKILLS: SkillMock[] = SKILL_DEFINITIONS.map(skill => ({
-  id: skill.id,
-  name: skill.name,
-  nextUnlock: SKILL_UNLOCKS[skill.id],
-}));
-
-const CHARACTER_TABS: Array<{ id: CharacterTabId; label: string }> = [
-  { id: "equipment", label: "Equipment" },
-  { id: "abilities", label: "Abilities" },
-];
-
-const HERBALISM_TABS: Array<{ id: HerbalismTabId; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "unlocks", label: "Unlocks" },
-  { id: "specialization", label: "Specialization" },
-];
-
-const UNLOCKED_ABILITY_IDS: AbilityId[] = ["whirlwind"];
 
 const CSS = `
   #${HUD_LAYER_ID} {
@@ -2147,9 +2101,8 @@ export class GameHudOverlay {
 
   // The server only pushes combat state on qualifying events (damage dealt/taken,
   // mob aggro), not on a recurring tick. To hide the "In Combat" tag exactly when
-  // the timer runs out — rather than leaving it stuck on until the next event —
-  // schedule a local re-render for that moment using the absolute expiry timestamp
-  // the server already sent us.
+  // the timer runs out, schedule a local re-render for that moment instead of
+  // leaving it stuck on until the next event.
   private scheduleCombatTagExpiry() {
     if (this.combatTagTimer) {
       clearTimeout(this.combatTagTimer);
@@ -2466,338 +2419,23 @@ export class GameHudOverlay {
   }
 
   private createSkillsPanel() {
-    const layout = document.createElement("div");
-    layout.className = "skills-layout";
-
-    const list = document.createElement("div");
-    list.className = "skill-list";
-
-    for (const skill of SKILLS) {
-      const progress = getSkillProgress(this.getSkillTotalXp(skill.id));
-      const xpMeta = progress.isMaxLevel
-        ? `${this.formatNumber(progress.totalXp)} XP`
-        : `${this.formatNumber(progress.xpIntoLevel)}/${this.formatNumber(progress.xpForNextLevel)} (${progress.percentToNextLevel}%)`;
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = `skill-row${skill.id === this.selectedSkill.id ? " active" : ""}`;
-      row.innerHTML = `
-        <span class="skill-name">${skill.name}</span>
-        <span class="skill-level">${progress.level}</span>
-        <span class="xp-bar"><span class="xp-fill" style="width: ${progress.percentToNextLevel}%"></span></span>
-        <span class="xp-meta">${xpMeta}</span>
-      `;
-      row.addEventListener("click", () => {
+    return createSkillsPanel({
+      selectedSkill: this.selectedSkill,
+      selectedHerbalismTab: this.selectedHerbalismTab,
+      universalPerkPoints: this.universalPerkPoints,
+      tooltip: this.tooltip,
+      getSkillTotalXp: skillId => this.getSkillTotalXp(skillId),
+      getSkillPayload: skillId => this.getSkillPayload(skillId),
+      onSelectSkill: skill => {
         this.selectedSkill = skill;
         this.renderActivePanel();
-      });
-      list.appendChild(row);
-    }
-
-    const selectedProgress = getSkillProgress(this.getSkillTotalXp(this.selectedSkill.id));
-    const detail = this.selectedSkill.id === "herbalism"
-      ? this.createHerbalismSkillDetail(selectedProgress)
-      : this.createBasicSkillDetail(selectedProgress);
-
-    layout.append(list, detail);
-    return layout;
-  }
-
-  private createBasicSkillDetail(selectedProgress: SkillProgress) {
-    const detail = document.createElement("div");
-    detail.className = "skill-detail";
-    const selectedXpLine = selectedProgress.isMaxLevel
-      ? `${this.formatNumber(selectedProgress.totalXp)} XP earned.`
-      : `${this.formatNumber(selectedProgress.xpIntoLevel)} of ${this.formatNumber(selectedProgress.xpForNextLevel)} XP toward level ${selectedProgress.level + 1}.`;
-    detail.innerHTML = `
-      <div class="detail-title">${this.selectedSkill.name}</div>
-      <p class="detail-copy">Level ${selectedProgress.level}. ${selectedXpLine}</p>
-      <div class="unlock-list">
-        <div class="unlock-item"><span>Next unlock</span><strong>${this.selectedSkill.nextUnlock}</strong></div>
-        <div class="unlock-item"><span>At level 20</span><strong>Branch perk</strong></div>
-        <div class="unlock-item"><span>At level ${MAX_SKILL_LEVEL}</span><strong>Mastery cap</strong></div>
-      </div>
-    `;
-
-    return detail;
-  }
-
-  private createHerbalismSkillDetail(selectedProgress: SkillProgress) {
-    const content = getSkillContentDefinition("herbalism");
-    if (!content) return this.createBasicSkillDetail(selectedProgress);
-
-    const detail = document.createElement("div");
-    detail.className = "skill-detail herbalism-detail";
-    const skillPayload = this.getSkillPayload("herbalism");
-    const selectedXpLine = selectedProgress.isMaxLevel
-      ? `${this.formatNumber(selectedProgress.totalXp)} XP earned.`
-      : `${this.formatNumber(selectedProgress.xpIntoLevel)} of ${this.formatNumber(selectedProgress.xpForNextLevel)} XP toward level ${selectedProgress.level + 1}.`;
-    const nextUnlock = content.unlocks.find(unlock => unlock.level > selectedProgress.level);
-
-    const header = document.createElement("div");
-    header.className = "herbalism-header";
-    header.innerHTML = `
-      <div>
-        <div class="detail-title">Herbalism</div>
-        <p class="detail-copy">${selectedXpLine}</p>
-      </div>
-      <div class="herbalism-level-badge">${selectedProgress.level}</div>
-    `;
-
-    const summary = document.createElement("div");
-    summary.className = "herbalism-summary-strip";
-    summary.append(
-      this.createHerbalismMetric("Next unlock", nextUnlock ? `Lv ${nextUnlock.level} ${nextUnlock.name}` : "All slice unlocks reached"),
-      this.createHerbalismMetric("Skill points", `${skillPayload.availableTreePoints} available`),
-      this.createHerbalismMetric("Universal points", `${this.universalPerkPoints.available} available`),
-    );
-
-    const tabs = document.createElement("div");
-    tabs.className = "herbalism-tabs";
-    for (const tab of HERBALISM_TABS) {
-      const button = document.createElement("button");
-      button.className = `herbalism-tab${tab.id === this.selectedHerbalismTab ? " active" : ""}`;
-      button.type = "button";
-      button.textContent = tab.label;
-      button.addEventListener("click", () => {
-        this.selectedHerbalismTab = tab.id;
+      },
+      onSelectHerbalismTab: tabId => {
+        this.selectedHerbalismTab = tabId;
         this.renderActivePanel();
-      });
-      tabs.appendChild(button);
-    }
-
-    const body = document.createElement("div");
-    body.className = "herbalism-tab-body";
-    if (this.selectedHerbalismTab === "overview") body.appendChild(this.createHerbalismOverview(content, selectedProgress));
-    if (this.selectedHerbalismTab === "unlocks") body.appendChild(this.createHerbalismUnlocks(content, selectedProgress));
-    if (this.selectedHerbalismTab === "specialization") body.appendChild(this.createHerbalismSpecialization(content));
-
-    detail.append(header, summary, tabs, body);
-    return detail;
-  }
-
-  private createHerbalismMetric(label: string, value: string) {
-    const metric = document.createElement("div");
-    metric.className = "herbalism-metric";
-    metric.innerHTML = `
-      <span class="herbalism-metric-label">${label}</span>
-      <span class="herbalism-metric-value">${value}</span>
-    `;
-    return metric;
-  }
-
-  private createHerbalismOverview(content: NonNullable<ReturnType<typeof getSkillContentDefinition>>, selectedProgress: SkillProgress) {
-    const container = document.createElement("div");
-    container.className = "herbalism-overview-grid";
-    const nextMilestones = content.unlocks
-      .filter(unlock => unlock.level > selectedProgress.level)
-      .slice(0, 3);
-
-    const rules = this.createHerbalismSection("What This Skill Does");
-    const ruleList = document.createElement("div");
-    ruleList.className = "herbalism-rule-list";
-    ruleList.append(
-      this.createLabelValueRow("Role", content.overview.role, "herbalism-rule"),
-      this.createLabelValueRow("Gathering", content.overview.gathering, "herbalism-rule"),
-      this.createLabelValueRow("Progression", content.overview.progression, "herbalism-rule"),
-    );
-    rules.appendChild(ruleList);
-
-    const families = this.createHerbalismSection("Item Families");
-    const familyList = document.createElement("div");
-    familyList.className = "herbalism-family-list";
-    familyList.append(
-      this.createLabelValueRow("Herbs", "Fairly common overworld nodes. Main path: Botanist.", "herbalism-family"),
-      this.createLabelValueRow("Mushrooms", "More uncommon cave, dungeon, and damp-area nodes. Main path: Mycologist.", "herbalism-family"),
-      this.createLabelValueRow("Bloomhearts", "Very rare living reagent cores found through gathering, prospecting, bosses, and special sources. Main path: Bloomkeeper.", "herbalism-family"),
-    );
-    families.appendChild(familyList);
-
-    const milestones = this.createHerbalismSection("Next Milestones");
-    const milestoneList = document.createElement("div");
-    milestoneList.className = "herbalism-milestone-list";
-    const visibleMilestones = nextMilestones.length > 0 ? nextMilestones : content.unlocks.slice(-3);
-    for (const unlock of visibleMilestones) {
-      milestoneList.appendChild(this.createLabelValueRow(`Lv ${unlock.level}`, `${unlock.name} - ${unlock.alchemyRole}.`, "herbalism-milestone"));
-    }
-    milestones.appendChild(milestoneList);
-
-    container.append(rules, families, milestones);
-    return container;
-  }
-
-  private createHerbalismUnlocks(content: NonNullable<ReturnType<typeof getSkillContentDefinition>>, selectedProgress: SkillProgress) {
-    const section = this.createHerbalismSection("Unlocks");
-    const list = document.createElement("div");
-    list.className = "herbalism-unlock-list";
-
-    const header = document.createElement("div");
-    header.className = "herbalism-unlock-header";
-    header.innerHTML = `
-      <span>Level</span>
-      <span>Reagent</span>
-      <span>Type</span>
-      <span>Where</span>
-      <span>XP</span>
-      <span>Status</span>
-    `;
-    list.appendChild(header);
-
-    for (const unlock of content.unlocks) {
-      const unlocked = selectedProgress.level >= unlock.level;
-      const row = document.createElement("div");
-      row.className = `herbalism-unlock-row${unlocked ? "" : " locked"}`;
-      row.innerHTML = `
-        <span class="herbalism-unlock-level">Lv ${unlock.level}</span>
-        <span class="herbalism-unlock-name">${unlock.name}</span>
-        <span class="herbalism-unlock-type">${unlock.nodeType} - ${unlock.rarity}</span>
-        <span class="herbalism-unlock-location">${unlock.location}</span>
-        <span class="herbalism-unlock-xp">${unlock.xp}</span>
-        <span class="herbalism-status${unlocked ? "" : " locked"}">${unlocked ? "Unlocked" : "Locked"}</span>
-      `;
-      list.appendChild(row);
-    }
-
-    section.appendChild(list);
-    return section;
-  }
-
-  private createHerbalismSpecialization(content: NonNullable<ReturnType<typeof getSkillContentDefinition>>) {
-    const container = document.createElement("div");
-    container.className = "specialization-map";
-
-    const intro = this.createHerbalismSection("Specialization Paths");
-    const introList = document.createElement("div");
-    introList.className = "herbalism-rule-list";
-    for (const path of content.specializationPaths) {
-      introList.appendChild(this.createLabelValueRow(path.name, path.summary, "herbalism-rule"));
-    }
-    intro.appendChild(introList);
-
-    const paths = document.createElement("div");
-    paths.className = "specialization-paths";
-    for (const path of content.specializationPaths) {
-      paths.appendChild(this.createSpecializationPath(path, content.perks.filter(perk => perk.pathId === path.id)));
-    }
-
-    container.append(intro, paths);
-    return container;
-  }
-
-  private createSpecializationPath(path: SkillSpecializationPathDefinition, perks: SkillPerkDefinition[]) {
-    const pathEl = document.createElement("div");
-    pathEl.className = `specialization-path ${path.id}`;
-    const liveCount = perks.filter(perk => perk.implementation.status === "live").length;
-    pathEl.innerHTML = `
-      <div class="specialization-path-title">
-        <span>${path.name}</span>
-        <span class="specialization-path-tag">${liveCount > 0 ? `${liveCount} live` : "Planned"}</span>
-      </div>
-      <div class="specialization-path-copy">${path.summary}</div>
-    `;
-
-    const perkList = document.createElement("div");
-    perkList.className = "perk-list";
-    for (const perk of perks) {
-      const skillPayload = this.getSkillPayload(perk.skillId);
-      const unlocked = skillPayload.unlockedPerkIds.includes(perk.id);
-      const blocked = perk.implementation.status !== "live" || !perk.implementation.unlockable;
-      const requirementsMet = this.areSkillPerkRequirementsMet(perk.requires, skillPayload);
-      const neededUniversalPoints = Math.max(0, perk.cost - skillPayload.availableTreePoints);
-      const hasPoints = skillPayload.availableTreePoints >= perk.cost || this.universalPerkPoints.available >= neededUniversalPoints;
-      const canUnlock = !unlocked && !blocked && requirementsMet && hasPoints;
-      const status = this.getPerkStatusText({
-        unlocked,
-        blocked,
-        requirementsMet,
-        hasPoints,
-        neededUniversalPoints,
-      });
-      const node = document.createElement("div");
-      node.className = [
-        "perk-node",
-        unlocked ? "learned" : "",
-        blocked ? "blocked" : "",
-        canUnlock ? "available" : "",
-      ].filter(Boolean).join(" ");
-      node.innerHTML = `
-        <div class="perk-heading">
-          <span class="perk-id">${perk.code}</span>
-          <span class="perk-name">${perk.name}</span>
-        </div>
-        <div class="perk-effect">${perk.effectText}</div>
-        <div class="perk-requirement">Requires: ${perk.requirementText}</div>
-        ${perk.plannedRequirementText ? `<div class="perk-requirement">Planned path: ${perk.plannedRequirementText}</div>` : ""}
-      `;
-      this.tooltip.attach(node, () => buildPerkTooltip(perk, {
-        status,
-        unlocked,
-        blocked,
-        requirementsMet,
-        hasPoints,
-        neededUniversalPoints,
-      }));
-
-      const footer = document.createElement("div");
-      footer.className = "perk-footer";
-
-      const statusEl = document.createElement("span");
-      statusEl.className = [
-        "perk-status",
-        unlocked ? "learned" : "",
-        blocked ? "blocked" : "",
-      ].filter(Boolean).join(" ");
-      statusEl.textContent = status;
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "perk-learn-button";
-      button.disabled = !canUnlock;
-      button.textContent = unlocked ? "Learned" : "Learn";
-      button.addEventListener("click", () => this.requestSkillPerkUnlock(perk, neededUniversalPoints));
-
-      footer.append(statusEl, button);
-      node.appendChild(footer);
-      perkList.appendChild(node);
-    }
-
-    pathEl.appendChild(perkList);
-    return pathEl;
-  }
-
-  private createHerbalismSection(titleText: string) {
-    const section = document.createElement("div");
-    section.className = "herbalism-section";
-    const title = document.createElement("div");
-    title.className = "herbalism-section-title";
-    title.textContent = titleText;
-    section.appendChild(title);
-    return section;
-  }
-
-  private areSkillPerkRequirementsMet(requirements: SkillPerkRequirement[], skillPayload: SkillXpPayload) {
-    const unlockedPerkIds = new Set(skillPayload.unlockedPerkIds);
-    const skillLevel = getSkillProgress(skillPayload.totalXp).level;
-
-    return requirements.every(requirement => {
-      if (requirement.type === "perk") return unlockedPerkIds.has(requirement.perkId);
-      if (requirement.type === "any_perk") return requirement.perkIds.some(perkId => unlockedPerkIds.has(perkId));
-      return skillLevel >= requirement.level;
+      },
+      onRequestPerkUnlock: (perk, neededUniversalPoints) => this.requestSkillPerkUnlock(perk, neededUniversalPoints),
     });
-  }
-
-  private getPerkStatusText(options: {
-    unlocked: boolean;
-    blocked: boolean;
-    requirementsMet: boolean;
-    hasPoints: boolean;
-    neededUniversalPoints: number;
-  }) {
-    if (options.unlocked) return "Learned";
-    if (options.blocked) return "Planned";
-    if (!options.requirementsMet) return "Locked";
-    if (!options.hasPoints) return "Need points";
-    if (options.neededUniversalPoints > 0) return "Uses universal";
-    return "Available";
   }
 
   private requestSkillPerkUnlock(perk: SkillPerkDefinition, neededUniversalPoints: number) {
@@ -2813,152 +2451,28 @@ export class GameHudOverlay {
     });
   }
 
-  private createLabelValueRow(label: string, value: string, className: string) {
-    const row = document.createElement("div");
-    row.className = className;
-    const labelEl = document.createElement("strong");
-    labelEl.textContent = label;
-    const valueEl = document.createElement("span");
-    valueEl.textContent = value;
-    row.append(labelEl, valueEl);
-    return row;
-  }
-
   private createInventoryPanel() {
-    const panel = document.createElement("div");
-    const filledSlots = this.inventory.slots.filter(Boolean).length;
-    panel.innerHTML = `
-      <div class="inventory-header">
-        <span>${filledSlots} / ${this.inventory.slotCount} slots</span>
-        <div class="inventory-actions">
-          <button class="inventory-action-button equip" type="button">Equip</button>
-          <button class="inventory-action-button split" type="button">Split</button>
-          <button class="inventory-action-button delete" type="button">Delete</button>
-        </div>
-      </div>
-    `;
-
-    const selectedSlot = this.getSelectedInventorySlot();
-    const selectedItem = selectedSlot ? getItemDefinition(selectedSlot.itemId) : null;
-    const equipButton = panel.querySelector<HTMLButtonElement>(".inventory-action-button.equip")!;
-    const splitButton = panel.querySelector<HTMLButtonElement>(".inventory-action-button.split")!;
-    const deleteButton = panel.querySelector<HTMLButtonElement>(".inventory-action-button.delete")!;
-    equipButton.disabled = !selectedSlot || selectedItem?.type !== "equipment" || !selectedItem.equipment || selectedSlot.quantity !== 1;
-    splitButton.disabled = !selectedSlot || selectedSlot.quantity <= 1;
-    deleteButton.disabled = !selectedSlot;
-    equipButton.addEventListener("click", () => this.equipSelectedInventoryItem());
-    splitButton.addEventListener("click", () => this.promptSplitSelectedInventoryStack());
-    deleteButton.addEventListener("click", () => this.confirmDeleteSelectedInventoryItem());
-    deleteButton.addEventListener("dragover", event => {
-      if (this.draggedInventorySlotIndex === null) return;
-      event.preventDefault();
-      deleteButton.classList.add("drag-over");
+    return createInventoryPanel({
+      inventory: this.inventory,
+      selectedSlotIndex: this.selectedInventorySlotIndex,
+      tooltip: this.tooltip,
+      getDraggedSlotIndex: () => this.draggedInventorySlotIndex,
+      setDraggedSlotIndex: slotIndex => {
+        this.draggedInventorySlotIndex = slotIndex;
+      },
+      onSelectSlot: slotIndex => this.selectInventorySlot(slotIndex),
+      onEquipSlot: slotIndex => this.equipInventoryItem(slotIndex),
+      onSplitSlot: slotIndex => this.promptSplitInventoryStack(slotIndex),
+      onDeleteSlot: slotIndex => this.confirmDeleteInventoryItem(slotIndex),
+      onMoveSlot: (fromSlotIndex, toSlotIndex) => {
+        this.socket.emit("inventory:move", { fromSlotIndex, toSlotIndex });
+      },
     });
-    deleteButton.addEventListener("dragleave", () => deleteButton.classList.remove("drag-over"));
-    deleteButton.addEventListener("drop", event => {
-      event.preventDefault();
-      deleteButton.classList.remove("drag-over");
-      if (this.draggedInventorySlotIndex === null) return;
-      this.confirmDeleteInventoryItem(this.draggedInventorySlotIndex);
-      this.draggedInventorySlotIndex = null;
-    });
-
-    const grid = document.createElement("div");
-    grid.className = "inventory-grid";
-
-    for (let slotIndex = 0; slotIndex < this.inventory.slots.length; slotIndex += 1) {
-      const slotItem = this.inventory.slots[slotIndex];
-      const item = slotItem ? getItemDefinition(slotItem.itemId) : null;
-      const slot = document.createElement("div");
-      slot.className = [
-        "inventory-slot",
-        item ? "filled" : "",
-        item?.rarity ?? "",
-        this.selectedInventorySlotIndex === slotIndex ? "selected" : "",
-      ].filter(Boolean).join(" ");
-      slot.dataset.slotIndex = String(slotIndex);
-      if (slotItem && item) {
-        this.tooltip.attach(slot, () => buildItemTooltip(item, {
-          quantity: slotItem.quantity,
-          context: "inventory",
-        }));
-      }
-
-      if (slotItem) {
-        slot.draggable = true;
-        slot.addEventListener("click", () => this.selectInventorySlot(slotIndex));
-        slot.addEventListener("dblclick", () => this.equipInventoryItem(slotIndex));
-        slot.addEventListener("contextmenu", event => {
-          event.preventDefault();
-          this.selectInventorySlot(slotIndex);
-          this.promptSplitInventoryStack(slotIndex);
-        });
-        slot.addEventListener("dragstart", event => {
-          this.tooltip.hide();
-          this.draggedInventorySlotIndex = slotIndex;
-          event.dataTransfer?.setData("text/plain", String(slotIndex));
-          event.dataTransfer?.setDragImage(slot, slot.clientWidth / 2, slot.clientHeight / 2);
-        });
-        slot.addEventListener("dragend", () => {
-          this.draggedInventorySlotIndex = null;
-          this.clearInventoryDragState();
-        });
-      }
-
-      slot.addEventListener("dragover", event => {
-        if (this.draggedInventorySlotIndex === null || this.draggedInventorySlotIndex === slotIndex) return;
-        event.preventDefault();
-        slot.classList.add("drag-over");
-      });
-      slot.addEventListener("dragleave", () => slot.classList.remove("drag-over"));
-      slot.addEventListener("drop", event => {
-        event.preventDefault();
-        slot.classList.remove("drag-over");
-        const fromSlotIndex = this.getDraggedSlotIndex(event);
-        this.draggedInventorySlotIndex = null;
-        if (fromSlotIndex === null || fromSlotIndex === slotIndex) return;
-        this.socket.emit("inventory:move", { fromSlotIndex, toSlotIndex: slotIndex });
-      });
-
-      if (item) {
-        const icon = document.createElement("img");
-        icon.className = "inventory-item-icon";
-        icon.src = item.iconUrl;
-        icon.alt = item.name;
-        slot.appendChild(icon);
-
-        const name = document.createElement("span");
-        name.className = "inventory-item-name";
-        name.textContent = item.name;
-        slot.appendChild(name);
-      }
-
-      if (slotItem && slotItem.quantity > 1) {
-        const count = document.createElement("span");
-        count.className = "item-count";
-        count.textContent = String(slotItem.quantity);
-        slot.appendChild(count);
-      }
-      grid.appendChild(slot);
-    }
-
-    panel.appendChild(grid);
-    return panel;
-  }
-
-  private getSelectedInventorySlot() {
-    if (this.selectedInventorySlotIndex === null) return null;
-    return this.inventory.slots[this.selectedInventorySlotIndex] ?? null;
   }
 
   private selectInventorySlot(slotIndex: number) {
     this.selectedInventorySlotIndex = this.selectedInventorySlotIndex === slotIndex ? null : slotIndex;
     if (this.activePanel === "inventory") this.renderActivePanel();
-  }
-
-  private equipSelectedInventoryItem() {
-    if (this.selectedInventorySlotIndex === null) return;
-    this.equipInventoryItem(this.selectedInventorySlotIndex);
   }
 
   private equipInventoryItem(slotIndex: number) {
@@ -2967,24 +2481,6 @@ export class GameHudOverlay {
     if (!slot || item?.type !== "equipment" || !item.equipment || slot.quantity !== 1) return;
 
     this.socket.emit("equipment:equip", { inventorySlotIndex: slotIndex });
-  }
-
-  private getDraggedSlotIndex(event: DragEvent) {
-    const transferValue = event.dataTransfer?.getData("text/plain");
-    const parsedTransferValue = transferValue ? Number(transferValue) : NaN;
-    if (Number.isInteger(parsedTransferValue)) return parsedTransferValue;
-    return this.draggedInventorySlotIndex;
-  }
-
-  private clearInventoryDragState() {
-    this.windowRoot
-      .querySelectorAll(".inventory-slot.drag-over, .inventory-action-button.drag-over")
-      .forEach(element => element.classList.remove("drag-over"));
-  }
-
-  private promptSplitSelectedInventoryStack() {
-    if (this.selectedInventorySlotIndex === null) return;
-    this.promptSplitInventoryStack(this.selectedInventorySlotIndex);
   }
 
   private promptSplitInventoryStack(slotIndex: number) {
@@ -3003,11 +2499,6 @@ export class GameHudOverlay {
     }
 
     this.socket.emit("inventory:split", { fromSlotIndex: slotIndex, quantity });
-  }
-
-  private confirmDeleteSelectedInventoryItem() {
-    if (this.selectedInventorySlotIndex === null) return;
-    this.confirmDeleteInventoryItem(this.selectedInventorySlotIndex);
   }
 
   private confirmDeleteInventoryItem(slotIndex: number) {
@@ -3121,169 +2612,18 @@ export class GameHudOverlay {
   };
 
   private createCharacterPanel() {
-    const panel = document.createElement("div");
-    panel.className = "character-panel";
-
-    const tabs = document.createElement("div");
-    tabs.className = "character-tabs";
-    for (const tab of CHARACTER_TABS) {
-      const button = document.createElement("button");
-      button.className = `character-tab${tab.id === this.selectedCharacterTab ? " active" : ""}`;
-      button.type = "button";
-      button.textContent = tab.label;
-      button.setAttribute("aria-pressed", String(tab.id === this.selectedCharacterTab));
-      button.addEventListener("click", () => {
-        this.selectedCharacterTab = tab.id;
+    return createCharacterPanel({
+      selectedTab: this.selectedCharacterTab,
+      equipment: this.equipment,
+      selectedEquipmentSlot: this.selectedEquipmentSlot,
+      tooltip: this.tooltip,
+      onSelectTab: tabId => {
+        this.selectedCharacterTab = tabId;
         this.renderActivePanel();
-      });
-      tabs.appendChild(button);
-    }
-
-    const body = document.createElement("div");
-    body.className = "character-tab-body";
-    if (this.selectedCharacterTab === "equipment") body.appendChild(this.createEquipmentPanel());
-    if (this.selectedCharacterTab === "abilities") body.appendChild(this.createAbilitiesPanel());
-
-    panel.append(tabs, body);
-    return panel;
-  }
-
-  private createAbilitiesPanel() {
-    const panel = document.createElement("div");
-    panel.className = "abilities-panel";
-
-    const list = document.createElement("div");
-    list.className = "abilities-list";
-
-    for (const ability of this.getUnlockedAbilities()) {
-      const entry = document.createElement("div");
-      entry.className = "ability-entry";
-
-      const iconButton = document.createElement("button");
-      iconButton.className = "ability-spell-icon";
-      iconButton.type = "button";
-      iconButton.setAttribute("aria-label", ability.name);
-      this.tooltip.attach(iconButton, () => buildAbilityTooltip(ability));
-
-      const icon = document.createElement("img");
-      icon.src = ability.iconUrl;
-      icon.alt = "";
-      iconButton.appendChild(icon);
-
-      const name = document.createElement("strong");
-      name.className = "ability-spell-name";
-      name.textContent = ability.name;
-
-      entry.append(iconButton, name);
-      list.appendChild(entry);
-    }
-
-    panel.appendChild(list);
-    return panel;
-  }
-
-  private getUnlockedAbilities() {
-    return UNLOCKED_ABILITY_IDS
-      .map(abilityId => getAbilityDefinition(abilityId))
-      .filter((ability): ability is NonNullable<ReturnType<typeof getAbilityDefinition>> => ability !== null);
-  }
-
-  private createEquipmentPanel() {
-    const panel = document.createElement("div");
-    const equippedSlots = Object.values(this.equipment.slots).filter(Boolean).length;
-    panel.innerHTML = `
-      <div class="equipment-header">
-        <span>${equippedSlots} / ${EQUIPMENT_SLOTS.length} equipped</span>
-        <div class="equipment-actions">
-          <button class="inventory-action-button unequip" type="button">Unequip</button>
-        </div>
-      </div>
-    `;
-
-    const unequipButton = panel.querySelector<HTMLButtonElement>(".inventory-action-button.unequip")!;
-    unequipButton.disabled = !this.getSelectedEquipmentItem();
-    unequipButton.addEventListener("click", () => this.unequipSelectedEquipmentItem());
-
-    const layout = document.createElement("div");
-    layout.className = "equipment-layout";
-
-    const slots = document.createElement("div");
-    slots.className = "equipment-grid";
-    for (const equipmentSlot of EQUIPMENT_SLOTS) {
-      slots.appendChild(this.createEquipmentSlot(equipmentSlot));
-    }
-
-    const stats = document.createElement("aside");
-    stats.className = "equipment-stats";
-    stats.appendChild(this.createEquipmentStatsPanel());
-
-    layout.append(slots, stats);
-    panel.appendChild(layout);
-    return panel;
-  }
-
-  private createEquipmentSlot(equipmentSlot: EquipmentSlot) {
-    const equippedItem = this.equipment.slots[equipmentSlot];
-    const item = equippedItem ? getItemDefinition(equippedItem.itemId) : null;
-    const frame = document.createElement("div");
-    frame.className = "equipment-slot-frame";
-
-    const label = document.createElement("span");
-    label.className = "equipment-slot-label";
-    label.textContent = this.formatEquipmentSlot(equipmentSlot);
-    frame.appendChild(label);
-
-    const slot = document.createElement("div");
-    slot.className = [
-      "equipment-slot",
-      item ? "filled" : "",
-      item ? "" : "empty",
-      item?.rarity ?? "",
-      this.selectedEquipmentSlot === equipmentSlot ? "selected" : "",
-    ].filter(Boolean).join(" ");
-    if (item) {
-      this.tooltip.attach(slot, () => buildItemTooltip(item, { context: "equipment" }));
-    }
-    slot.addEventListener("click", () => this.selectEquipmentSlot(equipmentSlot));
-    slot.addEventListener("dblclick", () => this.unequipEquipmentItem(equipmentSlot));
-
-    const main = document.createElement("div");
-    main.className = "equipment-slot-main";
-
-    if (item) {
-      const icon = document.createElement("img");
-      icon.className = "equipment-item-icon";
-      icon.src = item.iconUrl;
-      icon.alt = item.name;
-      main.appendChild(icon);
-    }
-
-    const text = document.createElement("div");
-    text.className = "equipment-slot-text";
-
-    const itemName = document.createElement("strong");
-    itemName.className = item ? "slot-item" : "slot-item equipment-slot-empty";
-    itemName.textContent = item?.name ?? "Empty";
-    text.appendChild(itemName);
-
-    const statSummary = item?.equipment?.stats ? this.formatStatSummary(item.equipment.stats) : "";
-    if (statSummary) {
-      const statLine = document.createElement("span");
-      statLine.className = "equipment-stat-line";
-      statLine.textContent = statSummary;
-      text.appendChild(statLine);
-    }
-
-    main.appendChild(text);
-    slot.appendChild(main);
-    frame.appendChild(slot);
-
-    return frame;
-  }
-
-  private getSelectedEquipmentItem() {
-    if (this.selectedEquipmentSlot === null) return null;
-    return this.equipment.slots[this.selectedEquipmentSlot] ?? null;
+      },
+      onSelectEquipmentSlot: equipmentSlot => this.selectEquipmentSlot(equipmentSlot),
+      onUnequipSlot: equipmentSlot => this.unequipEquipmentItem(equipmentSlot),
+    });
   }
 
   private selectEquipmentSlot(equipmentSlot: EquipmentSlot) {
@@ -3291,91 +2631,13 @@ export class GameHudOverlay {
     if (this.activePanel === "character") this.renderActivePanel();
   }
 
-  private unequipSelectedEquipmentItem() {
-    if (this.selectedEquipmentSlot === null) return;
-    this.unequipEquipmentItem(this.selectedEquipmentSlot);
-  }
-
   private unequipEquipmentItem(equipmentSlot: EquipmentSlot) {
     if (!this.equipment.slots[equipmentSlot]) return;
     this.socket.emit("equipment:unequip", { slot: equipmentSlot });
   }
 
-  private createEquipmentStatsPanel() {
-    const container = document.createElement("div");
-    const title = document.createElement("div");
-    title.className = "detail-title";
-    title.textContent = "Character";
-    container.appendChild(title);
-
-    const statList = document.createElement("div");
-    statList.className = "stat-list";
-    const totals = this.getEquipmentStatTotals();
-    const statEntries = Object.entries(totals);
-
-    if (statEntries.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "stat-row";
-      empty.innerHTML = `<span class="stat-label">Equipment bonuses</span><strong class="stat-value">None</strong>`;
-      statList.appendChild(empty);
-    } else {
-      for (const [stat, value] of statEntries) {
-        const row = document.createElement("div");
-        row.className = "stat-row";
-        row.innerHTML = `<span class="stat-label">${this.formatStatName(stat)}</span><strong class="stat-value">+${value}</strong>`;
-        statList.appendChild(row);
-      }
-    }
-
-    container.appendChild(statList);
-    return container;
-  }
-
-  private getEquipmentStatTotals() {
-    const totals: Record<string, number> = {};
-    for (const equippedItem of Object.values(this.equipment.slots)) {
-      const item = equippedItem ? getItemDefinition(equippedItem.itemId) : null;
-      if (!item?.equipment?.stats) continue;
-
-      for (const [stat, value] of Object.entries(item.equipment.stats)) {
-        if (typeof value !== "number" || value === 0) continue;
-        totals[stat] = (totals[stat] ?? 0) + value;
-      }
-    }
-
-    return totals;
-  }
-
-  private formatStatSummary(stats: object) {
-    return Object.entries(stats as Record<string, number | undefined>)
-      .filter((entry): entry is [string, number] => typeof entry[1] === "number" && entry[1] !== 0)
-      .map(([stat, value]) => `+${value} ${this.formatStatName(stat)}`)
-      .join(", ");
-  }
-
-  private formatEquipmentSlot(slot: EquipmentSlot) {
-    const labels: Record<EquipmentSlot, string> = {
-      head: "Head",
-      chest: "Chest",
-      legs: "Legs",
-      feet: "Boots",
-      main_hand: "Main Hand",
-      off_hand: "Off Hand",
-      ring: "Ring",
-      charm: "Charm",
-    };
-    return labels[slot];
-  }
-
   private formatNumber(value: number) {
     return new Intl.NumberFormat("en-US").format(value);
-  }
-
-  private formatStatName(stat: string) {
-    return stat
-      .split("_")
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
   }
 
   private createSocialPanel() {
@@ -3540,7 +2802,7 @@ export class GameHudOverlay {
   private handleTradeCancelled = (payload: TradeCancelledPayload) => {
     this.tradeState = null;
     this.renderTradeWindow();
-    this.addSystemMessage(this.getTradeCancelledMessage(payload?.reason));
+    this.addSystemMessage(getTradeCancelledMessage(payload?.reason));
     if (this.activePanel === "social" || this.activePanel === "inventory") {
       this.renderActivePanel();
     }
@@ -3564,220 +2826,16 @@ export class GameHudOverlay {
     this.tradeRoot.replaceChildren();
     if (!this.tradeState) return;
 
-    const windowEl = document.createElement("section");
-    windowEl.className = "trade-window";
-    windowEl.setAttribute("aria-label", "Trade");
-
-    const header = document.createElement("header");
-    header.className = "hud-window-header";
-
-    const title = document.createElement("div");
-    title.className = "hud-window-title";
-    title.textContent = `Trade with ${this.tradeState.partnerUsername}`;
-
-    const close = document.createElement("button");
-    close.className = "hud-close-button";
-    close.type = "button";
-    close.setAttribute("aria-label", "Cancel trade");
-    close.innerHTML = "&times;";
-    close.addEventListener("click", () => this.socket.emit("trade:cancel"));
-    header.append(title, close);
-
-    const body = document.createElement("div");
-    body.className = "trade-body";
-
-    const offers = document.createElement("div");
-    offers.className = "trade-offers";
-    offers.append(
-      this.createTradeOfferPanel("Your offer", this.tradeState.ownOffer, this.tradeState.ownAccepted, true),
-      this.createTradeOfferPanel(
-        `${this.tradeState.partnerUsername}'s offer`,
-        this.tradeState.otherOffer,
-        this.tradeState.otherAccepted,
-        false,
-      ),
-    );
-
-    const inventoryPanel = document.createElement("div");
-    inventoryPanel.className = "trade-panel";
-    const inventoryTitle = document.createElement("div");
-    inventoryTitle.className = "trade-inventory-title";
-    inventoryTitle.textContent = this.tradeState.ownAccepted ? "Changing your offer will reset acceptance" : "Click inventory items to offer them";
-    inventoryPanel.append(inventoryTitle, this.createTradeInventoryGrid());
-
-    const actions = document.createElement("div");
-    actions.className = "trade-actions";
-
-    const acceptButton = document.createElement("button");
-    acceptButton.className = "trade-action-button confirm";
-    acceptButton.type = "button";
-    acceptButton.textContent = this.tradeState.ownAccepted ? "Unaccept" : "Accept";
-    acceptButton.addEventListener("click", () => {
-      this.socket.emit("trade:setAccepted", { accepted: !this.tradeState?.ownAccepted });
-    });
-
-    const cancelButton = document.createElement("button");
-    cancelButton.className = "trade-action-button cancel";
-    cancelButton.type = "button";
-    cancelButton.textContent = "Cancel";
-    cancelButton.addEventListener("click", () => this.socket.emit("trade:cancel"));
-
-    actions.append(acceptButton, cancelButton);
-    body.append(offers, inventoryPanel, actions);
-    windowEl.append(header, body);
-    this.tradeRoot.appendChild(windowEl);
-  }
-
-  private createTradeOfferPanel(titleText: string, offer: TradeOfferItem[], accepted: boolean, isOwnOffer: boolean) {
-    const panel = document.createElement("div");
-    panel.className = `trade-panel${accepted ? " accepted" : ""}`;
-
-    const title = document.createElement("div");
-    title.className = "trade-panel-title";
-
-    const name = document.createElement("span");
-    name.textContent = titleText;
-
-    const status = document.createElement("span");
-    status.className = "trade-status";
-    status.textContent = accepted ? "Accepted" : "Editing";
-
-    title.append(name, status);
-    panel.appendChild(title);
-
-    const list = document.createElement("div");
-    list.className = "trade-offer-list";
-
-    if (offer.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "trade-offer-item empty";
-      empty.textContent = "Nothing offered";
-      list.appendChild(empty);
-    } else {
-      for (const offeredItem of offer) {
-        list.appendChild(this.createTradeOfferItem(offeredItem, isOwnOffer));
-      }
-    }
-
-    panel.appendChild(list);
-    return panel;
-  }
-
-  private createTradeOfferItem(offeredItem: TradeOfferItem, isOwnOffer: boolean) {
-    const item = getItemDefinition(offeredItem.itemId);
-    const row = document.createElement("div");
-    row.className = "trade-offer-item";
-
-    if (item) {
-      const icon = document.createElement("img");
-      icon.className = "inventory-item-icon";
-      icon.src = item.iconUrl;
-      icon.alt = item.name;
-      row.appendChild(icon);
-    } else {
-      const spacer = document.createElement("span");
-      row.appendChild(spacer);
-    }
-
-    const name = document.createElement("span");
-    name.textContent = `${item?.name ?? offeredItem.itemId}${offeredItem.quantity > 1 ? ` x${offeredItem.quantity}` : ""}`;
-    row.appendChild(name);
-
-    const remove = document.createElement("button");
-    remove.className = "trade-remove-button";
-    remove.type = "button";
-    remove.innerHTML = "&times;";
-    remove.disabled = !isOwnOffer;
-    remove.addEventListener("click", () => {
-      this.socket.emit("trade:removeItem", { slotIndex: offeredItem.slotIndex });
-    });
-    row.appendChild(remove);
-
-    return row;
-  }
-
-  private createTradeInventoryGrid() {
-    const grid = document.createElement("div");
-    grid.className = "trade-inventory-grid";
-    const offeredSlotIndexes = new Set(this.tradeState?.ownOffer.map(item => item.slotIndex) ?? []);
-
-    for (let slotIndex = 0; slotIndex < this.inventory.slots.length; slotIndex += 1) {
-      const slotItem = this.inventory.slots[slotIndex];
-      const item = slotItem ? getItemDefinition(slotItem.itemId) : null;
-      const slot = document.createElement("button");
-      slot.type = "button";
-      slot.className = [
-        "inventory-slot",
-        item ? "filled" : "",
-        item?.rarity ?? "",
-        offeredSlotIndexes.has(slotIndex) ? "selected" : "",
-      ].filter(Boolean).join(" ");
-      slot.disabled = !slotItem;
-      if (slotItem && item) {
-        this.tooltip.attach(slot, () => buildItemTooltip(item, {
-          quantity: slotItem.quantity,
-          context: "trade",
-        }));
-      }
-
-      if (slotItem && item) {
-        const icon = document.createElement("img");
-        icon.className = "inventory-item-icon";
-        icon.src = item.iconUrl;
-        icon.alt = item.name;
-        slot.appendChild(icon);
-
-        const name = document.createElement("span");
-        name.className = "inventory-item-name";
-        name.textContent = item.name;
-        slot.appendChild(name);
-
-        if (slotItem.quantity > 1) {
-          const count = document.createElement("span");
-          count.className = "item-count";
-          count.textContent = String(slotItem.quantity);
-          slot.appendChild(count);
-        }
-
-        slot.addEventListener("click", () => this.offerInventorySlot(slotIndex));
-      }
-
-      grid.appendChild(slot);
-    }
-
-    return grid;
-  }
-
-  private offerInventorySlot(slotIndex: number) {
-    const slot = this.inventory.slots[slotIndex];
-    if (!slot) return;
-
-    let quantity = 1;
-    if (slot.quantity > 1) {
-      const itemName = getItemDefinition(slot.itemId)?.name ?? slot.itemId;
-      const requestedQuantity = window.prompt(`Offer how many ${itemName}?`, String(slot.quantity));
-      if (requestedQuantity === null) return;
-
-      quantity = Number(requestedQuantity);
-      if (!Number.isInteger(quantity) || quantity <= 0 || quantity > slot.quantity) {
-        this.addSystemMessage(`Enter a whole number from 1 to ${slot.quantity}.`);
-        return;
-      }
-    }
-
-    this.socket.emit("trade:addItem", { slotIndex, quantity });
-  }
-
-  private getTradeCancelledMessage(reason?: string) {
-    const messages: Record<string, string> = {
-      cancelled: "Trade cancelled.",
-      disconnect: "Trade cancelled because a player disconnected.",
-      movement: "Trade cancelled because a player moved.",
-      range: "Trade cancelled because you are too far apart.",
-      death: "Trade cancelled because a player died.",
-    };
-
-    return messages[reason ?? ""] ?? "Trade cancelled.";
+    this.tradeRoot.appendChild(createTradeWindow({
+      tradeState: this.tradeState,
+      inventory: this.inventory,
+      tooltip: this.tooltip,
+      addSystemMessage: message => this.addSystemMessage(message),
+      onCancelTrade: () => this.socket.emit("trade:cancel"),
+      onSetAccepted: accepted => this.socket.emit("trade:setAccepted", { accepted }),
+      onRemoveItem: slotIndex => this.socket.emit("trade:removeItem", { slotIndex }),
+      onAddItem: (slotIndex, quantity) => this.socket.emit("trade:addItem", { slotIndex, quantity }),
+    }));
   }
 
   private getPanelTitle(panelId: PanelId) {
